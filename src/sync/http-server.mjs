@@ -174,12 +174,14 @@ function ensureInterceptsShape(raw) {
     return {
       state: makeDefaultInterceptState(),
       requests: {},
+      tool_calls: [],
     };
   }
 
   return {
     state: ensureInterceptState(raw.state),
     requests: raw.requests && typeof raw.requests === "object" ? raw.requests : {},
+    tool_calls: Array.isArray(raw.tool_calls) ? raw.tool_calls.slice(-100) : [],
   };
 }
 
@@ -307,6 +309,28 @@ function updateStateCounters(intercepts) {
   const running = requests.filter((item) => item?.status === "running").length;
   intercepts.state.waiting = waiting;
   intercepts.state.running = running;
+}
+
+function appendToolCall(intercepts, toolCall) {
+  if (!toolCall || typeof toolCall !== "object") {
+    return;
+  }
+
+  const normalized = {
+    id: String(toolCall.id ?? "").trim(),
+    sessionId: String(toolCall.sessionId ?? "").trim(),
+    tool: String(toolCall.tool ?? "").trim(),
+    args: toolCall.args && typeof toolCall.args === "object" ? toolCall.args : null,
+    result: toolCall.result && typeof toolCall.result === "object" ? toolCall.result : toolCall.result ?? null,
+    ts: Number.isFinite(toolCall.ts) ? toolCall.ts : Date.now(),
+    workDir: String(toolCall.workDir ?? "").trim(),
+  };
+
+  intercepts.tool_calls = Array.isArray(intercepts.tool_calls) ? intercepts.tool_calls : [];
+  intercepts.tool_calls.push(normalized);
+  if (intercepts.tool_calls.length > 100) {
+    intercepts.tool_calls = intercepts.tool_calls.slice(-100);
+  }
 }
 
 function maybeExpireRequest(intercepts, id) {
@@ -449,6 +473,30 @@ const server = createServer(async (req, res) => {
         updateStateCounters(store.intercepts);
         saveStore(store);
         return json(res, 200, { items });
+      }
+
+      if (req.method === "GET" && pathname === "/api/copilot/intercepts/tool-calls") {
+        const requested = toInt(url.searchParams.get("limit"), 100);
+        const limit = Math.min(requested, 500);
+        const store = loadStore();
+        const items = (Array.isArray(store.intercepts.tool_calls) ? store.intercepts.tool_calls : [])
+          .slice(-limit)
+          .reverse()
+          .map((item) => ({
+            id: String(item?.id ?? "").trim(),
+            sessionId: String(item?.sessionId ?? "").trim(),
+            tool: String(item?.tool ?? "").trim(),
+            args: item?.args ?? null,
+            result: item?.result ?? null,
+            ts: Number.isFinite(item?.ts) ? item.ts : 0,
+            workDir: String(item?.workDir ?? "").trim(),
+          }));
+
+        return json(res, 200, {
+          items,
+          total: Array.isArray(store.intercepts.tool_calls) ? store.intercepts.tool_calls.length : 0,
+          limit,
+        });
       }
 
       if (req.method === "POST" && pathname === "/api/copilot/intercepts/pretool") {
@@ -656,6 +704,10 @@ const server = createServer(async (req, res) => {
             tool: String(event.prompt.tool ?? "").trim(),
             hint: String(event.prompt.hint ?? "").trim(),
           };
+        }
+
+        if (event.toolCall && typeof event.toolCall === "object") {
+          appendToolCall(store.intercepts, event.toolCall);
         }
 
         const tokens = Number.parseInt(String(event.tokens ?? "0"), 10);

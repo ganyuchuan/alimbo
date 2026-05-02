@@ -80,6 +80,17 @@
         padding: 10px;
         margin-bottom: 8px;
       }
+      .item pre {
+        margin: 8px 0 0;
+        padding: 8px;
+        border-radius: 6px;
+        background: #f7f9fb;
+        border: 1px solid var(--border);
+        overflow: auto;
+        max-height: 200px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
       .tool {
         font-weight: 700;
       }
@@ -109,6 +120,11 @@
       <div class="panel">
         <div id="list"></div>
       </div>
+
+      <div class="panel">
+        <h2 class="title">Recent Tool Calls</h2>
+        <div id="toolCalls"></div>
+      </div>
     </div>
 
     <script>
@@ -117,6 +133,7 @@
       const decidedByInput = $("decidedBy");
       const statusEl = $("status");
       const listEl = $("list");
+      const toolCallsEl = $("toolCalls");
       const summaryEl = $("summary");
       const refreshBtn = $("refresh");
       const autoBtn = $("auto");
@@ -231,16 +248,61 @@
         }
       }
 
+      function shorten(value, max = 500) {
+        const text = String(value ?? "");
+        if (text.length <= max) {
+          return text;
+        }
+        return text.slice(0, max - 3) + "...";
+      }
+
+      function renderToolCalls(items) {
+        if (!Array.isArray(items) || items.length === 0) {
+          toolCallsEl.innerHTML = '<p class="empty">No tool calls yet.</p>';
+          return;
+        }
+
+        toolCallsEl.innerHTML = "";
+        for (const item of items) {
+          const card = document.createElement("div");
+          card.className = "item";
+          const argsText = shorten(JSON.stringify(item.args ?? null, null, 2));
+          const resultText = shorten(JSON.stringify(item.result ?? null, null, 2));
+          card.innerHTML =
+            '<div class="tool">' +
+            (item.tool || "unknown") +
+            ' <span class="meta">(' +
+            (item.id || "-") +
+            ")</span></div>" +
+            '<div class="meta">session: ' +
+            (item.sessionId || "-") +
+            " | time: " +
+            ts(item.ts) +
+            "</div>" +
+            "<div><strong>Args</strong></div>" +
+            "<pre>" +
+            argsText +
+            "</pre>" +
+            "<div><strong>Result</strong></div>" +
+            "<pre>" +
+            resultText +
+            "</pre>";
+          toolCallsEl.appendChild(card);
+        }
+      }
+
       async function refresh() {
         statusEl.className = "meta";
         statusEl.textContent = "Refreshing...";
         try {
-          const [stateRes, queueRes] = await Promise.all([
+          const [stateRes, queueRes, toolCallsRes] = await Promise.all([
             fetchJson("/api/copilot/intercepts/state"),
             fetchJson("/api/copilot/intercepts/queue?status=waiting&limit=100"),
+            fetchJson("/api/copilot/intercepts/tool-calls?limit=20"),
           ]);
           renderState(stateRes.state || {});
           renderList(queueRes.items || []);
+          renderToolCalls(toolCallsRes.items || []);
           statusEl.textContent = "Updated at " + new Date().toLocaleTimeString();
         } catch (error) {
           statusEl.textContent = String(error.message || error);

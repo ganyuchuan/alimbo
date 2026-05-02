@@ -328,6 +328,89 @@ function shortId(value) {
   return text.length <= 14 ? text : `${text.slice(0, 6)}...${text.slice(-4)}`;
 }
 
+function safeStringify(value, fallback = "{}") {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function createPostToolRequestId(input, invocation) {
+  const candidates = [
+    input?.requestId,
+    input?.permissionRequestId,
+    input?.toolCallId,
+    input?.id,
+    invocation?.requestId,
+    invocation?.toolCallId,
+    invocation?.id,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = String(candidate ?? "").trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return `post_${crypto.randomUUID()}`;
+}
+
+async function reportPostToolUseEvent({ input, invocation, config, workDir }) {
+  const interceptServerUrl = trimTrailingSlash(config.interceptServerUrl);
+  if (!config.interceptEnabled || !interceptServerUrl) {
+    return;
+  }
+
+  const interceptAuthToken = String(config.interceptAuthToken ?? "").trim();
+  const interceptTimeoutMs = toPositiveInt(config.interceptTimeoutMs, 5000);
+  const toolName = String(input?.toolName ?? "").trim().toLowerCase();
+  if (!toolName) {
+    return;
+  }
+
+  const requestId = createPostToolRequestId(input, invocation);
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+
+  if (interceptAuthToken) {
+    headers.Authorization = `Bearer ${interceptAuthToken}`;
+  }
+
+  const safeArgs = safeCloneToolArgs(input?.toolArgs);
+  const safeResult = safeCloneToolArgs(input?.toolResult);
+  const sessionId = String(invocation?.sessionId ?? input?.sessionId ?? "").trim();
+
+  await fetchJsonWithTimeout(`${interceptServerUrl}/api/copilot/intercepts/event`, {
+    method: "POST",
+    headers,
+    timeoutMs: interceptTimeoutMs,
+    body: JSON.stringify({
+      event: {
+        msg: `Tool ${toolName} completed`,
+        entry: `Tool result: ${toolName} (${requestId})`,
+        prompt: {
+          id: requestId,
+          tool: toolName,
+          hint: collectHumanReadableHint(toolName, safeArgs),
+        },
+        toolCall: {
+          id: requestId,
+          sessionId,
+          tool: toolName,
+          args: safeArgs,
+          result: safeResult,
+          ts: Date.now(),
+          workDir,
+        },
+      },
+    }),
+  });
+}
+
 async function pollInterceptDecision({
   interceptServerUrl,
   interceptAuthToken,
@@ -556,6 +639,31 @@ function buildCopilotHooks(config) {
       }
 
       return { permissionDecision: "allow" };
+    },
+    onPostToolUse: async (input, invocation) => {
+      const toolName = String(input?.toolName ?? "").trim().toLowerCase() || "unknown";
+      const safeArgs = safeCloneToolArgs(input?.toolArgs);
+      const safeResult = safeCloneToolArgs(input?.toolResult);
+      const sessionId = String(invocation?.sessionId ?? input?.sessionId ?? "").trim() || "-";
+
+      console.log(`[${sessionId}] Tool: ${toolName}`);
+      console.log(`  Args: ${safeStringify(safeArgs)}`);
+      console.log(`  Result: ${safeStringify(safeResult)}`);
+
+      try {
+        await reportPostToolUseEvent({
+          input,
+          invocation,
+          config,
+          workDir,
+        });
+      } catch (error) {
+        console.warn(
+          `[copilot-sdk][intercept] onPostToolUse upload failed tool=${toolName} reason=${String(error?.message ?? error)}`,
+        );
+      }
+
+      return null;
     },
   };
 }

@@ -1116,3 +1116,39 @@
 - node --check src/sync/http-server.mjs
 - 结果：通过
 
+---
+
+## 2026-05-02
+
+### 32) onPostToolUse 结果上报 + Tool Calls 查询 API + 审批页展示
+
+关联提交：本次提交
+
+变更目标：
+- 在 Copilot 工具执行后通过 `onPostToolUse` 记录工具参数与结果，并上报到 sync server。
+- 提供只读接口查询最近工具调用记录，便于页面和排障使用。
+- 在审批页新增“Recent Tool Calls”区域，直接展示最新工具调用数据。
+
+主要改动：
+- `src/tool/copilot.mjs`
+  - 在 hook 中新增 `onPostToolUse`。
+  - 打印工具名、参数、结果（脱敏后）。
+  - 调用 `POST /api/copilot/intercepts/event` 上报 `event.toolCall`。
+- `src/sync/http-server.mjs`
+  - intercepts 存储结构新增 `tool_calls`（保留最近 100 条）。
+  - `POST /api/copilot/intercepts/event` 中新增 `event.toolCall` 落盘。
+  - 新增只读接口：`GET /api/copilot/intercepts/tool-calls?limit=...`（默认 100，最大 500，倒序返回）。
+- `src/sync/intercept-approval.html`
+  - 新增“Recent Tool Calls”展示面板。
+  - `refresh()` 并行拉取 `/api/copilot/intercepts/tool-calls?limit=20` 并渲染 args/result。
+
+涉及文件：
+- src/tool/copilot.mjs
+- src/sync/http-server.mjs
+- src/sync/intercept-approval.html
+
+验证记录：
+- node --check src/tool/copilot.mjs
+- node --check src/sync/http-server.mjs
+- 结果：通过
+
