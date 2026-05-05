@@ -175,6 +175,13 @@ curl http://127.0.0.1:18790/health
 - `FEISHU_ROUTE_TOTAL_SHARDS`: fixed-routing shard total for Feishu bridge (`1` means disabled, default `1`)
 - `FEISHU_ROUTE_SHARD_INDEX`: current Feishu bridge shard index (`0`-based, default `0`)
 - `FEISHU_ROUTE_SALT`: hashing salt used by Feishu fixed routing (default `myclaw-feishu-route`)
+- `FEISHU_INTERCEPT_REVIEW_ENABLED`: enable Feishu approval worker for Copilot intercept queue (`true`/`false`, default `false`)
+- `FEISHU_INTERCEPT_SERVER_URL`: intercept server base URL used by Feishu approval worker (default `http://127.0.0.1:18790`)
+- `FEISHU_INTERCEPT_AUTH_TOKEN`: optional bearer token for intercept APIs; falls back to `COPILOT_INTERCEPT_AUTH_TOKEN`
+- `FEISHU_INTERCEPT_REVIEW_CHAT_ID`: Feishu chat id for approval notification cards and button callbacks
+- `FEISHU_INTERCEPT_REVIEW_DECIDER`: decidedBy prefix written back to server (default `feishu-bridge`)
+- `FEISHU_INTERCEPT_REVIEW_POLL_INTERVAL_MS`: polling interval for waiting queue (default `3000`)
+- `FEISHU_INTERCEPT_REVIEW_QUEUE_LIMIT`: max waiting items per poll (default `20`)
 - `COPILOT_ENABLED`: enable gh copilot tool (`true`/`false`, default `true`)
 - `COPILOT_TIMEOUT_MS`: timeout for Copilot SDK `sendAndWait` (default `120000`)
 - `COPILOT_MODEL`: model to use (empty = copilot default)
@@ -230,6 +237,10 @@ curl http://127.0.0.1:18790/health
 - `SYNC_INTERCEPT_AUTO_DENY_TOOLS`: comma-separated tools auto-denied by server policy
 - `SYNC_INTERCEPT_WAIT_TIMEOUT_MS`: server-side queue wait timeout before marking request expired (default `60000`)
 - `SYNC_INTERCEPT_POLL_AFTER_MS`: suggested poll interval returned by pretool API (default `1000`)
+
+When `FEISHU_INTERCEPT_REVIEW_ENABLED=true`, the bridge will poll `/api/copilot/intercepts/queue?status=waiting` and push each waiting request to the configured Feishu review chat as an interactive card. Operators can click the `Approve` or `Deny` button directly on the card, and the bridge will write the decision back to `/api/copilot/intercepts/decision`.
+
+Important: the Feishu application must subscribe to `card.action.trigger`, otherwise button clicks will not reach the bridge.
 
 OpenAI Responses example:
 

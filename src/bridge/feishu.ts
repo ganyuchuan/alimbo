@@ -31,6 +31,47 @@ type ServiceRequestParams = {
   lines?: number;
 };
 
+type InterceptQueueItem = {
+  id?: string;
+  status?: string;
+  decision?: string;
+  tool?: string;
+  hint?: string;
+  msg?: string;
+  createdAtMs?: number;
+  updatedAtMs?: number;
+  expiresAtMs?: number;
+  decidedBy?: string | null;
+  reason?: string;
+};
+
+type InterceptQueueResponse = {
+  items?: InterceptQueueItem[];
+};
+
+type InterceptDecisionResponse = {
+  ok?: boolean;
+  id?: string;
+  status?: string;
+  decision?: string;
+  reason?: string;
+};
+
+type InterceptCardActionValue = {
+  action?: string;
+  requestId?: string;
+  tool?: string;
+};
+
+type InterceptCardActionPayload = {
+  action?: {
+    value?: InterceptCardActionValue;
+  };
+  operator?: {
+    open_id?: string;
+  };
+};
+
 function maskSecret(value) {
   if (!value) {
     return "";
@@ -293,6 +334,99 @@ function clipText(value, maxChars = 500) {
     return text;
   }
   return `${text.slice(0, maxChars)}...`;
+}
+
+function trimTrailingSlash(value) {
+  return String(value ?? "").replace(/\/+$/, "");
+}
+
+function formatTime(value) {
+  const ts = Number(value);
+  if (!Number.isFinite(ts) || ts <= 0) {
+    return "-";
+  }
+  return new Date(ts).toLocaleString("zh-CN", { hour12: false });
+}
+
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function buildInterceptReviewCard(item, resolution = null) {
+  const id = String(item?.id ?? "").trim();
+  const tool = String(item?.tool ?? "").trim() || "unknown";
+  const hint = String(item?.hint ?? "").trim() || "-";
+  const msg = String(item?.msg ?? "").trim() || "-";
+  const createdAt = formatTime(item?.createdAtMs);
+  const expiresAt = formatTime(item?.expiresAtMs);
+  const title = resolution
+    ? `审核已完成 · ${tool}`
+    : `Copilot 审核请求 · ${tool}`;
+  const template = resolution
+    ? (resolution.decision === "allow" ? "green" : "red")
+    : "orange";
+  const summary = resolution
+    ? `结果: ${resolution.decision === "allow" ? "Approve" : "Deny"}\n操作人: ${resolution.decidedBy}\n原因: ${resolution.reason || "-"}`
+    : "请直接点击下方按钮完成审批";
+
+  const elements = [
+    {
+      tag: "div",
+      text: {
+        tag: "lark_md",
+        content: [
+          `**Request ID**: ${id}`,
+          `**Tool**: ${tool}`,
+          `**Hint**: ${hint}`,
+          `**Message**: ${msg}`,
+          `**Created At**: ${createdAt}`,
+          `**Expires At**: ${expiresAt}`,
+        ].join("\n"),
+      },
+    },
+    {
+      tag: "note",
+      elements: [
+        {
+          tag: "plain_text",
+          content: summary,
+        },
+      ],
+    },
+  ] as Array<Record<string, unknown>>;
+
+  if (!resolution) {
+    elements.push({
+      tag: "action",
+      actions: [
+        {
+          tag: "button",
+          type: "primary",
+          text: { tag: "plain_text", content: "Approve" },
+          value: { action: "approve", requestId: id, tool },
+        },
+        {
+          tag: "button",
+          type: "danger",
+          text: { tag: "plain_text", content: "Deny" },
+          value: { action: "deny", requestId: id, tool },
+        },
+      ],
+    });
+  }
+
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: {
+        tag: "plain_text",
+        content: title,
+      },
+      template,
+    },
+    elements,
+  };
 }
 
 function makeFeishuConversationScope({ appId, chatType, chatId, senderOpenId }) {
@@ -812,10 +946,20 @@ async function resolveBotOpenId(feishuClient) {
 
 async function sendFeishuText({ feishuClient, chatId, replyToMessageId, text, renderAsMarkdown = false }) {
   const payload = buildFeishuReplyPayload(text, renderAsMarkdown);
+  return sendFeishuMessage({
+    feishuClient,
+    chatId,
+    replyToMessageId,
+    msgType: payload.msgType,
+    content: payload.content,
+  });
+}
+
+async function sendFeishuMessage({ feishuClient, chatId, replyToMessageId, msgType, content }) {
   if (replyToMessageId) {
     await feishuClient.im.message.reply({
       path: { message_id: replyToMessageId },
-      data: { msg_type: payload.msgType, content: payload.content },
+      data: { msg_type: msgType, content },
     });
     return;
   }
@@ -824,10 +968,217 @@ async function sendFeishuText({ feishuClient, chatId, replyToMessageId, text, re
     params: { receive_id_type: "chat_id" },
     data: {
       receive_id: chatId,
-      msg_type: payload.msgType,
-      content: payload.content,
+      msg_type: msgType,
+      content,
     },
   });
+}
+
+function createInterceptReviewClient(feishuCfg) {
+  const baseUrl = trimTrailingSlash(feishuCfg.interceptServerUrl || "http://127.0.0.1:18790");
+  const authToken = String(feishuCfg.interceptAuthToken ?? "").trim();
+  const timeoutMs = parsePositiveInt(feishuCfg.requestTimeoutMs, 15000);
+
+  async function request(method, apiPath, body = undefined) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const headers = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      } as Record<string, string>;
+      if (authToken) {
+        headers.Authorization = `Bearer ${authToken}`;
+      }
+
+      const response = await fetch(`${baseUrl}${apiPath}`, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`intercept request failed (${response.status}): ${text.slice(0, 300)}`);
+      }
+
+      if (response.status === 204) {
+        return null;
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return {
+    async getWaitingQueue(limit) {
+      const safeLimit = parsePositiveInt(limit, 20);
+      const payload = await request(
+        "GET",
+        `/api/copilot/intercepts/queue?status=waiting&limit=${encodeURIComponent(String(safeLimit))}`,
+      ) as InterceptQueueResponse;
+      return Array.isArray(payload?.items) ? payload.items : [];
+    },
+
+    async decide({ id, decision, reason, decidedBy }) {
+      return request("POST", "/api/copilot/intercepts/decision", {
+        id,
+        decision,
+        reason,
+        decidedBy,
+      }) as Promise<InterceptDecisionResponse>;
+    },
+  };
+}
+
+function createInterceptReviewWorker({ feishuCfg, feishuClient }) {
+  const noop = {
+    start() {},
+    stop() {},
+    async handleCardAction() {
+      return null;
+    },
+  };
+
+  if (!feishuCfg.interceptReviewEnabled) {
+    return noop;
+  }
+
+  const reviewChatId = String(feishuCfg.interceptReviewChatId ?? "").trim();
+  if (!reviewChatId) {
+    console.warn("[feishu-bridge][intercept-review] disabled: FEISHU_INTERCEPT_REVIEW_CHAT_ID is empty");
+    return noop;
+  }
+
+  const client = createInterceptReviewClient(feishuCfg);
+  const seenSignatures = new Set();
+  const queueLimit = parsePositiveInt(feishuCfg.interceptReviewQueueLimit, 20);
+  const pollIntervalMs = parsePositiveInt(feishuCfg.interceptReviewPollIntervalMs, 3000);
+  const decider = String(feishuCfg.interceptReviewDecider ?? "").trim() || "feishu-bridge";
+  let timer = null as NodeJS.Timeout | null;
+  let polling = false;
+
+  const notifyNewWaitingItems = async (items) => {
+    for (const item of items) {
+      const id = String(item?.id ?? "").trim();
+      if (!id) {
+        continue;
+      }
+
+      const signature = `${id}:${Number(item?.updatedAtMs ?? item?.createdAtMs ?? 0)}`;
+      if (seenSignatures.has(signature)) {
+        continue;
+      }
+      seenSignatures.add(signature);
+
+      if (seenSignatures.size > 4000) {
+        const keep = [...seenSignatures].slice(-2000);
+        seenSignatures.clear();
+        for (const value of keep) {
+          seenSignatures.add(value);
+        }
+      }
+
+      await sendFeishuMessage({
+        feishuClient,
+        chatId: reviewChatId,
+        replyToMessageId: "",
+        msgType: "interactive",
+        content: JSON.stringify(buildInterceptReviewCard(item)),
+      });
+    }
+  };
+
+  const poll = async () => {
+    if (polling) {
+      return;
+    }
+    polling = true;
+    try {
+      const waitingItems = await client.getWaitingQueue(queueLimit);
+      await notifyNewWaitingItems(waitingItems);
+    } catch (error) {
+      console.warn(`[feishu-bridge][intercept-review] poll failed: ${String(error?.message ?? error)}`);
+    } finally {
+      polling = false;
+    }
+  };
+
+  return {
+    start() {
+      void poll();
+      timer = setInterval(() => {
+        void poll();
+      }, pollIntervalMs);
+      console.log(
+        `[feishu-bridge][intercept-review] enabled chatId=${reviewChatId} pollIntervalMs=${pollIntervalMs} queueLimit=${queueLimit}`,
+      );
+    },
+
+    stop() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    },
+
+    async handleCardAction(cardActionPayload) {
+      const data = (cardActionPayload ?? {}) as InterceptCardActionPayload;
+      const action = String(data?.action?.value?.action ?? "").trim().toLowerCase();
+      if (!["approve", "deny"].includes(action)) {
+        return null;
+      }
+
+      const id = String(data?.action?.value?.requestId ?? "").trim();
+      if (!id) {
+        return {
+          toast: {
+            type: "error",
+            content: "缺少 requestId，无法审批",
+          },
+        };
+      }
+
+      const decision = action === "approve" ? "allow" : "deny";
+      const operator = String(data?.operator?.open_id ?? "").trim();
+      const shortOperator = operator ? operator.slice(-8) : "unknown";
+      const decidedBy = `${decider}:${shortOperator}`;
+      const reason = `manual ${decision} from ${decidedBy}`;
+
+      const decisionResponse = await client.decide({
+        id,
+        decision,
+        decidedBy,
+        reason,
+      });
+
+      const updatedItem = {
+        id: String(decisionResponse?.id ?? id),
+        tool: String(data?.action?.value?.tool ?? "") || "unknown",
+        hint: "-",
+        msg: "审批已处理",
+      };
+
+      return {
+        toast: {
+          type: decision === "allow" ? "success" : "warning",
+          content: decision === "allow" ? "已批准" : "已拒绝",
+        },
+        card: {
+          type: "raw",
+          data: buildInterceptReviewCard(updatedItem, {
+            decision,
+            decidedBy,
+            reason: String(decisionResponse?.reason ?? reason),
+          }),
+        },
+      };
+    },
+  };
 }
 
 function assertConfig(feishuCfg) {
@@ -839,6 +1190,9 @@ function assertConfig(feishuCfg) {
   }
   if (feishuCfg.connectionMode !== "websocket") {
     throw new Error('Only FEISHU_CONNECTION_MODE="websocket" is supported in this MVP bridge');
+  }
+  if (feishuCfg.interceptReviewEnabled && !feishuCfg.interceptReviewChatId) {
+    throw new Error("FEISHU_INTERCEPT_REVIEW_CHAT_ID is required when FEISHU_INTERCEPT_REVIEW_ENABLED=true");
   }
 }
 
@@ -904,6 +1258,8 @@ gatewayClient.onEvent((frame) => {
 const botOpenId = await resolveBotOpenId(feishuClient);
 const dedup = createMessageDedup();
 let warnedUnknownBotOpenId = false;
+const interceptReviewWorker = createInterceptReviewWorker({ feishuCfg, feishuClient });
+interceptReviewWorker.start();
 
 console.log(
   `[feishu-bridge] config: appId=${maskSecret(feishuCfg.appId)} domain=${feishuCfg.domain} mode=${feishuCfg.connectionMode} requireMentionInGroup=${feishuCfg.requireMentionInGroup}`,
@@ -1147,12 +1503,15 @@ dispatcher.register({
       }
     }
   },
+  // SDK typing does not model return values here, but websocket card callbacks do support returning updated card payloads.
+  "card.action.trigger": ((payload) => interceptReviewWorker.handleCardAction(payload)),
 });
 
 wsClient.start({ eventDispatcher: dispatcher });
 console.log("[feishu-bridge] websocket client started");
 
 const shutdown = () => {
+  interceptReviewWorker.stop();
   gatewayClient.close();
   try {
     const maybeWsClient = wsClient as unknown as WsClientCompat;

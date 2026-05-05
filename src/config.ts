@@ -143,6 +143,19 @@ export const config = {
     routeTotalShards: toInt(process.env.FEISHU_ROUTE_TOTAL_SHARDS, 1),
     routeShardIndex: toNonNegativeInt(process.env.FEISHU_ROUTE_SHARD_INDEX, 0),
     routeSalt: process.env.FEISHU_ROUTE_SALT?.trim() || "myclaw-feishu-route",
+    interceptReviewEnabled: toBool(process.env.FEISHU_INTERCEPT_REVIEW_ENABLED, false),
+    interceptServerUrl:
+      process.env.FEISHU_INTERCEPT_SERVER_URL?.trim() ||
+      process.env.COPILOT_INTERCEPT_SERVER_URL?.trim() ||
+      "http://127.0.0.1:18790",
+    interceptAuthToken:
+      process.env.FEISHU_INTERCEPT_AUTH_TOKEN?.trim() ||
+      process.env.COPILOT_INTERCEPT_AUTH_TOKEN?.trim() ||
+      "",
+    interceptReviewChatId: process.env.FEISHU_INTERCEPT_REVIEW_CHAT_ID?.trim() || "",
+    interceptReviewDecider: process.env.FEISHU_INTERCEPT_REVIEW_DECIDER?.trim() || "feishu-bridge",
+    interceptReviewPollIntervalMs: toInt(process.env.FEISHU_INTERCEPT_REVIEW_POLL_INTERVAL_MS, 3000),
+    interceptReviewQueueLimit: toInt(process.env.FEISHU_INTERCEPT_REVIEW_QUEUE_LIMIT, 20),
   },
   maxPayloadBytes: 1024 * 1024,
 };

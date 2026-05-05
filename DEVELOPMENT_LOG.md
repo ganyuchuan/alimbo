@@ -1267,3 +1267,44 @@
 验证记录：
 - `npm run typecheck`
 - 结果：通过（`TYPECHECK_OK`）
+
+---
+
+## 2026-05-05
+
+### 35) Feishu 审核链路改为交互卡片按钮（Approve / Deny）
+
+关联提交：本次提交
+
+变更目标：
+- 去掉飞书审核文本命令（`/approve`、`/deny`、`/pending`）和对应命令路由。
+- 审核通知从纯文本改为飞书交互卡片，直接在卡片上点击 `Approve` / `Deny` 完成审批。
+- 点击按钮后直接回写 `/api/copilot/intercepts/decision`，并把原卡片更新为已审批状态。
+
+主要改动：
+- `src/bridge/feishu.ts`
+  - 新增审核卡片构造：`buildInterceptReviewCard`，包含请求详情与按钮动作值。
+  - 审核 worker 从文本消息通知改为发送 `interactive` 卡片。
+  - 新增 `card.action.trigger` 回调处理：
+    - 解析按钮动作（approve/deny）与 requestId
+    - 调用 decision 接口写回审批结果
+    - 返回新卡片内容更新原消息，并回传 toast 提示
+  - 删除审核命令处理入口（不再通过 `/approve` / `/deny` 文本命令审批）。
+  - 保留审核轮询与去重逻辑（waiting 队列 -> 发卡片）。
+- `README.md`
+  - 更新 `FEISHU_INTERCEPT_REVIEW_CHAT_ID` 描述为“卡片通知 + 按钮回调”。
+  - 审核流程说明改为卡片按钮模式，并增加订阅要求：`card.action.trigger`。
+- `.env.example`
+  - 保留并沿用现有 `FEISHU_INTERCEPT_REVIEW_*` 配置项，适配卡片审批模式。
+
+涉及文件：
+- src/bridge/feishu.ts
+- src/config.ts
+- README.md
+- .env.example
+- DEVELOPMENT_LOG.md
+
+验证记录：
+- `npm run typecheck`
+- `npm run build`
+- 结果：通过
