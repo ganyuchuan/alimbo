@@ -258,6 +258,60 @@
     - 新增会话消息归一化与 entries 收集逻辑，用于同步最近会话内容。
     - 新增 token 估算逻辑：按 prompt/output 文本近似估算 token。
     - 在普通会话和共享会话路径中，均在拿到最终响应后通过 `POST /api/copilot/intercepts/event` 上报 token 估算结果。
+
+  ---
+
+  ## 2026-05-06
+
+  ### 11) 多 Provider Agent 架构接入 Claude Agent SDK
+
+  变更目标：
+  - 在保持原有 Copilot 兼容的前提下，支持通过 `AGENT_PROVIDER` 在 Copilot 与 Claude 间切换。
+
+  主要改动：
+  - 新增 Provider 路由层：`src/tool/agent.ts`
+    - 提供统一入口：`runAgentWithSharedSession` / `runAgentWithSession`。
+  - 新增 Claude 适配层：`src/tool/claude.ts`
+    - 基于 `@anthropic-ai/claude-agent-sdk` 的 `query` 接口。
+    - 支持共享会话复用、流式 delta 回调、完成回调、超时处理。
+    - 增加与 Copilot 对齐的 hook 映射：`PreToolUse` / `PostToolUse` / `SessionStart` / `SessionEnd`。
+  - 网关/工具调用统一改走 agent 路由：
+    - `src/gateway/server.ts`
+    - `src/index.ts`
+    - `src/tool/sql.ts`
+  - 配置扩展：`src/config.ts`
+    - 新增 `AGENT_PROVIDER`、`CLAUDE_API_KEY`、`CLAUDE_MODEL`、`CLAUDE_MAX_TURNS` 等映射。
+  - 依赖切换：
+    - `package.json` / `package-lock.json`
+    - 从 `@anthropic-ai/claude-code` 迁移为 `@anthropic-ai/claude-agent-sdk`。
+
+  涉及文件：
+  - src/tool/agent.ts
+  - src/tool/claude.ts
+  - src/gateway/server.ts
+  - src/index.ts
+  - src/tool/sql.ts
+  - src/config.ts
+  - package.json
+  - package-lock.json
+
+  ### 12) Feishu 消息反应 emoji 按 agent/provider 区分（最小改动版）
+
+  变更目标：
+  - 不增加新配置项，直接硬编码按当前 provider 选择 `emoji_type`。
+  - 对命令消息（`/xxx`）不贴表情。
+
+  主要改动：
+  - `src/bridge/feishu.ts`
+    - 新增 `resolveReactionEmojiType`，基于 `copilotCfg.agentProvider` 返回不同 emoji。
+    - 命令消息返回空字符串；调用 `messageReaction.create` 前增加空值判断，避免无效请求。
+
+  涉及文件：
+  - src/bridge/feishu.ts
+
+  验证记录：
+  - `npm run typecheck`
+  - 结果：通过
   - `src/sync/http-server.mjs`
     - 拦截状态模型精简为 `total/running/waiting/completed` 主状态，由客户端 event 驱动更新。
     - 支持通过 event 写入 `entries`、状态字段与 `last_token_estimate`。

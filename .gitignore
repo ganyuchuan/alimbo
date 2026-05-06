@@ -6,3 +6,5 @@ data/
 dist/
 skills/
 config/
+logs/
+docs/

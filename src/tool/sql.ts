@@ -1,5 +1,5 @@
 import path from "node:path";
-import { runCopilotWithSession } from "./copilot.js";
+import { runAgentWithSession } from "./agent.js";
 
 type SqlToolConfig = {
   workDir?: string;
@@ -89,7 +89,7 @@ export async function runSqlRequest({
     schemaHint: String(config.schemaHint ?? "").trim(),
   });
 
-  const { output, sessionId } = await runCopilotWithSession({
+  const { output, sessionId } = await runAgentWithSession({
     prompt,
     config: {
       ...copilotConfig,

@@ -47,11 +47,17 @@ export const config = {
   },
   copilot: {
     enabled: toBool(process.env.COPILOT_ENABLED, true),
-    timeoutMs: toInt(process.env.COPILOT_TIMEOUT_MS, 120000),
+    // Agent provider routing: "copilot" (default) or "claude"
+    agentProvider: process.env.AGENT_PROVIDER?.trim().toLowerCase() || "copilot",
+    // Claude Code SDK settings (used when agentProvider === "claude")
+    claudeApiKey: process.env.CLAUDE_API_KEY?.trim() || "",
+    claudeModel: process.env.CLAUDE_MODEL?.trim() || "",
+    claudeMaxTurns: toInt(process.env.CLAUDE_MAX_TURNS, 10),
+    timeoutMs: toInt(process.env.AGENT_TIMEOUT_MS, 0) || toInt(process.env.COPILOT_TIMEOUT_MS, 120000),
     model: process.env.COPILOT_MODEL?.trim() || "",
     allowAllTools: toBool(process.env.COPILOT_ALLOW_ALL_TOOLS, true),
-    workDir: process.env.COPILOT_WORK_DIR?.trim() || "",
-    reuseSession: toBool(process.env.COPILOT_REUSE_SESSION, true),
+    workDir: process.env.AGENT_WORK_DIR?.trim() || process.env.COPILOT_WORK_DIR?.trim() || "",
+    reuseSession: toBool(process.env.AGENT_REUSE_SESSION, toBool(process.env.COPILOT_REUSE_SESSION, true)),
     skillsFile: process.env.COPILOT_SKILLS_FILE?.trim() || "data/copilot-skills.json",
     mcpConfigFile: process.env.COPILOT_MCP_CONFIG_FILE?.trim() || "config/mcporter.json",
     hookEnabled: toBool(process.env.COPILOT_HOOK_ENABLED, true),

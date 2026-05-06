@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import crypto from "node:crypto";
 import { WebSocketServer } from "ws";
 import { generateAssistantReply } from "../model/client.js";
-import { resetSharedCopilotSessionId, runCopilotWithSharedSession } from "../tool/copilot.js";
+import { resetSharedAgentSession, runAgentWithSharedSession } from "../tool/agent.js";
 import { runGitCommand } from "../tool/git.js";
 import { planCronOperation } from "../tool/cron.js";
 import { runSqlRequest } from "../tool/sql.js";
@@ -262,7 +262,7 @@ export function createGatewayServer(config, { cronScheduler } = { cronScheduler:
             );
           };
 
-          const { output, sessionId } = await runCopilotWithSharedSession({
+          const { output, sessionId } = await runAgentWithSharedSession({
             prompt,
             config: config.copilot,
             sessionKey,
@@ -435,7 +435,7 @@ export function createGatewayServer(config, { cronScheduler } = { cronScheduler:
             workDir: config.copilot?.workDir || process.cwd(),
             skillsFile: config.copilot?.skillsFile,
           });
-          resetSharedCopilotSessionId();
+          resetSharedAgentSession();
           socket.send(JSON.stringify(makeResponse(frame.id, true, payload)));
           return;
         }
@@ -452,7 +452,7 @@ export function createGatewayServer(config, { cronScheduler } = { cronScheduler:
             workDir: config.copilot?.workDir || process.cwd(),
             skillsFile: config.copilot?.skillsFile,
           });
-          resetSharedCopilotSessionId();
+          resetSharedAgentSession();
           socket.send(JSON.stringify(makeResponse(frame.id, true, payload)));
           return;
         }
@@ -478,7 +478,7 @@ export function createGatewayServer(config, { cronScheduler } = { cronScheduler:
             workDir: config.copilot?.workDir || process.cwd(),
             mcpConfigFile: config.copilot?.mcpConfigFile,
           });
-          resetSharedCopilotSessionId();
+          resetSharedAgentSession();
           socket.send(JSON.stringify(makeResponse(frame.id, true, payload)));
           return;
         }
@@ -495,7 +495,7 @@ export function createGatewayServer(config, { cronScheduler } = { cronScheduler:
             workDir: config.copilot?.workDir || process.cwd(),
             mcpConfigFile: config.copilot?.mcpConfigFile,
           });
-          resetSharedCopilotSessionId();
+          resetSharedAgentSession();
           socket.send(JSON.stringify(makeResponse(frame.id, true, payload)));
           return;
         }

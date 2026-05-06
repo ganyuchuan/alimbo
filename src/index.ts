@@ -3,6 +3,7 @@ import { createGatewayServer } from "./gateway/server.js";
 import { createCronScheduler } from "./cron/scheduler.js";
 import * as Lark from "@larksuiteoapi/node-sdk";
 import { runCopilotWithSharedSession, stopCopilotClient } from "./tool/copilot.js";
+import { runAgentWithSharedSession } from "./tool/agent.js";
 import { createSyncClient } from "./sync/client.js";
 import { looksLikeMarkdown } from "./bridge/reply-format.js";
 
@@ -80,7 +81,7 @@ if (config.cron.enabled) {
   });
 
     cronScheduler.registerExecutor("copilot", async (params, job) => {
-      const { output, sessionId } = await runCopilotWithSharedSession({
+      const { output, sessionId } = await runAgentWithSharedSession({
         prompt: params.prompt,
         config: config.copilot,
       });

@@ -575,6 +575,31 @@ function splitCommandText(text) {
   };
 }
 
+function resolveReactionEmojiType({ text, copilotCfg }) {
+  const command = splitCommandText(text);
+
+  if (command) {
+    return "";
+  }
+
+  const defaultEmoji = "OnIt";
+  const copilotEmoji = "OnIt";
+  const claudeEmoji = "Moon";
+  const codexEmoji = "Done";
+
+  const provider = String(copilotCfg?.agentProvider ?? "copilot").trim().toLowerCase();
+
+  if (provider === "copilot") {
+    return copilotEmoji;
+  } else if (provider === "claude") {
+    return claudeEmoji;
+  } else if (provider === "codex") {
+    return codexEmoji;
+  }
+
+  return defaultEmoji;
+}
+
 function parseMaybeJsonObject(raw, fieldName) {
   try {
     const parsed = JSON.parse(raw);
@@ -1473,14 +1498,21 @@ dispatcher.register({
       
     const isCopilot = copilotCfg.enabled;
 
-    // 先贴一个"正在处理"的表情回应
-    try {
-      await feishuClient.im.messageReaction.create({
-        path: { message_id: messageId },
-        data: { reaction_type: { emoji_type: "OnIt" } },
-      });
-    } catch (e) {
-      console.warn(`[feishu-bridge] add reaction failed: ${e?.message ?? e}`);
+    const reactionEmojiType = resolveReactionEmojiType({
+      text,
+      copilotCfg,
+    });
+
+    // 先贴一个"正在处理"的表情回应（命令消息可返回空字符串以跳过）
+    if (reactionEmojiType) {
+      try {
+        await feishuClient.im.messageReaction.create({
+          path: { message_id: messageId },
+          data: { reaction_type: { emoji_type: reactionEmojiType } },
+        });
+      } catch (e) {
+        console.warn(`[feishu-bridge] add reaction failed: ${e?.message ?? e}`);
+      }
     }
 
     let downloadedResource = null;
