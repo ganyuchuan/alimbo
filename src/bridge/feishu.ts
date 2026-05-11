@@ -84,6 +84,23 @@ type InterceptCardActionPayload = {
   };
 };
 
+type PendingAttachmentItem = {
+  kind: "image" | "file";
+  filePath: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  receivedAtMs: number;
+};
+
+type PendingAttachmentState = {
+  items: PendingAttachmentItem[];
+  expiresAtMs: number;
+};
+
+const ATTACHMENT_LISTEN_WINDOW_MS = 5 * 60 * 1000;
+const pendingAttachments = new Map<string, PendingAttachmentState>();
+
 function maskSecret(value) {
   if (!value) {
     return "";
@@ -363,6 +380,102 @@ function formatTime(value) {
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function isTextLikeFile({ fileName, contentType }) {
+  const normalizedName = String(fileName ?? "").toLowerCase();
+  return (
+    normalizedName.endsWith(".md") ||
+    normalizedName.endsWith(".markdown") ||
+    normalizedName.endsWith(".txt") ||
+    String(contentType ?? "").startsWith("text/")
+  );
+}
+
+async function cleanupAttachmentItems(items: PendingAttachmentItem[] = []) {
+  for (const item of items) {
+    if (!item?.filePath) {
+      continue;
+    }
+    await fs.unlink(item.filePath).catch(() => {});
+  }
+}
+
+async function clearExpiredPendingAttachments(scopeKey, nowMs = Date.now()) {
+  const state = pendingAttachments.get(scopeKey);
+  if (!state || state.expiresAtMs > nowMs) {
+    return;
+  }
+
+  pendingAttachments.delete(scopeKey);
+  await cleanupAttachmentItems(state.items);
+}
+
+async function appendPendingAttachment(scopeKey, item: PendingAttachmentItem) {
+  await clearExpiredPendingAttachments(scopeKey);
+  const nowMs = Date.now();
+  const state = pendingAttachments.get(scopeKey) || {
+    items: [],
+    expiresAtMs: nowMs + ATTACHMENT_LISTEN_WINDOW_MS,
+  };
+  state.items.push(item);
+  state.expiresAtMs = nowMs + ATTACHMENT_LISTEN_WINDOW_MS;
+  pendingAttachments.set(scopeKey, state);
+  return state.items.length;
+}
+
+async function consumePendingAttachmentContext(scopeKey, fileMaxTextChars) {
+  await clearExpiredPendingAttachments(scopeKey);
+  const state = pendingAttachments.get(scopeKey);
+  if (!state || state.items.length === 0) {
+    return "";
+  }
+
+  pendingAttachments.delete(scopeKey);
+
+  try {
+    const lines = [
+      "用户在当前对话中先发送了以下图片/文件，请先结合这些上下文再回答后续文本问题。",
+    ];
+
+    let imageIndex = 0;
+    let fileIndex = 0;
+
+    for (const item of state.items) {
+      if (item.kind === "image") {
+        imageIndex += 1;
+        lines.push(`图片#${imageIndex}:`);
+        lines.push(`- 路径: ${item.filePath}`);
+        lines.push(`- 类型: ${item.contentType}`);
+        lines.push(`- 大小(bytes): ${item.size}`);
+        continue;
+      }
+
+      fileIndex += 1;
+      lines.push(`文件#${fileIndex}:`);
+      lines.push(`- 文件名: ${item.fileName || "(unknown)"}`);
+      lines.push(`- 路径: ${item.filePath}`);
+      lines.push(`- 类型: ${item.contentType}`);
+      lines.push(`- 大小(bytes): ${item.size}`);
+
+      if (isTextLikeFile(item)) {
+        const raw = await fs.readFile(item.filePath, "utf8").catch(() => "");
+        if (raw) {
+          const clipped = raw.length > fileMaxTextChars
+            ? `${raw.slice(0, fileMaxTextChars)}\n\n[内容已截断，总长度=${raw.length}]`
+            : raw;
+          lines.push("- 文本内容:");
+          lines.push("```");
+          lines.push(clipped);
+          lines.push("```");
+        }
+      }
+    }
+
+    return lines.join("\n");
+  } finally {
+    await cleanupAttachmentItems(state.items);
+  }
 }
 
 function buildInterceptReviewCard(item, resolution = null) {
@@ -1515,7 +1628,6 @@ dispatcher.register({
       }
     }
 
-    let downloadedResource = null;
     try {
       let reply;
 
@@ -1541,6 +1653,36 @@ dispatcher.register({
         }
       };
 
+      if (isCopilot && !text && (inbound.kind === "image" || inbound.kind === "file")) {
+        const downloadedResource = await downloadFeishuResourceToTemp({
+          feishuCfg,
+          messageId,
+          resourceKey: inbound.kind === "image" ? inbound.imageKey : inbound.fileKey,
+          resourceType: inbound.kind,
+          fileNameHint: inbound.fileName,
+        });
+
+        const pendingCount = await appendPendingAttachment(copilotSessionKey, {
+          kind: inbound.kind,
+          filePath: downloadedResource.filePath,
+          fileName: downloadedResource.fileName,
+          contentType: downloadedResource.contentType,
+          size: downloadedResource.size,
+          receivedAtMs: Date.now(),
+        });
+
+        await sendFeishuText({
+          feishuClient,
+          chatId,
+          replyToMessageId: messageId,
+          text: `已收到${inbound.kind === "image" ? "图片" : "文件"}（当前已缓存 ${pendingCount} 个附件）。请在 ${Math.floor(
+            ATTACHMENT_LISTEN_WINDOW_MS / 60_000,
+          )} 分钟内发送一条文本消息，我会把这些附件作为上下文一起处理。`,
+          renderAsMarkdown: feishuCfg.replyMarkdown,
+        });
+        return;
+      }
+
       const commandReply = await routeCommand({
         text,
         sessionId,
@@ -1559,61 +1701,16 @@ dispatcher.register({
 
       if (!reply && isCopilot) {
         let prompt = text.trim();
-        if (inbound.kind === "image") {
-          downloadedResource = await downloadFeishuResourceToTemp({
-            feishuCfg,
-            messageId,
-            resourceKey: inbound.imageKey,
-            resourceType: "image",
-          });
+        const pendingAttachmentContext = await consumePendingAttachmentContext(
+          copilotSessionKey,
+          feishuCfg.fileMaxTextChars,
+        );
+        if (pendingAttachmentContext) {
           prompt = [
-            "用户发送了一张飞书图片，请分析图片内容并用中文回答。",
-            `图片文件路径: ${downloadedResource.filePath}`,
-            `图片类型: ${downloadedResource.contentType}`,
-            `图片大小(bytes): ${downloadedResource.size}`,
-            "如果无法直接读取图片内容，请明确说明原因并给出可执行的下一步。",
-          ].join("\n");
-        } else if (inbound.kind === "file") {
-          downloadedResource = await downloadFeishuResourceToTemp({
-            feishuCfg,
-            messageId,
-            resourceKey: inbound.fileKey,
-            resourceType: "file",
-            fileNameHint: inbound.fileName,
-          });
-
-          const fileName = String(downloadedResource.fileName || "").toLowerCase();
-          const isTextLike =
-            fileName.endsWith(".md") ||
-            fileName.endsWith(".markdown") ||
-            fileName.endsWith(".txt") ||
-            downloadedResource.contentType.startsWith("text/");
-
-          if (isTextLike) {
-            const raw = await fs.readFile(downloadedResource.filePath, "utf8");
-            const clipped = raw.length > feishuCfg.fileMaxTextChars
-              ? `${raw.slice(0, feishuCfg.fileMaxTextChars)}\n\n[内容已截断，总长度=${raw.length}]`
-              : raw;
-            prompt = [
-              "用户发送了一个文件，请根据文件内容回答。",
-              `文件名: ${downloadedResource.fileName}`,
-              `文件路径: ${downloadedResource.filePath}`,
-              `文件类型: ${downloadedResource.contentType}`,
-              "以下是文件文本内容：",
-              "```",
-              clipped,
-              "```",
-            ].join("\n");
-          } else {
-            prompt = [
-              "用户发送了一个文件，请尝试读取文件并给出结论。",
-              `文件名: ${downloadedResource.fileName}`,
-              `文件路径: ${downloadedResource.filePath}`,
-              `文件类型: ${downloadedResource.contentType}`,
-              `文件大小(bytes): ${downloadedResource.size}`,
-              "如果无法直接解析该格式，请明确说明并建议用户转换为 md/txt。",
-            ].join("\n");
-          }
+            pendingAttachmentContext,
+            "用户本条文本消息如下：",
+            prompt,
+          ].join("\n\n");
         }
 
         if (!prompt) {
@@ -1663,10 +1760,6 @@ dispatcher.register({
         });
       } catch (replyError) {
         console.error(`[feishu-bridge] error reply failed: ${String(replyError?.message ?? replyError)}`);
-      }
-    } finally {
-      if (downloadedResource?.filePath) {
-        await fs.unlink(downloadedResource.filePath).catch(() => {});
       }
     }
   },
