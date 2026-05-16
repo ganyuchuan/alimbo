@@ -4,7 +4,6 @@ import { createCronScheduler } from "./cron/scheduler.js";
 import * as Lark from "@larksuiteoapi/node-sdk";
 import { runCopilotWithSharedSession, stopCopilotClient } from "./tool/copilot.js";
 import { runAgentWithSharedSession } from "./tool/agent.js";
-import { createSyncClient } from "./sync/client.js";
 import { looksLikeMarkdown } from "./bridge/reply-format.js";
 
 function normalizeFeishuDomain(domain) {
@@ -58,11 +57,6 @@ let cronScheduler = null;
 if (config.cron.enabled) {
   cronScheduler = createCronScheduler(config.cron);
   let feishuNotifyClient = null;
-  let syncClient = null;
-
-  if (config.sync.enabled) {
-    syncClient = createSyncClient(config.sync);
-  }
 
   if (config.feishu.enabled && config.feishu.appId && config.feishu.appSecret) {
     feishuNotifyClient = new Lark.Client({
@@ -97,23 +91,6 @@ if (config.cron.enabled) {
   });
 
   cronScheduler.onJobFinished(async ({ job, trigger, status, error, output }) => {
-    if (syncClient) {
-      try {
-        await syncClient.upsertJob(job);
-        await syncClient.appendRun({
-          jobId: job.id,
-          jobName: job.name,
-          trigger,
-          status,
-          error,
-          output,
-          ranAtMs: job.state?.lastRunAtMs ?? Date.now(),
-        });
-      } catch (syncError) {
-        console.warn(`[sync] failed to push run event: ${String(syncError?.message ?? syncError)}`);
-      }
-    }
-
     if (!feishuNotifyClient || job.notify?.type !== "feishu") {
       return;
     }
@@ -150,35 +127,6 @@ if (config.cron.enabled) {
       renderAsMarkdown: outputIsMarkdown,
     });
   });
-
-  cronScheduler.onJobChanged(async ({ type, job }) => {
-    if (!syncClient || !job?.id) {
-      return;
-    }
-
-    try {
-      if (type === "remove") {
-        await syncClient.removeJob(job.id);
-      } else {
-        await syncClient.upsertJob(job);
-      }
-    } catch (syncError) {
-      console.warn(`[sync] failed to sync job change: ${String(syncError?.message ?? syncError)}`);
-    }
-  });
-
-  if (syncClient) {
-    (async () => {
-      try {
-        for (const job of cronScheduler.list()) {
-          await syncClient.upsertJob(job);
-        }
-        console.log("[sync] initial cron jobs synced");
-      } catch (syncError) {
-        console.warn(`[sync] initial sync failed: ${String(syncError?.message ?? syncError)}`);
-      }
-    })();
-  }
 
   cronScheduler.start();
 }

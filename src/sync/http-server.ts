@@ -201,13 +201,11 @@ function ensureInterceptsShape(raw) {
 
 function ensureStoreShape(raw) {
   if (!raw || typeof raw !== "object") {
-    return { jobs: {}, runs: [], intercepts: ensureInterceptsShape(null) };
+    return { intercepts: ensureInterceptsShape(null) };
   }
 
-  const jobs = raw.jobs && typeof raw.jobs === "object" ? raw.jobs : {};
-  const runs = Array.isArray(raw.runs) ? raw.runs : [];
   const intercepts = ensureInterceptsShape(raw.intercepts);
-  return { jobs, runs, intercepts };
+  return { intercepts };
 }
 
 type InterceptRequestLike = {
@@ -267,14 +265,6 @@ type InterceptEventPayload = {
 
 type InterceptEventBody = {
   event?: InterceptEventPayload;
-};
-
-type JobUpsertBody = {
-  job?: Record<string, unknown>;
-};
-
-type RunAppendBody = {
-  run?: Record<string, unknown>;
 };
 
 function loadStore() {
@@ -517,8 +507,6 @@ const server = createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         service: "myclaw-sync-server",
-        jobs: Object.keys(store.jobs).length,
-        runs: store.runs.length,
         intercepts: Object.keys(store.intercepts.requests).length,
       });
     }
@@ -855,74 +843,6 @@ const server = createServer(async (req, res) => {
       }
 
       return notFound(res);
-    }
-
-    if (req.method === "GET" && pathname === "/api/jobs") {
-      const store = loadStore();
-      return json(res, 200, { jobs: Object.values(store.jobs) });
-    }
-
-    if (req.method === "GET" && pathname.startsWith("/api/jobs/")) {
-      const id = decodeURIComponent(pathname.slice("/api/jobs/".length));
-      const store = loadStore();
-      const job = store.jobs[id];
-      if (!job) {
-        return notFound(res);
-      }
-      return json(res, 200, { job });
-    }
-
-    if (req.method === "PUT" && pathname.startsWith("/api/jobs/")) {
-      const id = decodeURIComponent(pathname.slice("/api/jobs/".length));
-      const body = await parseBody<JobUpsertBody>(req);
-      const job = body?.job;
-      if (!job || typeof job !== "object") {
-        return json(res, 400, { error: "invalid job payload" });
-      }
-
-      const store = loadStore();
-      store.jobs[id] = {
-        ...job,
-        id,
-        syncedAtMs: Date.now(),
-      };
-      saveStore(store);
-      return json(res, 200, { ok: true, job: store.jobs[id] });
-    }
-
-    if (req.method === "DELETE" && pathname.startsWith("/api/jobs/")) {
-      const id = decodeURIComponent(pathname.slice("/api/jobs/".length));
-      const store = loadStore();
-      delete store.jobs[id];
-      saveStore(store);
-      return json(res, 200, { ok: true, id });
-    }
-
-    if (req.method === "GET" && pathname === "/api/runs") {
-      const jobId = url.searchParams.get("jobId") || "";
-      const limit = toInt(url.searchParams.get("limit"), 100);
-      const store = loadStore();
-      let runs = store.runs;
-      if (jobId) {
-        runs = runs.filter((item) => item?.jobId === jobId);
-      }
-      return json(res, 200, { runs: runs.slice(-limit).reverse() });
-    }
-
-    if (req.method === "POST" && pathname === "/api/runs") {
-      const body = await parseBody<RunAppendBody>(req);
-      const run = body?.run;
-      if (!run || typeof run !== "object") {
-        return json(res, 400, { error: "invalid run payload" });
-      }
-
-      const store = loadStore();
-      store.runs.push({ ...run, syncedAtMs: Date.now() });
-      if (store.runs.length > 5000) {
-        store.runs = store.runs.slice(-5000);
-      }
-      saveStore(store);
-      return json(res, 200, { ok: true });
     }
 
     return notFound(res);

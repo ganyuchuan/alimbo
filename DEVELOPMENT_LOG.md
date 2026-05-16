@@ -2,6 +2,30 @@
 
 ## 2026-05-16
 
+### 14) 移除 jobs/runs 同步接口与 sync client
+
+变更目标：
+- 删除已不再需要的 `/api/jobs`、`/api/runs` REST 接口及其本地同步链路。
+- 清理 `createSyncClient`、`config.sync` 与对应环境变量，收敛 sync server 职责到 intercept 审批与事件聚合。
+
+主要改动：
+- `src/sync/http-server.ts`
+  - 删除 `jobs`、`runs` 数据结构与相关请求体类型。
+  - 删除 `/api/jobs`、`/api/jobs/:id`、`/api/runs` 路由与读写逻辑。
+  - `/health` 返回中移除 `jobs`、`runs` 统计，仅保留 intercept 相关状态。
+- `src/sync/client.ts`
+  - 删除整个同步客户端文件。
+- `src/index.ts`
+  - 删除 `createSyncClient` 接入。
+  - 删除 cron job 变更同步、run 记录上报与启动时全量同步逻辑。
+- `src/config.ts`
+  - 删除 `config.sync` 配置段。
+- `.env.example`
+  - 删除 `SYNC_ENABLED`、`SYNC_SERVER_URL`、`SYNC_TIMEOUT_MS`、`SYNC_NODE_ID`。
+
+验证记录：
+- `npm run typecheck`：通过
+
 ### 13) Intercept hint 组装取消字符截断
 
 变更目标：
