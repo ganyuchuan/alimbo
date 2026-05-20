@@ -53,7 +53,6 @@ function dayKey(ts = Date.now()) {
 
 const port = toInt(process.env.SYNC_PORT, 18790);
 const dbFile = process.env.SYNC_DB_FILE?.trim() || "data/sync.db";
-const interceptAuthToken = process.env.SYNC_INTERCEPT_AUTH_TOKEN?.trim() || "";
 const interceptDefaultDecision = normalizeDecision(process.env.SYNC_INTERCEPT_DEFAULT_DECISION, "allow");
 const interceptManualQueueEnabled = toBool(process.env.SYNC_INTERCEPT_MANUAL_QUEUE_ENABLED, false);
 const interceptManualQueueTools = new Set(toList(process.env.SYNC_INTERCEPT_MANUAL_QUEUE_TOOLS, []));
@@ -63,17 +62,6 @@ const interceptWaitTimeoutMs = toInt(process.env.SYNC_INTERCEPT_WAIT_TIMEOUT_MS,
 const interceptPollAfterMs = toInt(process.env.SYNC_INTERCEPT_POLL_AFTER_MS, 1000);
 const maxStateEntries = 50;
 const maxToolCalls = 100;
-
-function maskToken(value) {
-  const text = String(value ?? "").trim();
-  if (!text) {
-    return "";
-  }
-  if (text.length <= 6) {
-    return "***";
-  }
-  return `${text.slice(0, 3)}***${text.slice(-2)}`;
-}
 
 function setToArray(setLike) {
   return Array.isArray(setLike) ? setLike : [...setLike];
@@ -89,8 +77,6 @@ function buildInterceptPolicySnapshot() {
       autoDenyTools: setToArray(interceptAutoDenyTools),
       waitTimeoutMs: interceptWaitTimeoutMs,
       pollAfterMs: interceptPollAfterMs,
-      authTokenConfigured: Boolean(interceptAuthToken),
-      authTokenMasked: maskToken(interceptAuthToken),
     },
     envRaw: {
       SYNC_INTERCEPT_DEFAULT_DECISION: process.env.SYNC_INTERCEPT_DEFAULT_DECISION ?? "",
@@ -100,7 +86,6 @@ function buildInterceptPolicySnapshot() {
       SYNC_INTERCEPT_AUTO_DENY_TOOLS: process.env.SYNC_INTERCEPT_AUTO_DENY_TOOLS ?? "",
       SYNC_INTERCEPT_WAIT_TIMEOUT_MS: process.env.SYNC_INTERCEPT_WAIT_TIMEOUT_MS ?? "",
       SYNC_INTERCEPT_POLL_AFTER_MS: process.env.SYNC_INTERCEPT_POLL_AFTER_MS ?? "",
-      SYNC_INTERCEPT_AUTH_TOKEN: process.env.SYNC_INTERCEPT_AUTH_TOKEN ? "<set>" : "",
     },
   };
 }
@@ -207,31 +192,6 @@ function ensureInterceptState(raw) {
   };
 }
 
-function ensureInterceptsShape(raw) {
-  if (!raw || typeof raw !== "object") {
-    return {
-      state: makeDefaultInterceptState(),
-      requests: {},
-      tool_calls: [],
-    };
-  }
-
-  return {
-    state: ensureInterceptState(raw.state),
-    requests: raw.requests && typeof raw.requests === "object" ? raw.requests : {},
-    tool_calls: Array.isArray(raw.tool_calls) ? raw.tool_calls.slice(-100) : [],
-  };
-}
-
-function ensureStoreShape(raw) {
-  if (!raw || typeof raw !== "object") {
-    return { intercepts: ensureInterceptsShape(null) };
-  }
-
-  const intercepts = ensureInterceptsShape(raw.intercepts);
-  return { intercepts };
-}
-
 type InterceptPretoolRequest = {
   id?: string;
   tool?: string;
@@ -287,6 +247,26 @@ type InterceptEventBody = {
   event?: InterceptEventPayload;
 };
 
+type Principal = {
+  userId: string;
+  authToken: string;
+  userName: string;
+  source: "user";
+};
+
+type AuthTokenBody = {
+  userName?: string;
+};
+
+function generateIssuedAuthToken() {
+  // 128-bit random token encoded as hex.
+  return crypto.randomBytes(16).toString("hex");
+}
+
+function generateUserId() {
+  return `user_${crypto.randomUUID()}`;
+}
+
 function normalizeRequestRecord(raw) {
   if (!raw || typeof raw !== "object") {
     return null;
@@ -318,6 +298,7 @@ function normalizeToolCallRecord(raw) {
 
   return {
     id: String(raw.id ?? "").trim(),
+    userId: String(raw.userId ?? "").trim(),
     sessionId: String(raw.sessionId ?? "").trim(),
     tool: String(raw.tool ?? "").trim(),
     args: raw.args && typeof raw.args === "object" ? raw.args : null,
@@ -327,28 +308,7 @@ function normalizeToolCallRecord(raw) {
   };
 }
 
-function loadLegacyStoreForMigration() {
-  try {
-    const raw = fs.readFileSync(dbFile, "utf8");
-    const trimmed = raw.trim();
-    if (!trimmed || !trimmed.startsWith("{")) {
-      return null;
-    }
-
-    const parsed = ensureStoreShape(JSON.parse(trimmed));
-    const backupFile = `${dbFile}.legacy-${Date.now()}.json`;
-    fs.renameSync(dbFile, backupFile);
-    console.log(`[sync-server] backed up legacy JSON store to ${backupFile}`);
-    return parsed;
-  } catch (error) {
-    if (error?.code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  }
-}
-
-function loadStateFromDb(database) {
+function loadStateFromDb(database, userId) {
   const row = database.prepare(`
     SELECT
       total,
@@ -364,8 +324,8 @@ function loadStateFromDb(database) {
       tokens_day,
       last_completed_at_ms
     FROM intercept_state
-    WHERE id = 1
-  `).get();
+    WHERE user_id = ?
+  `).get(userId);
 
   if (!row) {
     return makeDefaultInterceptState();
@@ -387,11 +347,11 @@ function loadStateFromDb(database) {
   });
 }
 
-function saveStateToDb(database, state) {
+function saveStateToDb(database, userId, state) {
   const normalized = ensureInterceptState(state);
   database.prepare(`
     INSERT INTO intercept_state (
-      id,
+      user_id,
       total,
       running,
       waiting,
@@ -405,7 +365,7 @@ function saveStateToDb(database, state) {
       tokens_day,
       last_completed_at_ms
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
+    ON CONFLICT(user_id) DO UPDATE SET
       total = excluded.total,
       running = excluded.running,
       waiting = excluded.waiting,
@@ -419,7 +379,7 @@ function saveStateToDb(database, state) {
       tokens_day = excluded.tokens_day,
       last_completed_at_ms = excluded.last_completed_at_ms
   `).run(
-    1,
+    userId,
     normalized.total,
     normalized.running,
     normalized.waiting,
@@ -435,7 +395,7 @@ function saveStateToDb(database, state) {
   );
 }
 
-function getRequestById(database, id) {
+function getRequestById(database, userId, id) {
   const row = database.prepare(`
     SELECT
       id,
@@ -454,8 +414,8 @@ function getRequestById(database, id) {
       decided_by,
       decided_at_ms
     FROM intercept_requests
-    WHERE id = ?
-  `).get(id);
+    WHERE user_id = ? AND id = ?
+  `).get(userId, id);
 
   if (!row) {
     return null;
@@ -480,7 +440,7 @@ function getRequestById(database, id) {
   });
 }
 
-function listRequestsFromDb(database, { status = "", limit = 100 } = {}) {
+function listRequestsFromDb(database, userId, { status = "", limit = 100 } = {}) {
   const normalizedLimit = Math.max(1, toInt(limit, 100));
   const rows = status
     ? database.prepare(`
@@ -501,10 +461,10 @@ function listRequestsFromDb(database, { status = "", limit = 100 } = {}) {
           decided_by,
           decided_at_ms
         FROM intercept_requests
-        WHERE status = ?
+        WHERE user_id = ? AND status = ?
         ORDER BY created_at_ms DESC
         LIMIT ?
-      `).all(status, normalizedLimit)
+      `).all(userId, status, normalizedLimit)
     : database.prepare(`
         SELECT
           id,
@@ -523,9 +483,10 @@ function listRequestsFromDb(database, { status = "", limit = 100 } = {}) {
           decided_by,
           decided_at_ms
         FROM intercept_requests
+        WHERE user_id = ?
         ORDER BY created_at_ms DESC
         LIMIT ?
-      `).all(normalizedLimit);
+      `).all(userId, normalizedLimit);
 
   return rows.map((row) => normalizeRequestRecord({
     id: row.id,
@@ -546,7 +507,7 @@ function listRequestsFromDb(database, { status = "", limit = 100 } = {}) {
   }));
 }
 
-function saveRequestToDb(database, request) {
+function saveRequestToDb(database, userId, request) {
   const normalized = normalizeRequestRecord(request);
   if (!normalized?.id) {
     return;
@@ -555,6 +516,7 @@ function saveRequestToDb(database, request) {
   database.prepare(`
     INSERT INTO intercept_requests (
       id,
+      user_id,
       tool,
       hint,
       msg,
@@ -569,9 +531,10 @@ function saveRequestToDb(database, request) {
       expires_at_ms,
       decided_by,
       decided_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       tool = excluded.tool,
+      user_id = excluded.user_id,
       hint = excluded.hint,
       msg = excluded.msg,
       input_json = excluded.input_json,
@@ -587,6 +550,7 @@ function saveRequestToDb(database, request) {
       decided_at_ms = excluded.decided_at_ms
   `).run(
     normalized.id,
+    userId,
     normalized.tool,
     normalized.hint,
     normalized.msg,
@@ -604,18 +568,20 @@ function saveRequestToDb(database, request) {
   );
 }
 
-function listToolCallsFromDb(database, limit = maxToolCalls) {
+function listToolCallsFromDb(database, userId, limit = maxToolCalls) {
   const normalizedLimit = Math.max(1, Math.min(toInt(limit, maxToolCalls), 500));
   const rows = database.prepare(`
-    SELECT id, session_id, tool, args_json, result_json, ts, work_dir
+    SELECT id, user_id, session_id, tool, args_json, result_json, ts, work_dir
     FROM intercept_tool_calls
+    WHERE user_id = ?
     ORDER BY ts DESC, id DESC
     LIMIT ?
-  `).all(normalizedLimit);
+  `).all(userId, normalizedLimit);
 
   return rows
     .map((row) => normalizeToolCallRecord({
       id: row.id,
+      userId: row.user_id,
       sessionId: row.session_id,
       tool: row.tool,
       args: parseJsonText(row.args_json, null),
@@ -626,21 +592,22 @@ function listToolCallsFromDb(database, limit = maxToolCalls) {
     .filter(Boolean);
 }
 
-function countToolCallsFromDb(database) {
-  const row = database.prepare("SELECT COUNT(*) AS total FROM intercept_tool_calls").get();
+function countToolCallsFromDb(database, userId) {
+  const row = database.prepare("SELECT COUNT(*) AS total FROM intercept_tool_calls WHERE user_id = ?").get(userId);
   return Number.isFinite(row?.total) ? row.total : 0;
 }
 
-function insertToolCallToDb(database, toolCall) {
+function insertToolCallToDb(database, userId, toolCall) {
   const normalized = normalizeToolCallRecord(toolCall);
   if (!normalized?.id) {
     return;
   }
 
   database.prepare(`
-    INSERT INTO intercept_tool_calls (id, session_id, tool, args_json, result_json, ts, work_dir)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO intercept_tool_calls (id, user_id, session_id, tool, args_json, result_json, ts, work_dir)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
+      user_id = excluded.user_id,
       session_id = excluded.session_id,
       tool = excluded.tool,
       args_json = excluded.args_json,
@@ -649,6 +616,7 @@ function insertToolCallToDb(database, toolCall) {
       work_dir = excluded.work_dir
   `).run(
     normalized.id,
+    userId,
     normalized.sessionId,
     normalized.tool,
     stringifyJson(normalized.args, "null"),
@@ -659,24 +627,153 @@ function insertToolCallToDb(database, toolCall) {
 
   database.prepare(`
     DELETE FROM intercept_tool_calls
-    WHERE id NOT IN (
+    WHERE user_id = ? AND id NOT IN (
       SELECT id
       FROM intercept_tool_calls
+      WHERE user_id = ?
       ORDER BY ts DESC, id DESC
       LIMIT ?
     )
-  `).run(maxToolCalls);
+  `).run(userId, userId, maxToolCalls);
 }
 
-function countRequestsFromDb(database) {
+function countRequestsFromDb(database, userId) {
+  const row = database.prepare("SELECT COUNT(*) AS total FROM intercept_requests WHERE user_id = ?").get(userId);
+  return Number.isFinite(row?.total) ? row.total : 0;
+}
+
+function countAllRequestsFromDb(database) {
   const row = database.prepare("SELECT COUNT(*) AS total FROM intercept_requests").get();
   return Number.isFinite(row?.total) ? row.total : 0;
+}
+
+function tryExecMigration(database, sql) {
+  try {
+    database.exec(sql);
+  } catch (error) {
+    const message = String(error?.message ?? error).toLowerCase();
+    if (!message.includes("duplicate column name") && !message.includes("already exists")) {
+      throw error;
+    }
+  }
+}
+
+function createUserTokenRecord(database, { userName, now = Date.now() }) {
+  const normalizedUserName = String(userName ?? "").trim();
+
+  for (let i = 0; i < 6; i += 1) {
+    const userId = generateUserId();
+    const authToken = generateIssuedAuthToken();
+    try {
+      database.prepare(`
+        INSERT INTO users (user_id, user_name, auth_token, created_at_ms, updated_at_ms)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(userId, normalizedUserName, authToken, now, now);
+
+      return {
+        userId,
+        authToken,
+        userName: normalizedUserName,
+      };
+    } catch (error) {
+      const message = String(error?.message ?? error).toLowerCase();
+      if (!message.includes("constraint")) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("failed to issue auth token");
+}
+
+function getUserByAuthToken(database, authToken) {
+  const row = database.prepare(`
+    SELECT user_id, user_name, auth_token
+    FROM users
+    WHERE auth_token = ?
+    LIMIT 1
+  `).get(authToken);
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    userId: String(row.user_id ?? "").trim(),
+    userName: String(row.user_name ?? "").trim(),
+    authToken: String(row.auth_token ?? "").trim(),
+    source: "user",
+  };
+}
+
+function migrateInterceptStateTableIfNeeded(database) {
+  const columns = database.prepare("PRAGMA table_info(intercept_state)").all();
+  const hasUserIdPk = columns.some((column) => column?.name === "user_id" && Number(column?.pk) === 1);
+  if (hasUserIdPk) {
+    return;
+  }
+
+  const hasIdPk = columns.some((column) => column?.name === "id" && Number(column?.pk) === 1);
+  if (!hasIdPk) {
+    return;
+  }
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS intercept_state_v2 (
+      user_id TEXT PRIMARY KEY,
+      total INTEGER NOT NULL DEFAULT 0,
+      running INTEGER NOT NULL DEFAULT 0,
+      waiting INTEGER NOT NULL DEFAULT 0,
+      completed INTEGER NOT NULL DEFAULT 0,
+      tokens INTEGER NOT NULL DEFAULT 0,
+      tokens_today INTEGER NOT NULL DEFAULT 0,
+      msg TEXT NOT NULL DEFAULT '',
+      entries_json TEXT NOT NULL DEFAULT '[]',
+      prompt_json TEXT,
+      last_token_estimate_json TEXT,
+      tokens_day TEXT NOT NULL,
+      last_completed_at_ms INTEGER NOT NULL DEFAULT 0
+    );
+
+    INSERT OR IGNORE INTO intercept_state_v2 (
+      user_id,
+      total,
+      running,
+      waiting,
+      completed,
+      tokens,
+      tokens_today,
+      msg,
+      entries_json,
+      prompt_json,
+      last_token_estimate_json,
+      tokens_day,
+      last_completed_at_ms
+    )
+    SELECT
+      '' AS user_id,
+      total,
+      running,
+      waiting,
+      completed,
+      tokens,
+      tokens_today,
+      msg,
+      entries_json,
+      prompt_json,
+      last_token_estimate_json,
+      tokens_day,
+      last_completed_at_ms
+    FROM intercept_state;
+
+    DROP TABLE intercept_state;
+    ALTER TABLE intercept_state_v2 RENAME TO intercept_state;
+  `);
 }
 
 function openDatabase() {
   const dir = path.dirname(dbFile);
   fs.mkdirSync(dir, { recursive: true });
-  const legacyStore = loadLegacyStoreForMigration();
   const database = new DatabaseSync(dbFile);
 
   database.exec(`
@@ -684,8 +781,20 @@ function openDatabase() {
     PRAGMA synchronous = NORMAL;
     PRAGMA busy_timeout = 5000;
 
+    CREATE TABLE IF NOT EXISTS users (
+      user_id TEXT PRIMARY KEY,
+      user_name TEXT NOT NULL,
+      auth_type TEXT NOT NULL DEFAULT '',
+      auth_token TEXT NOT NULL UNIQUE,
+      created_at_ms INTEGER NOT NULL DEFAULT 0,
+      updated_at_ms INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_users_auth_token
+      ON users(auth_token);
+
     CREATE TABLE IF NOT EXISTS intercept_state (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
+      user_id TEXT PRIMARY KEY,
       total INTEGER NOT NULL DEFAULT 0,
       running INTEGER NOT NULL DEFAULT 0,
       waiting INTEGER NOT NULL DEFAULT 0,
@@ -702,6 +811,7 @@ function openDatabase() {
 
     CREATE TABLE IF NOT EXISTS intercept_requests (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL DEFAULT '',
       tool TEXT NOT NULL,
       hint TEXT NOT NULL DEFAULT '',
       msg TEXT NOT NULL DEFAULT '',
@@ -721,8 +831,15 @@ function openDatabase() {
     CREATE INDEX IF NOT EXISTS idx_intercept_requests_status_created_at
       ON intercept_requests(status, created_at_ms DESC);
 
+    CREATE INDEX IF NOT EXISTS idx_intercept_requests_user_status_created_at
+      ON intercept_requests(user_id, status, created_at_ms DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_intercept_requests_user_created_at
+      ON intercept_requests(user_id, created_at_ms DESC);
+
     CREATE TABLE IF NOT EXISTS intercept_tool_calls (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL DEFAULT '',
       session_id TEXT NOT NULL DEFAULT '',
       tool TEXT NOT NULL DEFAULT '',
       args_json TEXT,
@@ -733,27 +850,25 @@ function openDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_intercept_tool_calls_ts
       ON intercept_tool_calls(ts DESC, id DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_intercept_tool_calls_user_ts
+      ON intercept_tool_calls(user_id, ts DESC, id DESC);
   `);
 
-  const stateRow = database.prepare("SELECT 1 AS ok FROM intercept_state WHERE id = 1").get();
-  if (!stateRow) {
-    saveStateToDb(database, makeDefaultInterceptState());
-  }
+  migrateInterceptStateTableIfNeeded(database);
 
-  if (legacyStore) {
-    const migrated = ensureStoreShape(legacyStore);
-    saveStateToDb(database, migrated.intercepts.state);
+  tryExecMigration(database, "ALTER TABLE intercept_state ADD COLUMN user_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_requests ADD COLUMN user_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_calls ADD COLUMN user_id TEXT NOT NULL DEFAULT ''; ");
 
-    for (const request of Object.values(migrated.intercepts.requests ?? {})) {
-      saveRequestToDb(database, request);
-    }
-
-    for (const toolCall of Array.isArray(migrated.intercepts.tool_calls) ? migrated.intercepts.tool_calls : []) {
-      insertToolCallToDb(database, toolCall);
-    }
-
-    console.log(`[sync-server] migrated legacy intercept store into SQLite at ${dbFile}`);
-  }
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_intercept_requests_user_status_created_at
+      ON intercept_requests(user_id, status, created_at_ms DESC);
+    CREATE INDEX IF NOT EXISTS idx_intercept_requests_user_created_at
+      ON intercept_requests(user_id, created_at_ms DESC);
+    CREATE INDEX IF NOT EXISTS idx_intercept_tool_calls_user_ts
+      ON intercept_tool_calls(user_id, ts DESC, id DESC);
+  `);
 
   return database;
 }
@@ -938,10 +1053,6 @@ function resolvePretoolDecision(tool) {
 }
 
 function requireInterceptAuth(req, res) {
-  if (!interceptAuthToken) {
-    return true;
-  }
-
   const authorization = String(req.headers.authorization ?? "").trim();
   const tokenFromAuth = authorization.toLowerCase().startsWith("bearer ")
     ? authorization.slice("bearer ".length).trim()
@@ -949,15 +1060,31 @@ function requireInterceptAuth(req, res) {
   const tokenFromHeader = String(req.headers["x-intercept-token"] ?? "").trim();
   const provided = tokenFromAuth || tokenFromHeader;
 
-  if (!provided || provided !== interceptAuthToken) {
+  if (provided) {
+    const userPrincipal = getUserByAuthToken(storeDb, provided);
+    if (userPrincipal?.userId) {
+      return {
+        userId: userPrincipal.userId,
+        authToken: provided,
+        userName: userPrincipal.userName,
+        source: "user",
+      };
+    }
+  }
+
+  if (!provided) {
     console.warn(
       `[sync-server][intercept] unauthorized ${String(req.method ?? "") || "-"} ${String(req.url ?? "") || "-"}`,
     );
     json(res, 401, { error: "unauthorized" });
-    return false;
+    return null;
   }
 
-  return true;
+  console.warn(
+    `[sync-server][intercept] invalid token ${String(req.method ?? "") || "-"} ${String(req.url ?? "") || "-"}`,
+  );
+  json(res, 401, { error: "unauthorized" });
+  return null;
 }
 
 function toPublicInterceptState(state) {
@@ -988,21 +1115,40 @@ const server = createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         service: "myclaw-sync-server",
-        intercepts: countRequestsFromDb(storeDb),
+        intercepts: countAllRequestsFromDb(storeDb),
+      });
+    }
+
+    if (req.method === "POST" && pathname === "/auth/token") {
+      const body = await parseBody<AuthTokenBody>(req);
+      const userName = String(body?.userName ?? "").trim();
+      if (!userName) {
+        return json(res, 400, { error: "userName is required" });
+      }
+
+      const issued = withTransaction(() => createUserTokenRecord(storeDb, { userName }));
+      return json(res, 200, {
+        ok: true,
+        userId: issued.userId,
+        authToken: issued.authToken,
+        userName: issued.userName,
       });
     }
 
     if (pathname.startsWith("/api/copilot/intercepts/")) {
-      if (!requireInterceptAuth(req, res)) {
+      const principal = requireInterceptAuth(req, res);
+      if (!principal) {
         return;
       }
 
+      const principalUserId = principal.userId;
+
       if (req.method === "GET" && pathname === "/api/copilot/intercepts/state") {
         const state = withTransaction(() => {
-          const nextState = loadStateFromDb(storeDb);
+          const nextState = loadStateFromDb(storeDb, principalUserId);
           refreshTodayTokens(nextState);
           updateStateCounters(nextState);
-          saveStateToDb(storeDb, nextState);
+          saveStateToDb(storeDb, principalUserId, nextState);
           return nextState;
         });
 
@@ -1015,22 +1161,22 @@ const server = createServer(async (req, res) => {
         const statusFilter = String(url.searchParams.get("status") ?? "").trim().toLowerCase();
         const limit = toInt(url.searchParams.get("limit"), 100);
         const items = withTransaction(() => {
-          const state = loadStateFromDb(storeDb);
-          const waitingItems = listRequestsFromDb(storeDb, { status: "waiting", limit: 1000000 });
+          const state = loadStateFromDb(storeDb, principalUserId);
+          const waitingItems = listRequestsFromDb(storeDb, principalUserId, { status: "waiting", limit: 1000000 });
 
           for (const item of waitingItems) {
             const previousStatus = item.status;
             const previousUpdatedAtMs = item.updatedAtMs;
             maybeExpireRequest(state, item);
             if (item.status !== previousStatus || item.updatedAtMs !== previousUpdatedAtMs) {
-              saveRequestToDb(storeDb, item);
+              saveRequestToDb(storeDb, principalUserId, item);
             }
           }
 
           updateStateCounters(state);
-          saveStateToDb(storeDb, state);
+          saveStateToDb(storeDb, principalUserId, state);
 
-          return listRequestsFromDb(storeDb, {
+          return listRequestsFromDb(storeDb, principalUserId, {
             status: statusFilter,
             limit,
           }).map(toQueueItem);
@@ -1042,7 +1188,7 @@ const server = createServer(async (req, res) => {
       if (req.method === "GET" && pathname === "/api/copilot/intercepts/tool-calls") {
         const requested = toInt(url.searchParams.get("limit"), 100);
         const limit = Math.min(requested, 500);
-        const items = listToolCallsFromDb(storeDb, limit).map((item) => ({
+        const items = listToolCallsFromDb(storeDb, principalUserId, limit).map((item) => ({
           id: item.id,
           sessionId: item.sessionId,
           tool: item.tool,
@@ -1054,7 +1200,7 @@ const server = createServer(async (req, res) => {
 
         return json(res, 200, {
           items,
-          total: countToolCallsFromDb(storeDb),
+          total: countToolCallsFromDb(storeDb, principalUserId),
           limit,
         });
       }
@@ -1076,10 +1222,10 @@ const server = createServer(async (req, res) => {
         console.log(`[sync-server][intercept] pretool received id=${id} tool=${tool}`);
 
         const result = withTransaction(() => {
-          const state = loadStateFromDb(storeDb);
+          const state = loadStateFromDb(storeDb, principalUserId);
           refreshTodayTokens(state);
 
-          let item = getRequestById(storeDb, id);
+          let item = getRequestById(storeDb, principalUserId, id);
           if (item) {
             maybeExpireRequest(state, item);
           }
@@ -1148,8 +1294,8 @@ const server = createServer(async (req, res) => {
           }
 
           updateStateCounters(state);
-          saveRequestToDb(storeDb, item);
-          saveStateToDb(storeDb, state);
+          saveRequestToDb(storeDb, principalUserId, item);
+          saveStateToDb(storeDb, principalUserId, state);
 
           return {
             item,
@@ -1177,8 +1323,8 @@ const server = createServer(async (req, res) => {
         }
 
         const item = withTransaction(() => {
-          const state = loadStateFromDb(storeDb);
-          const nextItem = getRequestById(storeDb, id);
+          const state = loadStateFromDb(storeDb, principalUserId);
+          const nextItem = getRequestById(storeDb, principalUserId, id);
           if (!nextItem) {
             return null;
           }
@@ -1187,8 +1333,8 @@ const server = createServer(async (req, res) => {
           const previousUpdatedAtMs = nextItem.updatedAtMs;
           maybeExpireRequest(state, nextItem);
           if (nextItem.status !== previousStatus || nextItem.updatedAtMs !== previousUpdatedAtMs) {
-            saveRequestToDb(storeDb, nextItem);
-            saveStateToDb(storeDb, state);
+            saveRequestToDb(storeDb, principalUserId, nextItem);
+            saveStateToDb(storeDb, principalUserId, state);
           }
           return nextItem;
         });
@@ -1222,8 +1368,8 @@ const server = createServer(async (req, res) => {
         }
 
         const result = withTransaction(() => {
-          const state = loadStateFromDb(storeDb);
-          const item = getRequestById(storeDb, id);
+          const state = loadStateFromDb(storeDb, principalUserId);
+          const item = getRequestById(storeDb, principalUserId, id);
           if (!item) {
             return null;
           }
@@ -1252,8 +1398,8 @@ const server = createServer(async (req, res) => {
           appendEntry(state, `Manual ${finalDecision}: ${item.tool} (${item.id})`);
 
           updateStateCounters(state);
-          saveRequestToDb(storeDb, item);
-          saveStateToDb(storeDb, state);
+          saveRequestToDb(storeDb, principalUserId, item);
+          saveStateToDb(storeDb, principalUserId, state);
 
           return { item, state };
         });
@@ -1280,7 +1426,7 @@ const server = createServer(async (req, res) => {
         }
 
         const state = withTransaction(() => {
-          const nextState = loadStateFromDb(storeDb);
+          const nextState = loadStateFromDb(storeDb, principalUserId);
           refreshTodayTokens(nextState);
 
           const msg = String(event.msg ?? "").trim();
@@ -1327,7 +1473,7 @@ const server = createServer(async (req, res) => {
           }
 
           if (event.toolCall && typeof event.toolCall === "object") {
-            insertToolCallToDb(storeDb, event.toolCall);
+            insertToolCallToDb(storeDb, principalUserId, event.toolCall);
           }
 
           const tokens = Number.parseInt(String(event.tokens ?? "0"), 10);
@@ -1354,7 +1500,7 @@ const server = createServer(async (req, res) => {
           }
 
           updateStateCounters(nextState);
-          saveStateToDb(storeDb, nextState);
+          saveStateToDb(storeDb, principalUserId, nextState);
           return nextState;
         });
 

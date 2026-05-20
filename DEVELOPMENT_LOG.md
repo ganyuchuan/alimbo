@@ -33,6 +33,28 @@
 验证记录：
 - `npm run build`：通过
 
+### 18) 删除 sync authType 透传，统一改为服务端签发 token
+
+变更目标：
+- 彻底移除 `authType` 在 sync 鉴权链路中的透传与存储逻辑。
+- 审批页改为通过 `/auth/token` 动态签发 token，不再手工维护 auth type。
+- 收敛遗留的 `SYNC_INTERCEPT_AUTH_TOKEN` 配置，避免继续依赖旧静态 token。
+
+主要改动：
+- `src/sync/http-server.ts`
+  - 删除 `Principal` / `AuthTokenBody` 中的 `authType` 字段。
+  - `/auth/token` 仅接收 `userName`，由服务端生成 128-bit auth token。
+  - `requireInterceptAuth` 仅返回 `userId` / `authToken` / `userName`。
+  - `users` 表继续保留 `auth_type` 列定义，但不再在运行逻辑中使用。
+- `src/sync/intercept-approval.html`
+  - 删除 auth type 输入框。
+  - 改为先签发 token，再自动带入后续审批请求。
+- `.env.example`
+  - 删除 `SYNC_INTERCEPT_AUTH_TOKEN` 示例项，避免继续作为主路径配置。
+
+验证记录：
+- `npm run build`：通过
+
 ### 16) Token 估算模块化 + 缺口补齐（含工具调用 token）
 
 变更目标：

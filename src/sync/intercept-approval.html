@@ -122,7 +122,9 @@
       <div class="panel">
         <h1 class="title">Intercept Waiting Approval</h1>
         <div class="row">
-          <label>Auth Token <input id="token" value="dev-token" type="password" placeholder="optional" /></label>
+          <label>User Name <input id="userName" value="admin" placeholder="required" /></label>
+          <button id="issueToken" class="primary">Issue Token</button>
+          <label>Auth Token <input id="token" type="text" readonly placeholder="issue token first" /></label>
           <label>Decided By <input id="decidedBy" value="web-ui" /></label>
           <button id="refresh" class="primary">Refresh</button>
           <button id="auto">Auto 3s: ON</button>
@@ -150,6 +152,8 @@
     <script>
       const $ = (id) => document.getElementById(id);
       const tokenInput = $("token");
+      const userNameInput = $("userName");
+      const issueTokenBtn = $("issueToken");
       const decidedByInput = $("decidedBy");
       const statusEl = $("status");
       const listEl = $("list");
@@ -167,6 +171,36 @@
           base.Authorization = "Bearer " + token;
         }
         return base;
+      }
+
+      async function issueAuthToken() {
+        const userName = String(userNameInput.value || "").trim();
+        if (!userName) {
+          throw new Error("userName is required");
+        }
+
+        const response = await fetch("/auth/token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ userName }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || response.statusText || "issue token failed");
+        }
+
+        const token = String(payload.authToken || "").trim();
+        if (!token) {
+          throw new Error("empty auth token returned");
+        }
+
+        tokenInput.value = token;
+        statusEl.className = "meta";
+        statusEl.textContent =
+          "Token issued for userId=" + (payload.userId || "-") + " at " + new Date().toLocaleTimeString();
       }
 
       function ts(ms) {
@@ -364,6 +398,18 @@
       }
 
       refreshBtn.addEventListener("click", refresh);
+      issueTokenBtn.addEventListener("click", async () => {
+        issueTokenBtn.disabled = true;
+        try {
+          await issueAuthToken();
+          await refresh();
+        } catch (error) {
+          statusEl.textContent = String(error.message || error);
+          statusEl.className = "error";
+        } finally {
+          issueTokenBtn.disabled = false;
+        }
+      });
       autoBtn.addEventListener("click", toggleAuto);
       refresh();
       timer = setInterval(refresh, 3000);
