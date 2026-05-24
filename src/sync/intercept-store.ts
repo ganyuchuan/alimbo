@@ -705,10 +705,6 @@ class InterceptStore {
     return countTotalFromDb(this.db, "intercept_requests", userId);
   }
 
-  countAllRequests() {
-    return countTotalFromDb(this.db, "intercept_requests");
-  }
-
   createUserTokenRecord({ userName, now = Date.now() }) {
     const normalizedUserName = String(userName ?? "").trim();
 

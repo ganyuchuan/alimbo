@@ -85,10 +85,7 @@ export function createGatewayServer(config, { cronScheduler } = { cronScheduler:
   const httpServer = createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
       const payload = JSON.stringify({
-        ok: true,
-        service: "myclaw-gateway",
-        uptimeSec: Math.floor(process.uptime()),
-        connections: connections.size,
+        ok: true
       });
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(payload);

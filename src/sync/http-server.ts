@@ -396,9 +396,7 @@ const server = createServer(async (req, res) => {
 
     if (req.method === "GET" && pathname === "/health") {
       return json(res, 200, {
-        ok: true,
-        service: "myclaw-sync-server",
-        intercepts: interceptStore.countAllRequests(),
+        ok: true
       });
     }
 
