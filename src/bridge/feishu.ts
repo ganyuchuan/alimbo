@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "../config.js";
-import { createGatewayClient } from "./gateway-client.js";
+import { createGatewayClient } from "../gateway/gateway-client.js";
 import { buildFeishuReplyPayload } from "./reply-format.js";
 
 type TenantAccessTokenResponse = {

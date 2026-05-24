@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import crypto from "node:crypto";
 import { WebSocketServer } from "ws";
-import { resetSharedAgentSession, runAgentWithSharedSession } from "../tool/agent.js";
+import { resetSharedAgentSession, runAgentWithSharedSession } from "../agent-runtime/agent.js";
 import { runGitCommand } from "../tool/git.js";
 import { planCronOperation } from "../tool/cron.js";
 import { runSqlRequest } from "../tool/sql.js";

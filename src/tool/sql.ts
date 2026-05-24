@@ -1,5 +1,5 @@
 import path from "node:path";
-import { runAgentWithSession } from "./agent.js";
+import { runAgentWithSession } from "../agent-runtime/agent.js";
 
 type SqlToolConfig = {
   workDir?: string;

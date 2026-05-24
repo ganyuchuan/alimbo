@@ -1,4 +1,4 @@
-import { runCopilotWithSession } from "./copilot.js";
+import { runCopilotWithSession } from "../agent-runtime/copilot.js";
 
 const ALLOWED_ACTIONS = new Set(["list", "add", "update", "remove", "run"]);
 

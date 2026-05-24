@@ -1,4 +1,4 @@
-# MyClaw MVP (Gateway v1)
+# Alimbo MVP (Gateway v1)
 
 This is a minimal Gateway-only MVP inspired by OpenClaw.
 
@@ -84,8 +84,8 @@ printf '%s\n' '{"type":"req","id":"1","method":"connect","params":{"auth":{"toke
 
 从 GitHub Release 下载以下任一文件并解压：
 
-- `myclaw-v0.1.0-source.tar.gz`
-- `myclaw-v0.1.0-source.zip`
+- `alimbo-v0.1.0-source.tar.gz`
+- `alimbo-v0.1.0-source.zip`
 
 ### 2) 环境要求
 
@@ -110,7 +110,7 @@ cp .env.example .env
 - 网关：`PORT`、`GATEWAY_TOKEN`
 - 飞书桥接：`FEISHU_*`
 - Cron：`CRON_*`
-- 同步：`SYNC_ENABLED`、`SYNC_SERVER_URL`
+- 云端：`CLOUD_ENABLED`、`CLOUD_SERVER_URL`
 
 ### 5) 启动服务
 
@@ -126,10 +126,10 @@ npm start
 npm run bridge:feishu
 ```
 
-可选：启动同步服务：
+可选：启动云端服务：
 
 ```bash
-npm run sync-server
+npm run cloud-server
 ```
 
 ### 6) 启动后检查
@@ -153,7 +153,7 @@ curl http://127.0.0.1:18790/health
 - `FEISHU_REQUIRE_MENTION_IN_GROUP`: in group chat, require bot mention to trigger
 - `FEISHU_LOG_REPLY`: log outbound reply text in bridge logs (`true`/`false`, default `false`)
 - `FEISHU_REPLY_MARKDOWN`: when enabled, auto-detect markdown replies and send them as interactive cards; plain text replies still use `text` (`true`/`false`, default `true`)
-- `FEISHU_GATEWAY_URL`: myclaw gateway websocket url
+- `FEISHU_GATEWAY_URL`: alimbo gateway websocket url
 - `FEISHU_GATEWAY_TOKEN`: gateway token used by feishu bridge
 - `FEISHU_CLIENT_ID`: feishu bridge client id used in gateway connect
 - `FEISHU_REQUEST_TIMEOUT_MS`: gateway request timeout for feishu bridge
@@ -167,7 +167,7 @@ curl http://127.0.0.1:18790/health
 - `FEISHU_COPILOT_STREAM_MIN_CHUNK_CHARS`: min buffered chars before early flush in Feishu bridge (default `120`)
 - `FEISHU_ROUTE_TOTAL_SHARDS`: fixed-routing shard total for Feishu bridge (`1` means disabled, default `1`)
 - `FEISHU_ROUTE_SHARD_INDEX`: current Feishu bridge shard index (`0`-based, default `0`)
-- `FEISHU_ROUTE_SALT`: hashing salt used by Feishu fixed routing (default `myclaw-feishu-route`)
+- `FEISHU_ROUTE_SALT`: hashing salt used by Feishu fixed routing (default `alimbo-feishu-route`)
 - `FEISHU_INTERCEPT_REVIEW_ENABLED`: enable Feishu approval worker for Copilot intercept queue (`true`/`false`, default `false`)
 - `FEISHU_INTERCEPT_SERVER_URL`: intercept server base URL used by Feishu approval worker (default `http://127.0.0.1:18790`)
 - `FEISHU_INTERCEPT_AUTH_TOKEN`: optional bearer token for intercept APIs; falls back to `COPILOT_INTERCEPT_AUTH_TOKEN`
@@ -204,32 +204,32 @@ curl http://127.0.0.1:18790/health
 - `GIT_ALLOWED_COMMANDS`: comma-separated git subcommand allowlist
 - `SQL_ENABLED`: enable sql tool (`true`/`false`, default `true`)
 - `SQL_WORK_DIR`: working directory for sql tool (empty = `COPILOT_WORK_DIR` or process cwd)
-- `SQL_DB_FILE`: sqlite database file path (default `data/myclaw.db`)
+- `SQL_DB_FILE`: sqlite database file path (default `data/alimbo.db`)
 - `SQL_TIMEOUT_MS`: timeout for each sqlite query in milliseconds (default `30000`)
 - `SQL_SCHEMA_HINT`: optional schema hint text for Copilot NL->SQL translation
 - `SERVICE_ENABLED`: enable service management tool (`true`/`false`, default `false`)
 - `SERVICE_WORK_DIR`: working directory for service tool (empty = process cwd)
 - `SERVICE_TIMEOUT_MS`: timeout for PM2 command (default `30000`)
 - `SERVICE_PM2_BIN`: PM2 executable name/path (default `pm2`)
-- `SERVICE_WHITELIST`: comma-separated PM2 service names allowed for `/service <action> <name>` (default `myclaw-gateway,myclaw-feishu`)
+- `SERVICE_WHITELIST`: comma-separated PM2 service names allowed for `/service <action> <name>` (default `alimbo-gateway,alimbo-feishu`)
 - `CRON_ENABLED`: enable cron subsystem (`true`/`false`, default `true`)
 - `CRON_JOBS_FILE`: jobs persistence file path (default `data/cron-jobs.json`)
 - `CRON_JOB_TIMEOUT_MS`: per-job execution timeout (default `600000` = 10 min)
 - `CRON_MAX_CONCURRENT`: max concurrent job executions (default `1`)
-- `SYNC_ENABLED`: enable cron sync client (`true`/`false`, default `false`)
-- `SYNC_SERVER_URL`: sync REST server base URL (default `http://127.0.0.1:18790`)
-- `SYNC_TIMEOUT_MS`: sync request timeout (default `5000`)
-- `SYNC_NODE_ID`: node identity written to synced records (default `myclaw-local`)
-- `SYNC_PORT`: sync server port (default `18790`)
-- `SYNC_DB_FILE`: sync server persistence file (default `data/cron-jobs-sync.json`)
-- `SYNC_INTERCEPT_AUTH_TOKEN`: optional bearer token required by `/api/copilot/intercepts/*`
-- `SYNC_INTERCEPT_DEFAULT_DECISION`: default pretool decision (`allow|deny|wait`, default `allow`)
-- `SYNC_INTERCEPT_MANUAL_QUEUE_ENABLED`: force manual queue mode for configured tools (`true`/`false`, default `false`)
-- `SYNC_INTERCEPT_MANUAL_QUEUE_TOOLS`: comma-separated tools that enter manual queue; empty means all intercepted tools
-- `SYNC_INTERCEPT_AUTO_ALLOW_TOOLS`: comma-separated tools auto-approved by server policy
-- `SYNC_INTERCEPT_AUTO_DENY_TOOLS`: comma-separated tools auto-denied by server policy
-- `SYNC_INTERCEPT_WAIT_TIMEOUT_MS`: server-side queue wait timeout before marking request expired (default `60000`)
-- `SYNC_INTERCEPT_POLL_AFTER_MS`: suggested poll interval returned by pretool API (default `1000`)
+- `CLOUD_ENABLED`: enable cron cloud client (`true`/`false`, default `false`)
+- `CLOUD_SERVER_URL`: cloud REST server base URL (default `http://127.0.0.1:18790`)
+- `CLOUD_TIMEOUT_MS`: cloud request timeout (default `5000`)
+- `CLOUD_NODE_ID`: node identity written to cloud records (default `alimbo-local`)
+- `CLOUD_PORT`: cloud server port (default `18790`)
+- `CLOUD_DB_FILE`: cloud server persistence file (default `data/cloud.db`)
+- `CLOUD_INTERCEPT_AUTH_TOKEN`: optional bearer token required by `/api/copilot/intercepts/*`
+- `CLOUD_INTERCEPT_DEFAULT_DECISION`: default pretool decision (`allow|deny|wait`, default `allow`)
+- `CLOUD_INTERCEPT_MANUAL_QUEUE_ENABLED`: force manual queue mode for configured tools (`true`/`false`, default `false`)
+- `CLOUD_INTERCEPT_MANUAL_QUEUE_TOOLS`: comma-separated tools that enter manual queue; empty means all intercepted tools
+- `CLOUD_INTERCEPT_AUTO_ALLOW_TOOLS`: comma-separated tools auto-approved by server policy
+- `CLOUD_INTERCEPT_AUTO_DENY_TOOLS`: comma-separated tools auto-denied by server policy
+- `CLOUD_INTERCEPT_WAIT_TIMEOUT_MS`: server-side queue wait timeout before marking request expired (default `60000`)
+- `CLOUD_INTERCEPT_POLL_AFTER_MS`: suggested poll interval returned by pretool API (default `1000`)
 
 When `FEISHU_INTERCEPT_REVIEW_ENABLED=true`, the bridge will poll `/api/copilot/intercepts/queue?status=waiting` and push each waiting request to the configured Feishu review chat as an interactive card. Operators can click the `Approve` or `Deny` button directly on the card, and the bridge will write the decision back to `/api/copilot/intercepts/decision`.
 
@@ -439,7 +439,7 @@ Response payload (example):
 服务名必须存在于 `SERVICE_WHITELIST`，否则会拒绝执行。
 
 ```dotenv
-SERVICE_WHITELIST=myclaw-gateway,myclaw-feishu,myclaw-sync-server
+SERVICE_WHITELIST=alimbo-gateway,alimbo-feishu,alimbo-cloud-server
 ```
 
 Prerequisites:
@@ -455,7 +455,7 @@ Request:
   "type": "req",
   "id": "6",
   "method": "service.restart",
-  "params": { "name": "myclaw-gateway" }
+  "params": { "name": "alimbo-gateway" }
 }
 ```
 
@@ -473,19 +473,19 @@ Response payload (example):
 ```json
 {
   "ok": true,
-  "name": "myclaw-gateway",
-  "serviceName": "myclaw-gateway",
-  "output": "[myclaw-gateway] ..."
+  "name": "alimbo-gateway",
+  "serviceName": "alimbo-gateway",
+  "output": "[alimbo-gateway] ..."
 }
 ```
 
 ### 1. 在本地使用 PM2 启动
 
 ```bash
-cd /Users/yuchuan/Desktop/myclaw
-./node_modules/.bin/pm2 start npm --name myclaw-gateway -- run start
-./node_modules/.bin/pm2 start npm --name myclaw-feishu -- run bridge:feishu
-./node_modules/.bin/pm2 start npm --name myclaw-server -- run sync-server
+cd /Users/yuchuan/Desktop/alimbo
+./node_modules/.bin/pm2 start npm --name alimbo-gateway -- run start
+./node_modules/.bin/pm2 start npm --name alimbo-feishu -- run bridge:feishu
+./node_modules/.bin/pm2 start npm --name alimbo-cloud -- run cloud
 ./node_modules/.bin/pm2 ls
 ```
 ### 2. 测试远程重启
@@ -497,7 +497,7 @@ cd /Users/yuchuan/Desktop/myclaw
   "type": "req",
   "id": "svc-1",
   "method": "service.restart",
-  "params": { "name": "myclaw-gateway" }
+  "params": { "name": "alimbo-gateway" }
 }
 ```
 
@@ -505,11 +505,11 @@ cd /Users/yuchuan/Desktop/myclaw
 
 ```bash
 /service list
-/service start myclaw-gateway
-/service stop myclaw-feishu
-/service restart myclaw-gateway
-/service logs myclaw-gateway 100
-/service restart myclaw-sync-server
+/service start alimbo-gateway
+/service stop alimbo-feishu
+/service restart alimbo-gateway
+/service logs alimbo-gateway 100
+/service restart alimbo-cloud-server
 ```
 
 ## Skills Tool (Copilot SDK)
@@ -773,14 +773,14 @@ FEISHU_REQUEST_TIMEOUT_MS=130000
 - 启动恢复：自动清理上次残留 running 标记，重算 nextRunAtMs
 - 一次性任务（`at`）：过期后自动禁用
 
-## Cron Sync REST Server
+## Cron Cloud REST Server
 
 新增一个最小可用 Node.js HTTP 服务，用于汇总本地 cron job 与每次执行输出。其他终端可通过 REST API 拉取这些数据。
 
 启动：
 
 ```bash
-npm run sync-server
+npm run cloud-server
 ```
 
 健康检查：
@@ -795,7 +795,7 @@ curl http://127.0.0.1:18790/health
 - `GET /api/jobs/:id`：获取单个任务
 - `GET /api/runs?jobId=<id>&limit=100`：获取执行记录
 
-当 `SYNC_ENABLED=true` 时，myclaw gateway 会自动将以下数据同步到该服务：
+当 `CLOUD_ENABLED=true` 时，alimbo gateway 会自动将以下数据同步到该服务：
 
 - cron 任务增删改（upsert/delete）
 - 每次任务执行完成事件（含 `status/error/output`）
@@ -807,7 +807,7 @@ curl http://127.0.0.1:18790/health
 
 ## 多实例应用
 
-假设在一台电脑上运行5个 myclaw gateway 实例，同时也有对应的5个 feishu bridge 实例。可以按两种模式配：
+假设在一台电脑上运行5个 alimbo gateway 实例，同时也有对应的5个 feishu bridge 实例。可以按两种模式配：
 
 方案 A（推荐）：5 对 1:1 独立，5 个 bridge 各自不同飞书应用  
 这种情况下不需要分片路由，配置最简单。
@@ -831,7 +831,7 @@ curl http://127.0.0.1:18790/health
 - FEISHU_APP_SECRET
 
 4. bridge 客户端标识建议唯一  
-- FEISHU_CLIENT_ID=myclaw-feishu-1 到 myclaw-feishu-5
+- FEISHU_CLIENT_ID=alimbo-feishu-1 到 alimbo-feishu-5
 
 5. 固定路由参数（可保持默认）  
 - FEISHU_ROUTE_TOTAL_SHARDS=1  
@@ -846,8 +846,8 @@ curl http://127.0.0.1:18790/health
 - COPILOT_SKILLS_FILE  
 例如加后缀 -1 到 -5。
 
-7. 如果启用 sync-server，也要分开端口  
-- SYNC_PORT 不能冲突。
+7. 如果启用 cloud-server，也要分开端口  
+- CLOUD_PORT 不能冲突。
 
 方案 B：5 个 bridge 共用同一个飞书应用  
 才需要启用分片路由：

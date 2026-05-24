@@ -102,7 +102,7 @@ export const config = {
   sql: {
     enabled: toBool(process.env.SQL_ENABLED, true),
     workDir: process.env.SQL_WORK_DIR?.trim() || "",
-    dbFile: process.env.SQL_DB_FILE?.trim() || "data/myclaw.db",
+    dbFile: process.env.SQL_DB_FILE?.trim() || "data/alimbo.db",
     timeoutMs: toInt(process.env.SQL_TIMEOUT_MS, 30000),
     schemaHint: process.env.SQL_SCHEMA_HINT?.trim() || "",
   },
@@ -111,7 +111,7 @@ export const config = {
     workDir: process.env.SERVICE_WORK_DIR?.trim() || "",
     timeoutMs: toInt(process.env.SERVICE_TIMEOUT_MS, 30000),
     pm2Bin: process.env.SERVICE_PM2_BIN?.trim() || "pm2",
-    whitelist: toList(process.env.SERVICE_WHITELIST, ["myclaw-gateway", "myclaw-feishu"]),
+    whitelist: toList(process.env.SERVICE_WHITELIST, ["alimbo-gateway", "alimbo-feishu"]),
   },
   cron: {
     enabled: toBool(process.env.CRON_ENABLED, true),
@@ -130,7 +130,7 @@ export const config = {
     replyMarkdown: toBool(process.env.FEISHU_REPLY_MARKDOWN, true),
     gatewayUrl: process.env.FEISHU_GATEWAY_URL?.trim() || "ws://127.0.0.1:18789/ws",
     gatewayToken: process.env.FEISHU_GATEWAY_TOKEN?.trim() || process.env.GATEWAY_TOKEN?.trim() || "dev-token",
-    clientId: process.env.FEISHU_CLIENT_ID?.trim() || "myclaw-feishu-bridge",
+    clientId: process.env.FEISHU_CLIENT_ID?.trim() || "alimbo-feishu-bridge",
     requestTimeoutMs: toInt(process.env.FEISHU_REQUEST_TIMEOUT_MS, 15000),
     imageTempDir: process.env.FEISHU_IMAGE_TEMP_DIR?.trim() || "data/feishu-images",
     imageMaxBytes: toInt(process.env.FEISHU_IMAGE_MAX_BYTES, 10 * 1024 * 1024),
@@ -142,7 +142,7 @@ export const config = {
     copilotStreamMinChunkChars: toInt(process.env.FEISHU_COPILOT_STREAM_MIN_CHUNK_CHARS, 120),
     routeTotalShards: toInt(process.env.FEISHU_ROUTE_TOTAL_SHARDS, 1),
     routeShardIndex: toNonNegativeInt(process.env.FEISHU_ROUTE_SHARD_INDEX, 0),
-    routeSalt: process.env.FEISHU_ROUTE_SALT?.trim() || "myclaw-feishu-route",
+    routeSalt: process.env.FEISHU_ROUTE_SALT?.trim() || "alimbo-feishu-route",
     interceptReviewEnabled: toBool(process.env.FEISHU_INTERCEPT_REVIEW_ENABLED, false),
     interceptServerUrl:
       process.env.FEISHU_INTERCEPT_SERVER_URL?.trim() ||

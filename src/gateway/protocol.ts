@@ -43,7 +43,7 @@ export function makeHello(connId, methods) {
     protocol: PROTOCOL_VERSION,
     server: {
       connId,
-      version: "myclaw-gateway/0.1.0",
+      version: "alimbo-gateway/0.1.0",
     },
     features: {
       methods,

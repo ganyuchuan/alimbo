@@ -1,9 +1,9 @@
 import { config } from "./config.js";
-import { createGatewayServer } from "./gateway/server.js";
-import { createCronScheduler } from "./cron/scheduler.js";
+import { createGatewayServer } from "./gateway/gateway-server.js";
+import { createCronScheduler } from "./tool/scheduler.js";
 import * as Lark from "@larksuiteoapi/node-sdk";
-import { runCopilotWithSharedSession, stopCopilotClient } from "./tool/copilot.js";
-import { runAgentWithSharedSession } from "./tool/agent.js";
+import { runCopilotWithSharedSession, stopCopilotClient } from "./agent-runtime/copilot.js";
+import { runAgentWithSharedSession } from "./agent-runtime/agent.js";
 import { looksLikeMarkdown } from "./bridge/reply-format.js";
 
 function normalizeFeishuDomain(domain) {
@@ -135,10 +135,10 @@ const server = createGatewayServer(config, { cronScheduler });
 
 await server.listen();
 
-console.log(`[myclaw] gateway listening on ws://127.0.0.1:${config.port}/ws`);
-console.log(`[myclaw] health endpoint: http://127.0.0.1:${config.port}/health`);
+console.log(`[alimbo] gateway listening on ws://127.0.0.1:${config.port}/ws`);
+console.log(`[alimbo] health endpoint: http://127.0.0.1:${config.port}/health`);
 if (cronScheduler) {
-  console.log(`[myclaw] cron subsystem enabled, jobs file: ${config.cron.jobsFile}`);
+  console.log(`[alimbo] cron subsystem enabled, jobs file: ${config.cron.jobsFile}`);
 }
 
 const shutdown = async () => {

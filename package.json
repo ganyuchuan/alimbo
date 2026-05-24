@@ -1,18 +1,18 @@
 {
-  "name": "myclaw",
+  "name": "alimbo",
   "version": "0.1.0",
   "private": true,
-  "description": "MVP Gateway for MyClaw",
+  "description": "An AI agent gateway for tool orchestration, automation, and chat integrations.",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json --noCheck",
-    "postbuild": "mkdir -p dist/sync && cp src/sync/intercept-approval.html dist/sync/intercept-approval.html",
+    "postbuild": "mkdir -p dist/cloud && cp src/cloud/intercept-approval.html dist/cloud/intercept-approval.html",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "npm run build && node dist/index.js",
     "dev": "tsc --watch -p tsconfig.json",
     "bridge:feishu": "npm run build && node dist/bridge/feishu.js",
-    "sync-server": "npm run build && node dist/sync/http-server.js"
+    "cloud": "npm run build && node dist/cloud/intercept-server.js"
   },
   "engines": {
     "node": ">=22"

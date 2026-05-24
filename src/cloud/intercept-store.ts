@@ -348,7 +348,7 @@ class InterceptStore {
   maxToolCalls;
 
   constructor() {
-    this.dbFile = process.env.SYNC_DB_FILE?.trim() || "data/sync.db";
+    this.dbFile = process.env.CLOUD_DB_FILE?.trim() || "data/cloud.db";
     this.maxToolCalls = 100;
     this.db = openDatabase(this.dbFile);
   }

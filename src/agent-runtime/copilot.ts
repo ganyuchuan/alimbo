@@ -1,8 +1,8 @@
 import { CopilotClient, approveAll } from "@github/copilot-sdk";
 import crypto from "node:crypto";
 import path from "node:path";
-import { getSkillDirectoriesForSession } from "./skills.js";
-import { loadMcpServersForCopilot } from "./mcp.js";
+import { getSkillDirectoriesForSession } from "../tool/skills.js";
+import { loadMcpServersForCopilot } from "../tool/mcp.js";
 import { estimateConversationTokenBreakdown, estimateToolCallTokens } from "./token-estimate.js";
 
 const DEFAULT_SHARED_SESSION_KEY = "__global__";

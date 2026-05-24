@@ -50,14 +50,14 @@ function dayKey(ts = Date.now()) {
   return `${year}-${month}-${day}`;
 }
 
-const port = toInt(process.env.SYNC_PORT, 18790);
-const interceptDefaultDecision = normalizeDecision(process.env.SYNC_INTERCEPT_DEFAULT_DECISION, "allow");
-const interceptManualQueueEnabled = toBool(process.env.SYNC_INTERCEPT_MANUAL_QUEUE_ENABLED, false);
-const interceptManualQueueTools = new Set(toList(process.env.SYNC_INTERCEPT_MANUAL_QUEUE_TOOLS, []));
-const interceptAutoAllowTools = new Set(toList(process.env.SYNC_INTERCEPT_AUTO_ALLOW_TOOLS, []));
-const interceptAutoDenyTools = new Set(toList(process.env.SYNC_INTERCEPT_AUTO_DENY_TOOLS, []));
-const interceptWaitTimeoutMs = toInt(process.env.SYNC_INTERCEPT_WAIT_TIMEOUT_MS, 60000);
-const interceptPollAfterMs = toInt(process.env.SYNC_INTERCEPT_POLL_AFTER_MS, 1000);
+const port = toInt(process.env.CLOUD_PORT, 18790);
+const interceptDefaultDecision = normalizeDecision(process.env.CLOUD_INTERCEPT_DEFAULT_DECISION, "allow");
+const interceptManualQueueEnabled = toBool(process.env.CLOUD_INTERCEPT_MANUAL_QUEUE_ENABLED, false);
+const interceptManualQueueTools = new Set(toList(process.env.CLOUD_INTERCEPT_MANUAL_QUEUE_TOOLS, []));
+const interceptAutoAllowTools = new Set(toList(process.env.CLOUD_INTERCEPT_AUTO_ALLOW_TOOLS, []));
+const interceptAutoDenyTools = new Set(toList(process.env.CLOUD_INTERCEPT_AUTO_DENY_TOOLS, []));
+const interceptWaitTimeoutMs = toInt(process.env.CLOUD_INTERCEPT_WAIT_TIMEOUT_MS, 60000);
+const interceptPollAfterMs = toInt(process.env.CLOUD_INTERCEPT_POLL_AFTER_MS, 1000);
 const maxStateEntries = 50;
 
 function setToArray(setLike) {
@@ -76,13 +76,13 @@ function buildInterceptPolicySnapshot() {
       pollAfterMs: interceptPollAfterMs,
     },
     envRaw: {
-      SYNC_INTERCEPT_DEFAULT_DECISION: process.env.SYNC_INTERCEPT_DEFAULT_DECISION ?? "",
-      SYNC_INTERCEPT_MANUAL_QUEUE_ENABLED: process.env.SYNC_INTERCEPT_MANUAL_QUEUE_ENABLED ?? "",
-      SYNC_INTERCEPT_MANUAL_QUEUE_TOOLS: process.env.SYNC_INTERCEPT_MANUAL_QUEUE_TOOLS ?? "",
-      SYNC_INTERCEPT_AUTO_ALLOW_TOOLS: process.env.SYNC_INTERCEPT_AUTO_ALLOW_TOOLS ?? "",
-      SYNC_INTERCEPT_AUTO_DENY_TOOLS: process.env.SYNC_INTERCEPT_AUTO_DENY_TOOLS ?? "",
-      SYNC_INTERCEPT_WAIT_TIMEOUT_MS: process.env.SYNC_INTERCEPT_WAIT_TIMEOUT_MS ?? "",
-      SYNC_INTERCEPT_POLL_AFTER_MS: process.env.SYNC_INTERCEPT_POLL_AFTER_MS ?? "",
+      CLOUD_INTERCEPT_DEFAULT_DECISION: process.env.CLOUD_INTERCEPT_DEFAULT_DECISION ?? "",
+      CLOUD_INTERCEPT_MANUAL_QUEUE_ENABLED: process.env.CLOUD_INTERCEPT_MANUAL_QUEUE_ENABLED ?? "",
+      CLOUD_INTERCEPT_MANUAL_QUEUE_TOOLS: process.env.CLOUD_INTERCEPT_MANUAL_QUEUE_TOOLS ?? "",
+      CLOUD_INTERCEPT_AUTO_ALLOW_TOOLS: process.env.CLOUD_INTERCEPT_AUTO_ALLOW_TOOLS ?? "",
+      CLOUD_INTERCEPT_AUTO_DENY_TOOLS: process.env.CLOUD_INTERCEPT_AUTO_DENY_TOOLS ?? "",
+      CLOUD_INTERCEPT_WAIT_TIMEOUT_MS: process.env.CLOUD_INTERCEPT_WAIT_TIMEOUT_MS ?? "",
+      CLOUD_INTERCEPT_POLL_AFTER_MS: process.env.CLOUD_INTERCEPT_POLL_AFTER_MS ?? "",
     },
   };
 }
@@ -196,7 +196,7 @@ function renderInterceptApprovalPage() {
   try {
     interceptApprovalPageCache = fs.readFileSync(interceptApprovalPagePath, "utf8");
   } catch (error) {
-    console.warn(`[sync-server][intercept] failed to load approval page: ${String(error?.message ?? error)}`);
+    console.warn(`[cloud-server][intercept] failed to load approval page: ${String(error?.message ?? error)}`);
     interceptApprovalPageCache = "<!doctype html><html><body><h1>Approval page unavailable</h1></body></html>";
   }
 
@@ -291,7 +291,7 @@ function maybeExpireRequest(state, request) {
     request.reason = request.reason || "manual decision timeout";
     request.updatedAtMs = now;
     console.warn(
-      `[sync-server][intercept] queue timeout id=${request.id} tool=${request.tool} waitedMs=${Math.max(0, now - Number(request.createdAtMs ?? now))}`,
+      `[cloud-server][intercept] queue timeout id=${request.id} tool=${request.tool} waitedMs=${Math.max(0, now - Number(request.createdAtMs ?? now))}`,
     );
     state.msg = `Request ${request.id} timed out`;
     appendEntry(state, `Timeout: ${request.tool} (${request.id})`);
@@ -357,14 +357,14 @@ function requireInterceptAuth(req, res) {
 
   if (!provided) {
     console.warn(
-      `[sync-server][intercept] unauthorized ${String(req.method ?? "") || "-"} ${String(req.url ?? "") || "-"}`,
+      `[cloud-server][intercept] unauthorized ${String(req.method ?? "") || "-"} ${String(req.url ?? "") || "-"}`,
     );
     json(res, 401, { error: "unauthorized" });
     return null;
   }
 
   console.warn(
-    `[sync-server][intercept] invalid token ${String(req.method ?? "") || "-"} ${String(req.url ?? "") || "-"}`,
+    `[cloud-server][intercept] invalid token ${String(req.method ?? "") || "-"} ${String(req.url ?? "") || "-"}`,
   );
   json(res, 401, { error: "unauthorized" });
   return null;
@@ -509,7 +509,7 @@ const server = createServer(async (req, res) => {
           return json(res, 400, { error: "request.tool is required" });
         }
 
-        console.log(`[sync-server][intercept] pretool received id=${id} tool=${tool}`);
+        console.log(`[cloud-server][intercept] pretool received id=${id} tool=${tool}`);
 
         const result = interceptStore.withTransaction(() => {
           const state = interceptStore.loadState(principalUserId);
@@ -540,7 +540,7 @@ const server = createServer(async (req, res) => {
               decidedAtMs: 0,
             };
             appendEntry(state, `Intercepted: ${tool} (${id})`);
-            console.log(`[sync-server][intercept] queued id=${id} tool=${tool} total=${state.total}`);
+            console.log(`[cloud-server][intercept] queued id=${id} tool=${tool} total=${state.total}`);
           }
 
           const preDecision = resolvePretoolDecision(tool);
@@ -548,19 +548,19 @@ const server = createServer(async (req, res) => {
             item.status = "approved";
             item.decision = "allow";
             item.reason = item.reason || "auto allowed by server policy";
-            console.log(`[sync-server][intercept] auto allow id=${id} tool=${tool}`);
+            console.log(`[cloud-server][intercept] auto allow id=${id} tool=${tool}`);
           } else if (preDecision === "deny") {
             item.status = "denied";
             item.decision = "deny";
             item.reason = item.reason || "auto denied by server policy";
-            console.log(`[sync-server][intercept] auto deny id=${id} tool=${tool}`);
+            console.log(`[cloud-server][intercept] auto deny id=${id} tool=${tool}`);
           } else {
             item.status = "waiting";
             item.decision = "wait";
             item.reason = item.reason || "waiting for manual decision";
             item.expiresAtMs = now + interceptWaitTimeoutMs;
             console.log(
-              `[sync-server][intercept] waiting manual decision id=${id} tool=${tool} expiresInMs=${interceptWaitTimeoutMs}`,
+              `[cloud-server][intercept] waiting manual decision id=${id} tool=${tool} expiresInMs=${interceptWaitTimeoutMs}`,
             );
           }
 
@@ -676,7 +676,7 @@ const server = createServer(async (req, res) => {
           item.updatedAtMs = now;
 
           console.log(
-            `[sync-server][intercept] manual decision id=${item.id} tool=${item.tool} decision=${finalDecision} by=${item.decidedBy}`,
+            `[cloud-server][intercept] manual decision id=${item.id} tool=${item.tool} decision=${finalDecision} by=${item.decidedBy}`,
           );
 
           state.msg = `Manual ${finalDecision}: ${item.tool}`;
@@ -807,13 +807,13 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, "0.0.0.0", () => {
-  console.log(`[sync-server] listening on http://0.0.0.0:${port}`);
+  console.log(`[cloud-server] listening on http://0.0.0.0:${port}`);
   console.log(
-    `[sync-server][intercept] policy snapshot ${JSON.stringify(buildInterceptPolicySnapshot())}`,
+    `[cloud-server][intercept] policy snapshot ${JSON.stringify(buildInterceptPolicySnapshot())}`,
   );
   const lanIps = getLanIPv4Addresses();
   for (const ip of lanIps) {
-    console.log(`[sync-server] LAN access: http://${ip}:${port}`);
+    console.log(`[cloud-server] LAN access: http://${ip}:${port}`);
   }
-  console.log(`[sync-server] db file: ${interceptStore.getDbFile()}`);
+  console.log(`[cloud-server] db file: ${interceptStore.getDbFile()}`);
 });
