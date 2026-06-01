@@ -83,6 +83,52 @@ function updateEnvContent(baseText: string, overrides: Record<string, string>) {
   return `${output.join("\n").replace(/\n+$/g, "")}\n`;
 }
 
+function parseEnvFile(filePath: string) {
+  const content = readTextIfExists(filePath);
+  const entries: Record<string, string> = {};
+
+  for (const rawLine of String(content ?? "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!match) {
+      continue;
+    }
+
+    const key = match[1];
+    let value = String(match[2] ?? "").trim();
+
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+
+    entries[key] = value;
+  }
+
+  return entries;
+}
+
+function getReusableGatewayTokenFromEnv(envPath: string) {
+  const envValues = parseEnvFile(envPath);
+  const keys = [
+    "GATEWAY_TOKEN",
+    "FEISHU_GATEWAY_TOKEN",
+    "FEISHU_INTERCEPT_AUTH_TOKEN",
+    "COPILOT_INTERCEPT_AUTH_TOKEN",
+  ] as const;
+
+  const values = keys.map((key) => String(envValues[key] ?? "").trim());
+  if (values.some((value) => !value)) {
+    return "";
+  }
+
+  const first = values[0];
+  return values.every((value) => value === first) ? first : "";
+}
+
 async function fetchJson(url: string, options: RequestInit = {}) {
   const response = await fetch(url, options);
   const payload = await response.json().catch(() => ({}));
@@ -231,10 +277,49 @@ function startGatewayDetached(cwd: string) {
     stdio: "inherit",
   });
   child.unref();
+  return child.pid;
+}
+
+function startFeishuDetached(cwd: string) {
+  const target = path.resolve(__dirname, "bridge/feishu.js");
+  const child = spawn(process.execPath, [target], {
+    cwd,
+    env: process.env,
+    detached: true,
+    stdio: "inherit",
+  });
+  child.unref();
+  return child.pid;
+}
+
+function parseYesNo(value: string) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return ["y", "yes", "1", "true", "是"].includes(normalized);
 }
 
 function listListeningPidsByPort(port: number) {
   const result = spawnSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], {
+    encoding: "utf8",
+  });
+
+  if (result.status !== 0) {
+    return [] as number[];
+  }
+
+  return String(result.stdout ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => Number.parseInt(line, 10))
+    .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
+}
+
+function listPidsByCommandKeyword(keyword: string) {
+  const result = spawnSync("pgrep", ["-f", keyword], {
     encoding: "utf8",
   });
 
@@ -281,6 +366,44 @@ async function stopGatewayProcessesOnPort(port: number) {
   }
 }
 
+async function stopProcessesByCommandKeyword({
+  keyword,
+  label,
+  timeoutMs = 5_000,
+}: {
+  keyword: string;
+  label: string;
+  timeoutMs?: number;
+}) {
+  const pids = listPidsByCommandKeyword(keyword);
+  if (!pids.length) {
+    return;
+  }
+
+  console.log(`[alimbo-setup] Stop existing ${label} process(es): ${pids.join(", ")}`);
+
+  for (const pid of pids) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // Process may have exited already.
+    }
+  }
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!listPidsByCommandKeyword(keyword).length) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+
+  const remaining = listPidsByCommandKeyword(keyword);
+  if (remaining.length) {
+    throw new Error(`failed to stop existing ${label} process(es): ${remaining.join(", ")}`);
+  }
+}
+
 async function main() {
   const cwd = process.cwd();
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -291,37 +414,51 @@ async function main() {
     const cloudInput = await rl.question("Cloud URL (default http://127.0.0.1:18790): ");
     const cloudBaseUrl = String(cloudInput || "").trim() || "http://127.0.0.1:18790";
 
+    const envPath = path.resolve(cwd, ".env");
+    const reusableToken = getReusableGatewayTokenFromEnv(envPath);
+
     const pairingCodeInput = await rl.question("Pairing code (4 digits): ");
     const pairingCode = String(pairingCodeInput || "").trim();
-    if (!/^\d{4}$/.test(pairingCode)) {
-      throw new Error("pairing code must be 4 digits");
+    const skipPairing = !pairingCode && Boolean(reusableToken);
+    let pairingPayload: PairingTokenPayload | null = null;
+    let token = "";
+
+    if (skipPairing) {
+      token = reusableToken;
+      console.log("[alimbo-setup] Pairing code is empty, reuse consistent token from .env and skip pairing");
+    } else {
+      if (!/^\d{4}$/.test(pairingCode)) {
+        throw new Error(
+          "pairing code must be 4 digits. leave it empty only when .env has consistent GATEWAY_TOKEN/FEISHU_GATEWAY_TOKEN/FEISHU_INTERCEPT_AUTH_TOKEN/COPILOT_INTERCEPT_AUTH_TOKEN",
+        );
+      }
+
+      console.log("[alimbo-setup] Resolve token via /auth/pairing-token ...");
+      pairingPayload = await resolveTokenByPairingCode({ cloudBaseUrl, pairingCode });
+      token = String(pairingPayload.authToken ?? "").trim();
+
+      const envExample = loadEnvExampleTemplate(cwd);
+      const envBase = readTextIfExists(envPath).trim() ? readTextIfExists(envPath) : envExample;
+      const envText = updateEnvContent(envBase, {
+        GATEWAY_TOKEN: token,
+        FEISHU_GATEWAY_TOKEN: token,
+        FEISHU_INTERCEPT_AUTH_TOKEN: token,
+        COPILOT_INTERCEPT_AUTH_TOKEN: token,
+        COPILOT_INTERCEPT_SERVER_URL: cloudBaseUrl,
+        FEISHU_INTERCEPT_SERVER_URL: cloudBaseUrl,
+        COPILOT_INTERCEPT_ENABLED: "true",
+        COPILOT_INTERCEPT_TOOLS: "bash,run_in_terminal,edit_file,create_file,delete_file",
+      });
+      fs.writeFileSync(envPath, envText, "utf8");
+      console.log(`[alimbo-setup] Wrote ${envPath}`);
     }
-
-    console.log("[alimbo-setup] Resolve token via /auth/pairing-token ...");
-    const pairingPayload = await resolveTokenByPairingCode({ cloudBaseUrl, pairingCode });
-    const token = String(pairingPayload.authToken ?? "").trim();
-
-    const envExample = loadEnvExampleTemplate(cwd);
-    const envPath = path.resolve(cwd, ".env");
-    const envBase = readTextIfExists(envPath).trim() ? readTextIfExists(envPath) : envExample;
-    const envText = updateEnvContent(envBase, {
-      GATEWAY_TOKEN: token,
-      FEISHU_GATEWAY_TOKEN: token,
-      FEISHU_INTERCEPT_AUTH_TOKEN: token,
-      COPILOT_INTERCEPT_AUTH_TOKEN: token,
-      COPILOT_INTERCEPT_SERVER_URL: cloudBaseUrl,
-      FEISHU_INTERCEPT_SERVER_URL: cloudBaseUrl,
-      COPILOT_INTERCEPT_ENABLED: "true",
-      COPILOT_INTERCEPT_TOOLS: "bash,run_in_terminal,edit_file,create_file,delete_file",
-    });
-    fs.writeFileSync(envPath, envText, "utf8");
-    console.log(`[alimbo-setup] Wrote ${envPath}`);
 
     const gatewayPort = toInt(process.env.PORT, 18789);
     await stopGatewayProcessesOnPort(gatewayPort);
 
     console.log("[alimbo-setup] Start gateway in background ...");
-    startGatewayDetached(cwd);
+    const gatewayPid = startGatewayDetached(cwd);
+    let feishuPid: number | undefined;
 
     await waitForGatewayHealth({
       baseUrl: `http://127.0.0.1:${gatewayPort}`,
@@ -329,26 +466,83 @@ async function main() {
     });
     console.log("[alimbo-setup] Gateway is healthy");
 
-    const verification = await verifyInterceptDecisionApi({
-      cloudBaseUrl,
-      authToken: token,
-      workDir: cwd,
-    });
+    if (skipPairing) {
+      console.log("[alimbo-setup] Skip intercept verification/report because pairing was skipped");
+    } else {
+      const verification = await verifyInterceptDecisionApi({
+        cloudBaseUrl,
+        authToken: token,
+        workDir: cwd,
+      });
 
-    await reportSetupInterceptVerificationEvent({
-      cloudBaseUrl,
-      authToken: token,
-      workDir: cwd,
-      verification,
-    });
+      await reportSetupInterceptVerificationEvent({
+        cloudBaseUrl,
+        authToken: token,
+        workDir: cwd,
+        verification,
+      });
+    }
+
+    const startFeishuInput = await rl.question("Start Feishu bridge now? (y/N): ");
+    const shouldStartFeishu = parseYesNo(startFeishuInput);
+
+    if (shouldStartFeishu) {
+      const existingEnvValues = parseEnvFile(envPath);
+      const existingFeishuAppId = String(existingEnvValues.FEISHU_APP_ID ?? "").trim();
+      const existingFeishuAppSecret = String(existingEnvValues.FEISHU_APP_SECRET ?? "").trim();
+
+      const feishuAppIdInput = await rl.question("FEISHU_APP_ID (press Enter to use .env value): ");
+      const feishuAppSecretInput = await rl.question("FEISHU_APP_SECRET (press Enter to use .env value): ");
+      const feishuAppId = String(feishuAppIdInput || "").trim() || existingFeishuAppId;
+      const feishuAppSecret = String(feishuAppSecretInput || "").trim() || existingFeishuAppSecret;
+
+      if (!feishuAppId || !feishuAppSecret) {
+        throw new Error("FEISHU_APP_ID and FEISHU_APP_SECRET are required when enabling Feishu bridge");
+      }
+
+      const envExample = loadEnvExampleTemplate(cwd);
+      const envBase = readTextIfExists(envPath).trim() ? readTextIfExists(envPath) : envExample;
+      const envText = updateEnvContent(envBase, {
+        FEISHU_ENABLED: "true",
+        FEISHU_APP_ID: feishuAppId,
+        FEISHU_APP_SECRET: feishuAppSecret,
+      });
+      fs.writeFileSync(envPath, envText, "utf8");
+      console.log(`[alimbo-setup] Wrote ${envPath} (Feishu config)`);
+
+      await stopProcessesByCommandKeyword({
+        keyword: path.resolve(__dirname, "bridge/feishu.js"),
+        label: "feishu",
+      });
+
+      console.log("[alimbo-setup] Start feishu bridge in background ...");
+      feishuPid = startFeishuDetached(cwd);
+    }
 
     console.log("[alimbo-setup] Success");
+    console.log("[alimbo-setup] Process info:");
+    console.log(`[alimbo-setup] - alimbo-gateway pid=${gatewayPid ?? "unknown"}`);
+    if (shouldStartFeishu) {
+      console.log(`[alimbo-setup] - alimbo-feishu pid=${feishuPid ?? "unknown"}`);
+    } else {
+      console.log("[alimbo-setup] - alimbo-feishu pid=not-started");
+    }
     console.log(JSON.stringify({
       ok: true,
-      userId: pairingPayload.userId,
-      username: pairingPayload.username,
+      userId: pairingPayload?.userId,
+      username: pairingPayload?.username,
       pairingCode,
       cloudBaseUrl,
+      skipPairing,
+      startedFeishu: shouldStartFeishu,
+      gatewayProcess: {
+        name: "alimbo-gateway",
+        pid: gatewayPid ?? null,
+      },
+      feishuProcess: {
+        name: "alimbo-feishu",
+        pid: shouldStartFeishu ? (feishuPid ?? null) : null,
+      },
     }, null, 2));
   } catch (error) {
     console.error(`[alimbo-setup] Failed: ${String((error as any)?.message ?? error)}`);

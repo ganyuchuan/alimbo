@@ -1,5 +1,38 @@
 # Development Log
 
+## 2026-06-01
+
+### 27) setup 交互增强 + CLI 命令收敛 + 进程日志与可观测性补强
+
+变更目标：
+- 将 CLI 从多入口收敛为安装与运维最小闭环，降低用户使用复杂度。
+- 强化 setup 端到端体验：支持免配对复用 token、可选启动飞书桥接、复用已有飞书凭据、避免重复拉起飞书进程。
+- 提升本地运维可观测性：补充 gateway/feishu 进程与日志查看能力。
+
+主要改动：
+- CLI 命令调整
+  - `src/cli.ts`
+    - 默认命令由 `--help` 改为 `setup`。
+    - 新增 `logs` 子命令：`alimbo logs gateway|feishu [--lines N] [--follow|-f]`（基于 PM2）。
+    - 移除 `start`、`bridge:feishu`、`cloud` 命令入口，仅保留 `setup` 与 `logs`。
+- setup 免配对与拦截验证策略
+  - `src/setup.ts`
+    - 新增 `.env` 解析能力，支持在 Pairing code 为空时复用已有共享 token。
+    - 当 `.env` 中 `GATEWAY_TOKEN`、`FEISHU_GATEWAY_TOKEN`、`FEISHU_INTERCEPT_AUTH_TOKEN`、`COPILOT_INTERCEPT_AUTH_TOKEN` 非空且一致时，允许跳过配对。
+    - 跳过配对分支下，不调用 `verifyInterceptDecisionApi` 与 `reportSetupInterceptVerificationEvent`。
+- setup 飞书启动流程增强
+  - `src/setup.ts`
+    - setup 成功后新增交互：`Start Feishu bridge now? (y/N)`。
+    - 若选择启动，提示输入 `FEISHU_APP_ID` 与 `FEISHU_APP_SECRET`，并支持回车复用 `.env` 既有值。
+    - 启动飞书前先停止历史飞书进程（按命令关键字匹配），避免重复运行。
+    - 成功输出新增进程信息：`alimbo-gateway` 与 `alimbo-feishu` 的进程名与 PID（未启动时显示 `not-started`）。
+- 文档同步
+  - `README.md`
+    - Quick Start 补充 CLI 日志查看示例（一次性查看与 follow 模式）。
+
+验证记录：
+- `npm run build`：通过
+
 ## 2026-05-29
 
 ### 26) cloud 事件可观测性增强 + setup mock token estimate + 进程命名优化

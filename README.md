@@ -51,6 +51,17 @@ npm run bridge:feishu
 alimbo setup
 ```
 
+6. View PM2 logs via CLI:
+
+```bash
+# One-shot last 100 lines (default)
+alimbo logs gateway
+alimbo logs feishu --lines 200
+
+# Follow mode
+alimbo logs gateway --follow
+```
+
 The setup wizard will:
 - ask for pairing code
 - resolve token from cloud `/auth/pairing-token`
