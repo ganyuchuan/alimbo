@@ -3,6 +3,14 @@
   "version": "0.2.1",
   "private": false,
   "description": "An AI agent gateway for tool orchestration, automation, and chat integrations.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ganyuchuan/alimbo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ganyuchuan/alimbo/issues"
+  },
+  "homepage": "https://github.com/ganyuchuan/alimbo#readme",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

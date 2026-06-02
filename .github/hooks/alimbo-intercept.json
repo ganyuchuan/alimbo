@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "node scripts/hooks/pretool.mjs",
+        "cwd": ".",
+        "timeoutSec": 60
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "node scripts/hooks/posttool.mjs",
+        "cwd": ".",
+        "timeoutSec": 60
+      }
+    ],  
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "node scripts/hooks/session-start.mjs",
+        "cwd": ".",
+        "timeoutSec": 60
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "bash": "node scripts/hooks/session-end.mjs",
+        "cwd": ".",
+        "timeoutSec": 60
+      }
+    ]
+  }
+}
