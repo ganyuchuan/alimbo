@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import pm2 from "pm2";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline/promises";
@@ -11,6 +11,8 @@ import { reportInterceptEventByApi } from "./agent-runtime/intercept-event.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const PM2_GATEWAY_NAME = "alimbo-gateway";
+const PM2_FEISHU_NAME = "alimbo-feishu";
 
 type PairingTokenPayload = {
   ok?: boolean;
@@ -268,28 +270,94 @@ async function reportSetupInterceptVerificationEvent({
   });
 }
 
-function startGatewayDetached(cwd: string) {
-  const target = path.resolve(__dirname, "index.js");
-  const child = spawn(process.execPath, [target], {
-    cwd,
-    env: process.env,
-    detached: true,
-    stdio: "inherit",
+function connectPm2Client() {
+  return new Promise<void>((resolve, reject) => {
+    pm2.connect((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
   });
-  child.unref();
-  return child.pid;
 }
 
-function startFeishuDetached(cwd: string) {
-  const target = path.resolve(__dirname, "bridge/feishu.js");
-  const child = spawn(process.execPath, [target], {
-    cwd,
-    env: process.env,
-    detached: true,
-    stdio: "inherit",
+function disconnectPm2Client() {
+  return new Promise<void>((resolve) => {
+    pm2.disconnect();
+    resolve();
   });
-  child.unref();
-  return child.pid;
+}
+
+function pm2DescribeProcess(name: string) {
+  return new Promise<any[]>((resolve, reject) => {
+    pm2.describe(name, (error, processDescriptionList) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(Array.isArray(processDescriptionList) ? processDescriptionList : []);
+    });
+  });
+}
+
+function pm2DeleteProcess(name: string) {
+  return new Promise<void>((resolve, reject) => {
+    pm2.delete(name, (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function pm2StartProcess({ name, scriptPath, cwd }: { name: string; scriptPath: string; cwd: string }) {
+  return new Promise<void>((resolve, reject) => {
+    const processEnv = {
+      ...process.env,
+      // PM2 internally JSON.parse(process.env.io); avoid invalid "undefined" values.
+      io: "{}",
+    };
+
+    pm2.start(
+      {
+        name,
+        script: scriptPath,
+        cwd,
+        interpreter: process.execPath,
+        env: processEnv,
+      },
+      (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      },
+    );
+  });
+}
+
+function extractPidFromPm2Describe(list: any[]) {
+  const first = Array.isArray(list) && list.length ? list[0] : null;
+  const pid = Number.parseInt(String(first?.pid ?? ""), 10);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return undefined;
+  }
+  return pid;
+}
+
+async function ensurePm2Process({ name, scriptPath, cwd }: { name: string; scriptPath: string; cwd: string }) {
+  const existing = await pm2DescribeProcess(name);
+  if (existing.length) {
+    await pm2DeleteProcess(name);
+  }
+
+  await pm2StartProcess({ name, scriptPath, cwd });
+  const started = await pm2DescribeProcess(name);
+  return extractPidFromPm2Describe(started);
 }
 
 function parseYesNo(value: string) {
@@ -301,112 +369,10 @@ function parseYesNo(value: string) {
   return ["y", "yes", "1", "true", "是"].includes(normalized);
 }
 
-function listListeningPidsByPort(port: number) {
-  const result = spawnSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], {
-    encoding: "utf8",
-  });
-
-  if (result.status !== 0) {
-    return [] as number[];
-  }
-
-  return String(result.stdout ?? "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => Number.parseInt(line, 10))
-    .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
-}
-
-function listPidsByCommandKeyword(keyword: string) {
-  const result = spawnSync("pgrep", ["-f", keyword], {
-    encoding: "utf8",
-  });
-
-  if (result.status !== 0) {
-    return [] as number[];
-  }
-
-  return String(result.stdout ?? "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => Number.parseInt(line, 10))
-    .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
-}
-
-async function stopGatewayProcessesOnPort(port: number) {
-  const pids = listListeningPidsByPort(port);
-  if (!pids.length) {
-    return;
-  }
-
-  console.log(`[alimbo-setup] Stop existing process(es) on :${port} -> ${pids.join(", ")}`);
-
-  for (const pid of pids) {
-    try {
-      process.kill(pid, "SIGTERM");
-    } catch {
-      // Process may have exited already.
-    }
-  }
-
-  const startedAt = Date.now();
-  const timeoutMs = 5_000;
-  while (Date.now() - startedAt < timeoutMs) {
-    if (!listListeningPidsByPort(port).length) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-
-  const remaining = listListeningPidsByPort(port);
-  if (remaining.length) {
-    throw new Error(`failed to stop existing gateway process on :${port}; still listening pid(s): ${remaining.join(", ")}`);
-  }
-}
-
-async function stopProcessesByCommandKeyword({
-  keyword,
-  label,
-  timeoutMs = 5_000,
-}: {
-  keyword: string;
-  label: string;
-  timeoutMs?: number;
-}) {
-  const pids = listPidsByCommandKeyword(keyword);
-  if (!pids.length) {
-    return;
-  }
-
-  console.log(`[alimbo-setup] Stop existing ${label} process(es): ${pids.join(", ")}`);
-
-  for (const pid of pids) {
-    try {
-      process.kill(pid, "SIGTERM");
-    } catch {
-      // Process may have exited already.
-    }
-  }
-
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (!listPidsByCommandKeyword(keyword).length) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-
-  const remaining = listPidsByCommandKeyword(keyword);
-  if (remaining.length) {
-    throw new Error(`failed to stop existing ${label} process(es): ${remaining.join(", ")}`);
-  }
-}
-
 async function main() {
   const cwd = process.cwd();
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  let pm2Connected = false;
 
   try {
     console.log("[alimbo-setup] Start desktop onboarding setup");
@@ -454,11 +420,18 @@ async function main() {
     }
 
     const gatewayPort = toInt(process.env.PORT, 18789);
-    await stopGatewayProcessesOnPort(gatewayPort);
-
-    console.log("[alimbo-setup] Start gateway in background ...");
-    const gatewayPid = startGatewayDetached(cwd);
+    let gatewayPid: number | undefined;
     let feishuPid: number | undefined;
+
+    await connectPm2Client();
+    pm2Connected = true;
+
+    console.log(`[alimbo-setup] Manage gateway with PM2 API (${PM2_GATEWAY_NAME}) ...`);
+    gatewayPid = await ensurePm2Process({
+      name: PM2_GATEWAY_NAME,
+      scriptPath: path.resolve(__dirname, "index.js"),
+      cwd,
+    });
 
     await waitForGatewayHealth({
       baseUrl: `http://127.0.0.1:${gatewayPort}`,
@@ -510,13 +483,12 @@ async function main() {
       fs.writeFileSync(envPath, envText, "utf8");
       console.log(`[alimbo-setup] Wrote ${envPath} (Feishu config)`);
 
-      await stopProcessesByCommandKeyword({
-        keyword: path.resolve(__dirname, "bridge/feishu.js"),
-        label: "feishu",
+      console.log(`[alimbo-setup] Manage feishu bridge with PM2 API (${PM2_FEISHU_NAME}) ...`);
+      feishuPid = await ensurePm2Process({
+        name: PM2_FEISHU_NAME,
+        scriptPath: path.resolve(__dirname, "bridge/feishu.js"),
+        cwd,
       });
-
-      console.log("[alimbo-setup] Start feishu bridge in background ...");
-      feishuPid = startFeishuDetached(cwd);
     }
 
     console.log("[alimbo-setup] Success");
@@ -534,13 +506,14 @@ async function main() {
       pairingCode,
       cloudBaseUrl,
       skipPairing,
+      processManager: "pm2-api",
       startedFeishu: shouldStartFeishu,
       gatewayProcess: {
-        name: "alimbo-gateway",
+        name: PM2_GATEWAY_NAME,
         pid: gatewayPid ?? null,
       },
       feishuProcess: {
-        name: "alimbo-feishu",
+        name: PM2_FEISHU_NAME,
         pid: shouldStartFeishu ? (feishuPid ?? null) : null,
       },
     }, null, 2));
@@ -549,6 +522,10 @@ async function main() {
     console.error("[alimbo-setup] Please request a new pairing code on mobile/wearable and run `alimbo setup` again.");
     process.exit(1);
   } finally {
+    if (pm2Connected) {
+      await disconnectPm2Client();
+      pm2Connected = false;
+    }
     rl.close();
   }
 }
