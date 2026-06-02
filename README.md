@@ -200,7 +200,7 @@ curl http://127.0.0.1:18790/health
 - `FEISHU_ROUTE_SHARD_INDEX`: current Feishu bridge shard index (`0`-based, default `0`)
 - `FEISHU_ROUTE_SALT`: hashing salt used by Feishu fixed routing (default `alimbo-feishu-route`)
 - `FEISHU_INTERCEPT_REVIEW_ENABLED`: enable Feishu approval worker for Copilot intercept queue (`true`/`false`, default `false`)
-- `FEISHU_INTERCEPT_SERVER_URL`: intercept server base URL used by Feishu approval worker (default `http://127.0.0.1:18790`)
+- `FEISHU_INTERCEPT_SERVER_URL`: intercept server base URL used by Feishu approval worker (default `https://go.aigc4me.cloud`)
 - `FEISHU_INTERCEPT_AUTH_TOKEN`: optional bearer token for intercept APIs; falls back to `COPILOT_INTERCEPT_AUTH_TOKEN`
 - `FEISHU_INTERCEPT_REVIEW_CHAT_ID`: Feishu chat id for approval notification cards and button callbacks
 - `FEISHU_INTERCEPT_REVIEW_DECIDER`: decidedBy prefix written back to server (default `feishu-bridge`)
@@ -248,7 +248,7 @@ curl http://127.0.0.1:18790/health
 - `CRON_JOB_TIMEOUT_MS`: per-job execution timeout (default `600000` = 10 min)
 - `CRON_MAX_CONCURRENT`: max concurrent job executions (default `1`)
 - `CLOUD_ENABLED`: enable cron cloud client (`true`/`false`, default `false`)
-- `CLOUD_SERVER_URL`: cloud REST server base URL (default `http://127.0.0.1:18790`)
+- `CLOUD_SERVER_URL`: cloud REST server base URL (default `https://go.aigc4me.cloud`)
 - `CLOUD_TIMEOUT_MS`: cloud request timeout (default `5000`)
 - `CLOUD_NODE_ID`: node identity written to cloud records (default `alimbo-local`)
 - `CLOUD_PORT`: cloud server port (default `18790`)

@@ -147,7 +147,7 @@ export const config = {
     interceptServerUrl:
       process.env.FEISHU_INTERCEPT_SERVER_URL?.trim() ||
       process.env.COPILOT_INTERCEPT_SERVER_URL?.trim() ||
-      "http://127.0.0.1:18790",
+      "https://go.aigc4me.cloud",
     interceptAuthToken:
       process.env.FEISHU_INTERCEPT_AUTH_TOKEN?.trim() ||
       process.env.COPILOT_INTERCEPT_AUTH_TOKEN?.trim() ||

@@ -53,8 +53,8 @@ function loadEnvExampleTemplate(cwd: string) {
     "FEISHU_GATEWAY_TOKEN=dev-token",
     "FEISHU_INTERCEPT_AUTH_TOKEN=",
     "COPILOT_INTERCEPT_AUTH_TOKEN=",
-    "COPILOT_INTERCEPT_SERVER_URL=http://127.0.0.1:18790",
-    "FEISHU_INTERCEPT_SERVER_URL=http://127.0.0.1:18790",
+    "COPILOT_INTERCEPT_SERVER_URL=https://go.aigc4me.cloud",
+    "FEISHU_INTERCEPT_SERVER_URL=https://go.aigc4me.cloud",
   ].join("\n");
 }
 
@@ -411,8 +411,8 @@ async function main() {
   try {
     console.log("[alimbo-setup] Start desktop onboarding setup");
 
-    const cloudInput = await rl.question("Cloud URL (default http://127.0.0.1:18790): ");
-    const cloudBaseUrl = String(cloudInput || "").trim() || "http://127.0.0.1:18790";
+    const cloudInput = await rl.question("Cloud URL (default https://go.aigc4me.cloud): ");
+    const cloudBaseUrl = String(cloudInput || "").trim() || "https://go.aigc4me.cloud";
 
     const envPath = path.resolve(cwd, ".env");
     const reusableToken = getReusableGatewayTokenFromEnv(envPath);
