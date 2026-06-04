@@ -1,20 +1,12 @@
 import process from "node:process";
-import path from "node:path";
 import { requestInterceptDecisionByApi } from "../../dist/agent-runtime/intercept-decision.js";
 import {
   collectHumanReadableHint,
-  collectPathCandidates,
-  getAllowedDirs,
-  getBlockedToolsSet,
-  getDestructiveToolsSet,
   getInterceptToolsSet,
-  getRestrictedDirToolsSet,
-  isPathInsideAllowedDirs,
   loadEnvFromCwd,
   mapDecisionToPermission,
   readJsonFromStdin,
   safeCloneToolArgs,
-  toBool,
   toPositiveInt,
   withStdErrLogging,
   writeJson,
@@ -36,17 +28,11 @@ async function main() {
   const interceptTimeoutMs = toPositiveInt(process.env.COPILOT_INTERCEPT_TIMEOUT_MS, 5000);
   const interceptPollIntervalMs = toPositiveInt(process.env.COPILOT_INTERCEPT_POLL_INTERVAL_MS, 1000);
   const interceptMaxWaitMs = toPositiveInt(process.env.COPILOT_INTERCEPT_MAX_WAIT_MS, 30000);
-  const interceptFailOpen = toBool(process.env.COPILOT_INTERCEPT_FAIL_OPEN, false);
-  const interceptEnabled = TextTrackCueList;
-  const askBeforeDestructive = toBool(process.env.COPILOT_ASK_BEFORE_DESTRUCTIVE, true);
-
-  const blockedTools = getBlockedToolsSet();
-  const restrictedDirTools = getRestrictedDirToolsSet();
-  const destructiveTools = getDestructiveToolsSet();
+  const interceptFailOpen = String(process.env.COPILOT_INTERCEPT_FAIL_OPEN ?? "").trim().toLowerCase();
+  const isFailOpen = ["1", "true", "yes", "on"].includes(interceptFailOpen);
   const interceptTools = getInterceptToolsSet();
-  const allowedDirs = getAllowedDirs(workDir);
 
-  const shouldUseIntercept = Boolean(interceptEnabled && interceptServerUrl && interceptTools.size > 0);
+  const shouldUseIntercept = Boolean(interceptServerUrl && interceptTools.size > 0);
 
   if (shouldUseIntercept && interceptTools.has(toolName)) {
     try {
@@ -79,7 +65,7 @@ async function main() {
       return;
     } catch (error) {
       const reason = `intercept request failed: ${String(error?.message ?? error)}`;
-      const permission = interceptFailOpen
+      const permission = isFailOpen
         ? {
             permissionDecision: "allow",
             permissionDecisionReason: `${reason}; fail-open enabled`,
@@ -91,37 +77,6 @@ async function main() {
       writeJson(permission);
       return;
     }
-  }
-
-  if (blockedTools.has(toolName)) {
-    writeJson({
-      permissionDecision: "deny",
-      permissionDecisionReason: `Tool \"${toolName}\" is blocked by COPILOT_BLOCKED_TOOLS`,
-    });
-    return;
-  }
-
-  if (allowedDirs.length > 0 && restrictedDirTools.has(toolName)) {
-    const pathCandidates = collectPathCandidates(input?.toolArgs);
-    const blocked = pathCandidates.find((candidate) => {
-      const resolved = path.isAbsolute(candidate)
-        ? path.resolve(candidate)
-        : path.resolve(workDir, candidate);
-      return !isPathInsideAllowedDirs(resolved, allowedDirs);
-    });
-
-    if (blocked) {
-      writeJson({
-        permissionDecision: "deny",
-        permissionDecisionReason: `Path \"${blocked}\" is outside COPILOT_ALLOWED_DIRS`,
-      });
-      return;
-    }
-  }
-
-  if (askBeforeDestructive && destructiveTools.has(toolName)) {
-    writeJson({ permissionDecision: "ask" });
-    return;
   }
 
   writeJson({ permissionDecision: "allow" });

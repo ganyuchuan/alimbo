@@ -450,9 +450,6 @@ function buildClaudeHooks(config) {
   }
 
   const workDir = path.resolve(config.workDir || process.cwd());
-  const blockedTools = normalizeSet(config.blockedTools, []);
-  const restrictedDirTools = normalizeSet(config.restrictedDirTools, DEFAULT_RESTRICTED_DIR_TOOLS);
-  const destructiveTools = normalizeSet(config.destructiveTools, DEFAULT_DESTRUCTIVE_TOOLS);
   const interceptTools = normalizeSet(config.interceptTools, []);
   const interceptServerUrl = trimTrailingSlash(config.interceptServerUrl);
   const interceptEnabled = Boolean(config.interceptEnabled && interceptServerUrl && interceptTools.size > 0);
@@ -493,35 +490,6 @@ function buildClaudeHooks(config) {
       }
     }
 
-    if (blockedTools.has(toolName)) {
-      return toPreToolHookOutput(
-        "PreToolUse",
-        "deny",
-        `Tool \"${toolName}\" is blocked by COPILOT_BLOCKED_TOOLS`,
-      );
-    }
-
-    if (allowedDirs.length > 0 && restrictedDirTools.has(toolName)) {
-      const pathCandidates = collectPathCandidates(input?.tool_input);
-      const blocked = pathCandidates.find((candidate) => {
-        const resolved = path.isAbsolute(candidate)
-          ? path.resolve(candidate)
-          : path.resolve(workDir, candidate);
-        return !isPathInsideAllowedDirs(resolved, allowedDirs);
-      });
-
-      if (blocked) {
-        return toPreToolHookOutput(
-          "PreToolUse",
-          "deny",
-          `Path \"${blocked}\" is outside COPILOT_ALLOWED_DIRS`,
-        );
-      }
-    }
-
-    if (config.askBeforeDestructive && destructiveTools.has(toolName)) {
-      return toPreToolHookOutput("PreToolUse", "ask", "destructive tool requires approval");
-    }
 
     return toPreToolHookOutput("PreToolUse", "allow", "allowed by policy");
   };
@@ -714,11 +682,6 @@ function buildOptions(config, resumeSessionId = "") {
 
   if (resumeSessionId) {
     options.resume = resumeSessionId;
-  }
-
-  // Keep behavior close to existing copilot config semantics.
-  if (config?.allowAllTools) {
-    options.permissionMode = "acceptEdits";
   }
 
   options.hooks = buildClaudeHooks(config);

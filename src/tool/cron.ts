@@ -7,17 +7,12 @@ type CopilotRuntimeConfig = {
   reuseSession?: boolean;
   timeoutMs?: number;
   model?: string;
-  allowAllTools?: boolean;
   workDir?: string;
   skillsFile?: string;
   mcpConfigFile?: string;
   hookEnabled?: boolean;
-  blockedTools?: string[];
-  restrictedDirTools?: string[];
   allowedDirs?: string[];
-  askBeforeDestructive?: boolean;
-  destructiveTools?: string[];
-  permissionRequestMode?: "auto" | "approve" | "deny" | "delegate";
+  permissionRequestMode?: "auto" | "approve" | "deny";
   interceptEnabled?: boolean;
   interceptTools?: string[];
   interceptServerUrl?: string;

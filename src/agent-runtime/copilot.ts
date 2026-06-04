@@ -211,94 +211,12 @@ function resolvePermissionHandler(config) {
     return denyAllPermissions;
   }
 
-  if (mode === "delegate") {
-    return undefined;
-  }
-
-  return config.allowAllTools ? approveAll : denyAllPermissions;
+  return undefined;
 }
-
-const DEFAULT_RESTRICTED_DIR_TOOLS = [
-  "read_file",
-  "create_file",
-  "edit_file",
-  "delete_file",
-  "file_search",
-  "list_dir",
-  "view_image",
-];
-
-const DEFAULT_DESTRUCTIVE_TOOLS = [
-  "delete_file",
-  "edit_file",
-  "create_file",
-  "run_in_terminal",
-  "run_command",
-  "shell",
-  "bash",
-];
 
 function normalizeSet(values, fallback = []) {
   const source = Array.isArray(values) && values.length > 0 ? values : fallback;
   return new Set(source.map((item) => String(item ?? "").trim().toLowerCase()).filter(Boolean));
-}
-
-function isPathInsideAllowedDirs(filePath, allowedDirs) {
-  const normalizedPath = path.resolve(filePath);
-  return allowedDirs.some((dirPath) => {
-    const normalizedDir = path.resolve(dirPath);
-    return normalizedPath === normalizedDir || normalizedPath.startsWith(`${normalizedDir}${path.sep}`);
-  });
-}
-
-function collectPathCandidates(toolArgs) {
-  const candidates = [];
-  const seen = new Set();
-  const keys = new Set([
-    "path",
-    "filePath",
-    "targetPath",
-    "directory",
-    "dirPath",
-    "cwd",
-    "workingDirectory",
-    "source",
-    "destination",
-  ]);
-
-  const walk = (value) => {
-    if (!value) {
-      return;
-    }
-
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (!trimmed || seen.has(trimmed)) {
-        return;
-      }
-      seen.add(trimmed);
-      candidates.push(trimmed);
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        walk(item);
-      }
-      return;
-    }
-
-    if (typeof value === "object") {
-      for (const [key, nested] of Object.entries(value)) {
-        if (keys.has(key)) {
-          walk(nested);
-        }
-      }
-    }
-  };
-
-  walk(toolArgs);
-  return candidates;
 }
 
 function toPositiveInt(value, fallback) {
@@ -831,16 +749,9 @@ function buildCopilotHooks(config) {
   }
 
   const workDir = path.resolve(config.workDir || process.cwd());
-  const blockedTools = normalizeSet(config.blockedTools, []);
-  const restrictedDirTools = normalizeSet(config.restrictedDirTools, DEFAULT_RESTRICTED_DIR_TOOLS);
-  const destructiveTools = normalizeSet(config.destructiveTools, DEFAULT_DESTRUCTIVE_TOOLS);
   const interceptTools = normalizeSet(config.interceptTools, []);
   const interceptServerUrl = trimTrailingSlash(config.interceptServerUrl);
   const interceptEnabled = Boolean(config.interceptEnabled && interceptServerUrl && interceptTools.size > 0);
-  const allowedDirs = (Array.isArray(config.allowedDirs) ? config.allowedDirs : [])
-    .map((item) => String(item ?? "").trim())
-    .filter(Boolean)
-    .map((item) => path.resolve(path.isAbsolute(item) ? item : path.resolve(workDir, item)));
 
   return {
     onPreToolUse: async (input) => {
@@ -880,34 +791,6 @@ function buildCopilotHooks(config) {
             permissionDecisionReason: reason,
           };
         }
-      }
-
-      if (blockedTools.has(toolName)) {
-        return {
-          permissionDecision: "deny",
-          permissionDecisionReason: `Tool \"${toolName}\" is blocked by COPILOT_BLOCKED_TOOLS`,
-        };
-      }
-
-      if (allowedDirs.length > 0 && restrictedDirTools.has(toolName)) {
-        const pathCandidates = collectPathCandidates(input?.toolArgs);
-        const blocked = pathCandidates.find((candidate) => {
-          const resolved = path.isAbsolute(candidate)
-            ? path.resolve(candidate)
-            : path.resolve(workDir, candidate);
-          return !isPathInsideAllowedDirs(resolved, allowedDirs);
-        });
-
-        if (blocked) {
-          return {
-            permissionDecision: "deny",
-            permissionDecisionReason: `Path \"${blocked}\" is outside COPILOT_ALLOWED_DIRS`,
-          };
-        }
-      }
-
-      if (config.askBeforeDestructive && destructiveTools.has(toolName)) {
-        return { permissionDecision: "ask" };
       }
 
       return { permissionDecision: "allow" };

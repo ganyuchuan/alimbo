@@ -209,17 +209,12 @@ curl http://127.0.0.1:18790/health
 - `COPILOT_ENABLED`: enable gh copilot tool (`true`/`false`, default `true`)
 - `COPILOT_TIMEOUT_MS`: timeout for Copilot SDK `sendAndWait` (default `120000`)
 - `COPILOT_MODEL`: model to use (empty = copilot default)
-- `COPILOT_ALLOW_ALL_TOOLS`: allow copilot to use all tools unattended (`true`/`false`, default `true`)
 - `COPILOT_WORK_DIR`: working directory for copilot (empty = process cwd)
 - `COPILOT_REUSE_SESSION`: reuse shared copilot sessions in gateway `copilot` method (`true`/`false`, default `true`, keyed by `sessionKey` when provided)
 - `COPILOT_MCP_CONFIG_FILE`: MCP server config file for Copilot SDK session (`config/mcporter.json` by default)
 - `COPILOT_HOOK_ENABLED`: enable Copilot SDK hook policy layer (`true`/`false`, default `true`)
-- `COPILOT_BLOCKED_TOOLS`: comma-separated tool denylist enforced by hook (`onPreToolUse`)
-- `COPILOT_RESTRICTED_DIR_TOOLS`: tools that must pass directory scope checks
 - `COPILOT_ALLOWED_DIRS`: comma-separated allowed directories for file access checks (empty means no directory restriction)
-- `COPILOT_ASK_BEFORE_DESTRUCTIVE`: ask before destructive tool calls (`true`/`false`, default `true`)
-- `COPILOT_DESTRUCTIVE_TOOLS`: comma-separated destructive tool list used by ask policy
-- `COPILOT_PERMISSION_REQUEST_MODE`: `auto|approve|deny|delegate` (default `auto`); use `delegate` when you want SDK runtime ask flow
+- `COPILOT_PERMISSION_REQUEST_MODE`: `auto|approve|deny` (default `auto`)
 - `COPILOT_INTERCEPT_ENABLED`: enable intercept forwarding via `onPreToolUse` (`true`/`false`, default `false`)
 - `COPILOT_INTERCEPT_TOOLS`: comma-separated tool names that should be sent to intercept server before execution
 - `COPILOT_INTERCEPT_SERVER_URL`: intercept HTTP server base URL
@@ -352,24 +347,17 @@ Alimbo uses Copilot SDK hooks (`onPreToolUse`) to enforce a policy layer per ses
 ```dotenv
 COPILOT_WORK_DIR=/Users/you/sandbox/project-a
 COPILOT_HOOK_ENABLED=true
-COPILOT_BLOCKED_TOOLS=
-COPILOT_RESTRICTED_DIR_TOOLS=read_file,create_file,edit_file,delete_file,file_search,list_dir,view_image
 COPILOT_ALLOWED_DIRS=/Users/you/sandbox/project-a,/Users/you/sandbox/shared-readonly
-COPILOT_ASK_BEFORE_DESTRUCTIVE=true
-COPILOT_DESTRUCTIVE_TOOLS=delete_file,run_in_terminal,shell,bash
-COPILOT_PERMISSION_REQUEST_MODE=delegate
+COPILOT_PERMISSION_REQUEST_MODE=auto
 ```
 
 说明：
 
-- if a tool is in `COPILOT_BLOCKED_TOOLS`, hook denies it
-- if a file path is outside `COPILOT_ALLOWED_DIRS`, hook denies it
-- if a tool is in `COPILOT_DESTRUCTIVE_TOOLS` and ask policy is enabled, hook returns `ask`
-- to make `ask` effective, prefer `COPILOT_PERMISSION_REQUEST_MODE=delegate` so permission decisions are delegated to SDK runtime
+- when `COPILOT_PERMISSION_REQUEST_MODE` is `auto`, permission decisions are delegated to SDK runtime
 
 重要说明
 
-- 如果你想让“询问”真正发生，建议把 COPILOT_PERMISSION_REQUEST_MODE 设为 delegate。
+- 如果你想让“询问”真正发生，建议把 COPILOT_PERMISSION_REQUEST_MODE 设为 auto。
 - 如果设为 approve，ask 很可能会被自动放行。
 - 这套是应用层策略，不是操作系统级沙箱；要强隔离还需结合独立用户或容器。
 

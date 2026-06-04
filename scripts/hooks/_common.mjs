@@ -5,26 +5,6 @@ import dotenv from "dotenv";
 
 let envLoaded = false;
 
-const DEFAULT_RESTRICTED_DIR_TOOLS = [
-  "read_file",
-  "create_file",
-  "edit_file",
-  "delete_file",
-  "file_search",
-  "list_dir",
-  "view_image",
-];
-
-const DEFAULT_DESTRUCTIVE_TOOLS = [
-  "delete_file",
-  "edit_file",
-  "create_file",
-  "run_in_terminal",
-  "run_command",
-  "shell",
-  "bash",
-];
-
 const LIFECYCLE_STATE_FILE = path.resolve(process.env.HOME || ".", ".copilot/hooks/lifecycle-state.json");
 
 export function loadEnvFromCwd() {
@@ -86,18 +66,6 @@ export function normalizeSet(values, fallback = []) {
   return new Set(source.map((item) => String(item ?? "").trim().toLowerCase()).filter(Boolean));
 }
 
-export function getRestrictedDirToolsSet() {
-  return normalizeSet(parseCsv(process.env.COPILOT_RESTRICTED_DIR_TOOLS), DEFAULT_RESTRICTED_DIR_TOOLS);
-}
-
-export function getDestructiveToolsSet() {
-  return normalizeSet(parseCsv(process.env.COPILOT_DESTRUCTIVE_TOOLS), DEFAULT_DESTRUCTIVE_TOOLS);
-}
-
-export function getBlockedToolsSet() {
-  return normalizeSet(parseCsv(process.env.COPILOT_BLOCKED_TOOLS), []);
-}
-
 export function getInterceptToolsSet() {
   return normalizeSet(parseCsv(process.env.COPILOT_INTERCEPT_TOOLS), []);
 }
@@ -105,74 +73,6 @@ export function getInterceptToolsSet() {
 export function getAllowedDirs(workDir) {
   return parseCsv(process.env.COPILOT_ALLOWED_DIRS)
     .map((item) => path.resolve(path.isAbsolute(item) ? item : path.resolve(workDir, item)));
-}
-
-export function isPathInsideAllowedDirs(filePath, allowedDirs) {
-  const normalizedPath = path.resolve(filePath);
-  return allowedDirs.some((dirPath) => {
-    const normalizedDir = path.resolve(dirPath);
-    return normalizedPath === normalizedDir || normalizedPath.startsWith(`${normalizedDir}${path.sep}`);
-  });
-}
-
-export function collectPathCandidates(toolArgs) {
-  const candidates = [];
-  const seen = new Set();
-  const keys = new Set([
-    "path",
-    "filePath",
-    "targetPath",
-    "directory",
-    "dirPath",
-    "cwd",
-    "workingDirectory",
-    "source",
-    "destination",
-  ]);
-
-  const add = (value) => {
-    const text = String(value ?? "").trim();
-    if (!text || seen.has(text)) {
-      return;
-    }
-    seen.add(text);
-    candidates.push(text);
-  };
-
-  const walk = (value) => {
-    if (!value) {
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        walk(item);
-      }
-      return;
-    }
-
-    if (typeof value !== "object") {
-      return;
-    }
-
-    for (const [key, nested] of Object.entries(value)) {
-      if (keys.has(String(key))) {
-        if (typeof nested === "string") {
-          add(nested);
-        } else if (Array.isArray(nested)) {
-          for (const item of nested) {
-            if (typeof item === "string") {
-              add(item);
-            }
-          }
-        }
-      }
-      walk(nested);
-    }
-  };
-
-  walk(toolArgs);
-  return candidates;
 }
 
 function truncateString(value, maxLength = 240) {
