@@ -2,6 +2,28 @@
 
 ## 2026-06-05
 
+### 34) 移除 Copilot permissionRequestMode 并统一权限模式语义
+
+变更目标：
+- 移除 `COPILOT_PERMISSION_REQUEST_MODE` 在运行时、配置类型与文档中的暴露，避免与 Claude 侧能力不一致造成误解。
+- 统一对外权限模式语义，回归 hook/intercept 作为最小公分母能力。
+
+主要改动：
+- `src/agent-runtime/copilot.ts`
+  - 移除 `approveAll` 依赖、`denyAllPermissions` 与 `resolvePermissionHandler` 逻辑。
+  - `buildSessionConfig` 不再注入 `onPermissionRequest`。
+- `src/config.ts`
+  - 删除 `permissionRequestMode` 配置项与环境变量读取。
+- `src/tool/cron.ts`、`src/tool/sql.ts`
+  - 删除 `permissionRequestMode` 类型字段。
+- `.env.example`、`README.md`
+  - 移除 `COPILOT_PERMISSION_REQUEST_MODE` 配置说明与示例。
+  - README 对齐为“权限由 hook/intercept 流程处理”的描述，并补充 Claude permission 模式参考说明。
+
+验证记录：
+- `npm run typecheck`：待发布流程中执行
+- `npm run build`：待发布流程中执行
+
 ### 33) 修复 Claude pretool 输出污染导致 deny 未生效
 
 变更目标：

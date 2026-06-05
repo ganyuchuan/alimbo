@@ -1,4 +1,4 @@
-import { CopilotClient, approveAll } from "@github/copilot-sdk";
+import { CopilotClient } from "@github/copilot-sdk";
 import crypto from "node:crypto";
 import path from "node:path";
 import { getSkillDirectoriesForSession } from "../tool/skills.js";
@@ -96,24 +96,6 @@ function withSharedSessionLock(sessionKey, task) {
   // Keep queue alive even when one task fails.
   sharedSessionQueues.set(key, run.catch(() => {}));
   return run;
-}
-
-function denyAllPermissions() {
-  return { kind: "denied-by-rules" };
-}
-
-function resolvePermissionHandler(config) {
-  const mode = String(config?.permissionRequestMode ?? "auto").trim().toLowerCase();
-
-  if (mode === "approve") {
-    return approveAll;
-  }
-
-  if (mode === "deny") {
-    return denyAllPermissions;
-  }
-
-  return undefined;
 }
 
 function truncateForViewPath(value) {
@@ -628,7 +610,6 @@ async function buildSessionConfig(config) {
   });
 
   const sessionConfig: any = {
-    onPermissionRequest: resolvePermissionHandler(config),
     workingDirectory: config.workDir || process.cwd(),
     streaming: true,
     skillDirectories,

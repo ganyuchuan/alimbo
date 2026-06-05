@@ -61,7 +61,6 @@ export const config = {
     mcpConfigFile: process.env.COPILOT_MCP_CONFIG_FILE?.trim() || "config/mcporter.json",
     hookEnabled: toBool(process.env.COPILOT_HOOK_ENABLED, true),
     allowedDirs: toList(process.env.COPILOT_ALLOWED_DIRS, []),
-    permissionRequestMode: process.env.COPILOT_PERMISSION_REQUEST_MODE?.trim().toLowerCase() || "auto",
     interceptEnabled: toBool(process.env.COPILOT_INTERCEPT_ENABLED, false),
     interceptTools: toList(process.env.COPILOT_INTERCEPT_TOOLS, []),
     interceptServerUrl: process.env.COPILOT_INTERCEPT_SERVER_URL?.trim() || "",

@@ -17,7 +17,6 @@ type CopilotRuntimeConfig = {
   mcpConfigFile?: string;
   hookEnabled?: boolean;
   allowedDirs?: string[];
-  permissionRequestMode?: "auto" | "approve" | "deny";
   interceptEnabled?: boolean;
   interceptTools?: string[];
   interceptServerUrl?: string;

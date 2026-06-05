@@ -214,7 +214,6 @@ curl http://127.0.0.1:18790/health
 - `COPILOT_MCP_CONFIG_FILE`: MCP server config file for Copilot SDK session (`config/mcporter.json` by default)
 - `COPILOT_HOOK_ENABLED`: enable Copilot SDK hook policy layer (`true`/`false`, default `true`)
 - `COPILOT_ALLOWED_DIRS`: comma-separated allowed directories for file access checks (empty means no directory restriction)
-- `COPILOT_PERMISSION_REQUEST_MODE`: `auto|approve|deny` (default `auto`)
 - `COPILOT_INTERCEPT_ENABLED`: enable intercept forwarding via `onPreToolUse` (`true`/`false`, default `false`)
 - `COPILOT_INTERCEPT_TOOLS`: comma-separated tool names that should be sent to intercept server before execution
 - `COPILOT_INTERCEPT_SERVER_URL`: intercept HTTP server base URL
@@ -348,17 +347,14 @@ Alimbo uses Copilot SDK hooks (`onPreToolUse`) to enforce a policy layer per ses
 COPILOT_WORK_DIR=/Users/you/sandbox/project-a
 COPILOT_HOOK_ENABLED=true
 COPILOT_ALLOWED_DIRS=/Users/you/sandbox/project-a,/Users/you/sandbox/shared-readonly
-COPILOT_PERMISSION_REQUEST_MODE=auto
 ```
 
 说明：
 
-- when `COPILOT_PERMISSION_REQUEST_MODE` is `auto`, permission decisions are delegated to SDK runtime
+- permission checks are handled by hook and intercept flows in runtime
 
 重要说明
 
-- 如果你想让“询问”真正发生，建议把 COPILOT_PERMISSION_REQUEST_MODE 设为 auto。
-- 如果设为 approve，ask 很可能会被自动放行。
 - 这套是应用层策略，不是操作系统级沙箱；要强隔离还需结合独立用户或容器。
 
 #### 区别 COPILOT_WORK_DIR 和 COPILOT_ALLOWED_DIRS
@@ -928,8 +924,8 @@ curl http://127.0.0.1:18790/health
 Copilot 在会话开始/结束会上报 state、entries、prompt、session 等完整结构；Claude 目前只上报 msg、entry、session。  
 参考：copilot.ts 与 claude.ts
 
-[ ] 权限请求模式语义未对齐  
-Copilot 有 permissionRequestMode 处理（approve/deny/默认 undefined），Claude 侧没有等价入口。  
+[√] 权限模式已降级统一为最小公分母  
+Copilot 侧已移除 permissionRequestMode，和 Claude 统一为不暴露该模式配置。  
 参考：copilot.ts 与 claude.ts
 
 [ ] 预工具拦截请求信息粒度未对齐  
@@ -970,3 +966,18 @@ normalizeDecision、trimTrailingSlash、truncate、safeCloneToolArgs、safeStrin
 涉及文件：copilot.ts, claude.ts
 
 如果你要，我可以下一步直接给你做一版“最小对齐改造”PR（先清理 Claude 死代码 + 生命周期上报结构对齐 + hint 字段对齐），不做大规模重构，风险最低。
+
+## Claude permission 模式
+
+The permission mode option (`permission_mode` in Python, `permissionMode` in TypeScript) controls whether the agent asks for approval before using tools:
+
+| Mode                       | Behavior                                                                                                                                                                             |
+| :------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"default"`                | Tools not covered by allow rules trigger your approval callback; no callback means deny                                                                                              |
+| `"acceptEdits"`            | Auto-approves file edits and common filesystem commands (`mkdir`, `touch`, `mv`, `cp`, etc.); other Bash commands follow default rules                                               |
+| `"plan"`                   | Read-only tools run; Claude explores and produces a plan without editing your source files                                                                                           |
+| `"dontAsk"`                | Never prompts. Tools pre-approved by [permission rules](/en/settings#permission-settings) run, everything else is denied                                                             |
+| `"auto"` (TypeScript only) | Uses a model classifier to approve or deny each tool call. See [Auto mode](/en/permission-modes#eliminate-prompts-with-auto-mode) for availability and behavior                      |
+| `"bypassPermissions"`      | Runs all allowed tools without asking. Cannot be used when running as root on Unix. Use only in isolated environments where the agent's actions cannot affect systems you care about |
+
+For interactive applications, use `"default"` with a tool approval callback to surface approval prompts. For autonomous agents on a dev machine, `"acceptEdits"` auto-approves file edits and common filesystem commands (`mkdir`, `touch`, `mv`, `cp`, etc.) while still gating other `Bash` commands behind allow rules. Reserve `"bypassPermissions"` for CI, containers, or other isolated environments. See [Permissions](/en/agent-sdk/permissions) for full details.
