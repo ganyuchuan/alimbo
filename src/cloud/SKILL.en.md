@@ -22,7 +22,7 @@ npm i -g alimbo
 alimbo setup
 ```
 
-## or Install From GitHub Release Package
+## Or Install From GitHub Release Package
 
 Use this path when global npm install is not preferred.
 
@@ -55,24 +55,23 @@ npm run build
 node dist/cli.js setup
 ```
 
-## Pair With Apple Watch (Simple Setup Steps)
+## Pair With Apple Watch
 
 Setup is short and guided. Most users finish in a few minutes.
 
-1. Enter your Cloud URL.
-- What you do: paste the URL shown by your service.
+1. Enter your Cloud URL, or press Enter to skip.
 
 2. Enter the 4-digit code from Apple Watch.
-- What you do: open the watch pairing screen and type the code.
 
-3. Choose whether to start Feishu bridge now.
-- What you do: type `y` for yes, or press Enter for no.
+> Open Alimbo Buddy. After first-time username setup, it will show both the pairing code and Cloud URL.
+
+3. Choose whether to start Feishu bridge now. If you want to approve your Agent actions from Feishu, type `y`; otherwise press Enter to skip.
 
 4. If you chose yes, enter Feishu App ID and App Secret.
-- What you do: paste both values, or press Enter to reuse saved values.
 
-5. Wait for success output.
-- What you do: confirm that setup shows gateway started (and Feishu started if selected).
+> Open the [Feishu Open Platform](https://open.feishu.cn/app), then go to your app's Credentials and Basic Info page. Copy App ID (format like `cli_xxxxxxxxx`) and App Secret.
+
+5. If everything goes well, you will receive `Setup intercept decision connectivity check` on Apple Watch, and `[alimbo-setup] Success` in your terminal.
 
 ## Stop Alimbo Desktop
 
@@ -84,7 +83,7 @@ pm2 stop <gateway_process_name_or_id>
 pm2 stop <feishu_process_name_or_id>
 ```
 
-If you are not sure of names, run `pm2 list` first and stop only Alimbo-related processes.
+If you are not sure of names, run `pm2 list` first and stop only processes named like `alimbo-xxx`.
 
 ## Uninstall Alimbo Desktop
 

@@ -55,28 +55,27 @@ npm run build
 node dist/cli.js setup
 ```
 
-## 与 Apple Watch 配对（简明步骤）
+## 与 Apple Watch 配对
 
 setup 全程有引导，大多数用户几分钟就能完成。
 
-1. 输入 Cloud URL。
-- 你需要做什么：粘贴服务提供给你的 URL。
+1. 输入 Cloud URL，直接回车跳过。
 
 2. 输入 Apple Watch 上的 4 位配对码。
-- 你需要做什么：打开手表配对页面，输入看到的 4 位数字。
 
-3. 选择是否立即启动飞书桥接。
-- 你需要做什么：输入 `y` 表示是，或直接回车表示否。
+> 打开 Alimbo Buddy，首次安装输入完用户名后会显示配对码和 Cloud URL。
+
+3. 选择是否立即启动飞书桥接，如果想要在飞书上审批你的 Agent 指令，输入 `y` 表示是，否则回车跳过。
 
 4. 如果你选择了是，输入飞书 App ID 和 App Secret。
-- 你需要做什么：粘贴这两个值；如果已有保存值，也可以直接回车复用。
 
-5. 等待 setup 成功提示。
-- 你需要做什么：确认页面显示 gateway 已启动（如果你选择了飞书，也会显示飞书已启动）。
+> 打开 [飞书开放平台](https://open.feishu.cn/app) 在应用的 凭证与基础信息 页面，复制 App ID（格式如 cli_xxxxxxxxx）和 App Secret。
+
+5. 如果一切顺利，你会在 Apple Watch 收到一条消息 `Setup intercept decision connectivity check` ，以及在电脑终端收到 setup 成功提示 `[alimbo-setup] Success`！
 
 ## 如何关闭 Alimbo Desktop
 
-如果你需要停止服务，可使用 PM2：
+Alimbo 桌面端启动后会一直挂在后台服务，如果你需要停止服务，可使用 PM2：
 
 ```bash
 pm2 list
@@ -84,7 +83,7 @@ pm2 stop <gateway_process_name_or_id>
 pm2 stop <feishu_process_name_or_id>
 ```
 
-如果不确定进程名，先执行 `pm2 list`，只停止与 Alimbo 相关的进程。
+如果不确定进程名，先执行 `pm2 list`，只停止与 `alimbo-xxx` 相关的进程。
 
 ## 如何卸载 Alimbo Desktop
 
