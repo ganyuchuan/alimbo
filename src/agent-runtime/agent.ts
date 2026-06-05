@@ -3,12 +3,14 @@ import {
   runCopilotWithSession,
   resetSharedCopilotSessionId,
 } from "./copilot.js";
-import { resetSharedClaudeSession } from "./claude.js";
+import { 
+  runClaudeWithSharedSession,
+  runClaudeWithSession,
+  resetSharedClaudeSession
+ } from "./claude.js";
 
 function resolveProvider(config: any): string {
-  return String(config?.agentProvider ?? "copilot")
-    .trim()
-    .toLowerCase() || "copilot";
+  return String(config?.agentProvider).trim().toLowerCase();
 }
 
 /**
@@ -33,7 +35,6 @@ export async function runAgentWithSharedSession({
   const provider = resolveProvider(config);
 
   if (provider === "claude") {
-    const { runClaudeWithSharedSession } = await import("./claude.js");
     return runClaudeWithSharedSession({ prompt, config, sessionKey, onDelta, onDone });
   }
 
@@ -62,7 +63,6 @@ export async function runAgentWithSession({
   const provider = resolveProvider(config);
 
   if (provider === "claude") {
-    const { runClaudeWithSession } = await import("./claude.js");
     return runClaudeWithSession({ prompt, config, resumeSessionId, onDelta, onDone });
   }
 
