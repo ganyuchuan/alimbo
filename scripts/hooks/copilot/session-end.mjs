@@ -1,4 +1,4 @@
-import { reportInterceptEventByApi } from "../../dist/agent-runtime/intercept-event.js";
+import { reportInterceptEventByApi } from "../../../dist/agent-runtime/intercept-event.js";
 import {
   collectSessionEntries,
   createPostToolRequestId,
@@ -8,7 +8,7 @@ import {
   shortId,
   toPositiveInt,
   writeJson,
-} from "./_common.mjs";
+} from "../_common.mjs";
 
 async function main() {
   loadEnvFromCwd();

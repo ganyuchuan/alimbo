@@ -1,5 +1,5 @@
 import process from "node:process";
-import { requestInterceptDecisionByApi } from "../../dist/agent-runtime/intercept-decision.js";
+import { requestInterceptDecisionByApi } from "../../../dist/agent-runtime/intercept-decision.js";
 import {
   collectHumanReadableHint,
   getInterceptToolsSet,
@@ -10,7 +10,7 @@ import {
   toPositiveInt,
   withStdErrLogging,
   writeJson,
-} from "./_common.mjs";
+} from "../_common.mjs";
 
 async function main() {
   loadEnvFromCwd();

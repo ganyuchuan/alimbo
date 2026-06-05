@@ -1,13 +1,14 @@
-import { reportInterceptEventByApi } from "../../dist/agent-runtime/intercept-event.js";
+import { reportInterceptEventByApi } from "../../../dist/agent-runtime/intercept-event.js";
 import {
-  collectHumanReadableHint,
+  collectSessionEntries,
   createPostToolRequestId,
   loadEnvFromCwd,
+  markSessionStart,
   readJsonFromStdin,
-  safeCloneToolArgs,
+  shortId,
   toPositiveInt,
   writeJson,
-} from "./_common.mjs";
+} from "../_common.mjs";
 
 async function main() {
   loadEnvFromCwd();
@@ -22,15 +23,10 @@ async function main() {
     return;
   }
 
-  const toolName = String(input?.toolName ?? "").trim().toLowerCase();
-  if (!toolName) {
-    writeJson({});
-    return;
-  }
-
   const requestId = createPostToolRequestId(input, {});
-  const safeArgs = safeCloneToolArgs(input?.toolArgs);
-  const safeResult = safeCloneToolArgs(input?.toolResult);
+  const sessionId = String(input?.sessionId ?? "").trim();
+  const state = markSessionStart();
+  const entries = collectSessionEntries(input, {});
   const workDir = String(input?.cwd ?? input?.workingDirectory ?? process.cwd()).trim();
 
   await reportInterceptEventByApi({
@@ -38,25 +34,24 @@ async function main() {
     interceptAuthToken,
     interceptTimeoutMs,
     event: {
-      msg: `Tool ${toolName} completed`,
-      entry: `Tool result: ${toolName} (${requestId})`,
+      msg: `Session start: ${sessionId || shortId(requestId)}`,
+      entry: `Session start: ${sessionId || shortId(requestId)}`,
+      state,
+      entries,
       prompt: {
-        id: requestId,
-        tool: toolName,
-        hint: collectHumanReadableHint(toolName, safeArgs),
+        id: sessionId || requestId,
+        tool: "session",
+        hint: "Copilot session start",
       },
-      toolCall: {
-        id: requestId,
-        sessionId: String(input?.sessionId ?? "").trim(),
-        tool: toolName,
-        args: safeArgs,
-        result: safeResult,
+      session: {
+        id: sessionId,
+        phase: "start",
         ts: Date.now(),
         workDir,
       },
     },
   }).catch(() => {
-    // Ignore event upload failures in hooks to avoid blocking tool flow.
+    // Ignore event upload failures in hooks.
   });
 
   writeJson({});

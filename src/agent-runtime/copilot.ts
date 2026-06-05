@@ -3,11 +3,13 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { getSkillDirectoriesForSession } from "../tool/skills.js";
 import { loadMcpServersForCopilot } from "../tool/mcp.js";
-import { requestInterceptDecisionByApi } from "./intercept-decision.js";
 import { reportInterceptEventByApi } from "./intercept-event.js";
+import { runPreToolInterceptGate } from "./pretool-gate.js";
 import {
-  createEmptyTurnToolStats,
-  normalizeDecision,
+  buildPostToolInterceptEvent,
+  buildSessionLifecycleInterceptEvent,
+} from "./activity-event-builder.js";
+import {
   normalizeSessionId,
   normalizeSet,
   safeCloneToolArgs,
@@ -16,7 +18,9 @@ import {
   trimTrailingSlash,
   truncateString,
 } from "./common.js";
-import { estimateConversationTokenBreakdown, estimateToolCallTokens } from "./token-estimate.js";
+import { createSessionTokenTracker } from "./session-token-tracker.js";
+import { buildTokenEstimateInterceptEvent } from "./token-event-builder.js";
+import { estimateConversationTokenBreakdown } from "./token-estimate.js";
 
 const DEFAULT_SHARED_SESSION_KEY = "__global__";
 
@@ -26,113 +30,13 @@ let sdkClientCwd = "";
 let sharedSessions = new Map();
 let sharedCopilotSessionIds = new Map();
 let sharedSkillSignatures = new Map();
-let sessionTurnToolStats = new Map();
-let sessionContextCarryoverTokens = new Map();
+const sessionTokenTracker = createSessionTokenTracker();
 const sessionLifecycleState = {
   total: 0,
   running: 0,
   waiting: 0,
   completed: false,
 };
-const DEFAULT_REQUEST_OVERHEAD_TOKENS = 80;
-const PER_TOOL_CALL_OVERHEAD_TOKENS = 24;
-const MAX_SESSION_CARRYOVER_TOKENS = 240000;
-
-function ensureTurnToolStats(sessionId) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) {
-    return createEmptyTurnToolStats();
-  }
-
-  const existing = sessionTurnToolStats.get(normalizedSessionId);
-  if (existing) {
-    return existing;
-  }
-
-  const created = createEmptyTurnToolStats();
-  sessionTurnToolStats.set(normalizedSessionId, created);
-  return created;
-}
-
-function consumeTurnToolStats(sessionId) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) {
-    return createEmptyTurnToolStats();
-  }
-
-  const existing = sessionTurnToolStats.get(normalizedSessionId);
-  if (!existing) {
-    return createEmptyTurnToolStats();
-  }
-
-  sessionTurnToolStats.set(normalizedSessionId, createEmptyTurnToolStats());
-  return existing;
-}
-
-function clearSessionTokenTracking(sessionId) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) {
-    return;
-  }
-  sessionTurnToolStats.delete(normalizedSessionId);
-  sessionContextCarryoverTokens.delete(normalizedSessionId);
-}
-
-function getSessionCarryoverTokens(sessionId) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) {
-    return 0;
-  }
-  const value = Number(sessionContextCarryoverTokens.get(normalizedSessionId) ?? 0);
-  return Number.isFinite(value) && value > 0 ? value : 0;
-}
-
-function setSessionCarryoverTokens(sessionId, tokens) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) {
-    return;
-  }
-
-  const normalized = Math.max(0, Math.min(MAX_SESSION_CARRYOVER_TOKENS, Number(tokens) || 0));
-  if (normalized <= 0) {
-    sessionContextCarryoverTokens.delete(normalizedSessionId);
-    return;
-  }
-  sessionContextCarryoverTokens.set(normalizedSessionId, normalized);
-}
-
-function recordToolUsageForSession({ sessionId, toolName, toolArgs, toolResult }) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) {
-    return;
-  }
-
-  const breakdown = estimateToolCallTokens({
-    toolName,
-    toolArgs,
-    toolResult,
-  });
-
-  const stats = ensureTurnToolStats(normalizedSessionId);
-  stats.toolCallCount += 1;
-  stats.toolArgsTokens += breakdown.argsTokens;
-  stats.toolResultTokens += breakdown.resultTokens;
-  stats.toolEntries.push(
-    truncateString(
-      `tool=${breakdown.toolName} argsTokens=${breakdown.argsTokens} resultTokens=${breakdown.resultTokens} args=${breakdown.argsPreview} result=${breakdown.resultPreview}`,
-      500,
-    ),
-  );
-
-  if (stats.toolEntries.length > 20) {
-    stats.toolEntries = stats.toolEntries.slice(-20);
-  }
-}
-
-function estimateRequestOverheadTokens({ toolCallCount }) {
-  const normalizedToolCallCount = Math.max(0, Number(toolCallCount) || 0);
-  return DEFAULT_REQUEST_OVERHEAD_TOKENS + (normalizedToolCallCount * PER_TOOL_CALL_OVERHEAD_TOKENS);
-}
 
 function normalizeSessionKey(sessionKey) {
   const normalized = String(sessionKey ?? "").trim();
@@ -160,7 +64,7 @@ async function disconnectSharedSessionForKey(sessionKey) {
   if (existing) {
     await existing.disconnect().catch(() => {});
   }
-  clearSessionTokenTracking(trackedSessionId);
+  sessionTokenTracker.clearSessionTokenTracking(trackedSessionId);
   sharedSessions.delete(key);
   sharedSkillSignatures.delete(key);
   sharedSessionQueues.delete(key);
@@ -351,38 +255,6 @@ function collectHumanReadableHint(toolName, toolArgs) {
   return generateInterceptHintWithTemplate(toolName, toolArgs);
 }
 
-function mapInterceptDecisionToPermission(result, fallbackReason) {
-  const decision = normalizeDecision(result?.decision, "deny");
-  const reason = String(result?.reason ?? fallbackReason ?? "intercept decision").trim() || "intercept decision";
-
-  if (decision === "allow" || decision === "approved") {
-    return {
-      permissionDecision: "allow",
-      permissionDecisionReason: reason,
-    };
-  }
-
-  if (decision === "ask") {
-    return {
-      permissionDecision: "ask",
-      permissionDecisionReason: reason,
-    };
-  }
-
-  return {
-    permissionDecision: "deny",
-    permissionDecisionReason: reason,
-  };
-}
-
-function shortId(value) {
-  const text = String(value ?? "").trim();
-  if (!text) {
-    return "-";
-  }
-  return text.length <= 14 ? text : `${text.slice(0, 6)}...${text.slice(-4)}`;
-}
-
 function normalizeMessageEntry(value) {
   if (typeof value === "string") {
     return truncateString(value, 500);
@@ -492,29 +364,22 @@ async function reportPostToolUseEvent({ input, invocation, config, workDir }) {
   const safeArgs = safeCloneToolArgs(input?.toolArgs);
   const safeResult = safeCloneToolArgs(input?.toolResult);
   const sessionId = String(invocation?.sessionId ?? input?.sessionId ?? "").trim();
+  const event = buildPostToolInterceptEvent({
+    toolName,
+    requestId,
+    sessionId,
+    args: safeArgs,
+    result: safeResult,
+    workDir,
+    hint: collectHumanReadableHint(toolName, safeArgs),
+    includePrompt: true,
+  });
 
   await reportInterceptEventByApi({
     interceptServerUrl,
     interceptAuthToken,
     interceptTimeoutMs,
-    event: {
-      msg: `Tool ${toolName} completed`,
-      entry: `Tool result: ${toolName} (${requestId})`,
-      prompt: {
-        id: requestId,
-        tool: toolName,
-        hint: collectHumanReadableHint(toolName, safeArgs),
-      },
-      toolCall: {
-        id: requestId,
-        sessionId,
-        tool: toolName,
-        args: safeArgs,
-        result: safeResult,
-        ts: Date.now(),
-        workDir,
-      },
-    },
+    event,
   });
 }
 
@@ -530,28 +395,22 @@ async function reportSessionLifecycleEvent({ phase, input, invocation, config, w
   const sessionId = String(invocation?.sessionId ?? input?.sessionId ?? "").trim();
   const state = phase === "start" ? markSessionStart() : markSessionEnd();
   const entries = collectSessionEntries(input, invocation);
+  const event = buildSessionLifecycleInterceptEvent({
+    phase,
+    sessionId,
+    requestId,
+    workDir,
+    hint: `Copilot session ${phase}`,
+    state,
+    entries,
+    includePrompt: true,
+  });
 
   await reportInterceptEventByApi({
     interceptServerUrl,
     interceptAuthToken,
     interceptTimeoutMs,
-    event: {
-      msg: `Session ${phase}: ${sessionId || shortId(requestId)}`,
-      entry: `Session ${phase}: ${sessionId || shortId(requestId)}`,
-      state,
-      entries,
-      prompt: {
-        id: sessionId || requestId,
-        tool: "session",
-        hint: `Copilot session ${phase}`,
-      },
-      session: {
-        id: sessionId,
-        phase,
-        ts: Date.now(),
-        workDir,
-      },
-    },
+    event,
   });
 }
 
@@ -577,13 +436,25 @@ async function reportSessionTokenEstimateEvent({
     return;
   }
 
-  const breakdown = estimateConversationTokenBreakdown({ prompt, output, entries });
-  const toolTokens = Math.max(0, Number(toolArgsTokens) || 0) + Math.max(0, Number(toolResultTokens) || 0);
-  const carryoverTokens = Math.max(0, Number(contextCarryoverTokens) || 0);
-  const overheadTokens = Math.max(0, Number(requestOverheadTokens) || 0);
-  const turnTokens = breakdown.totalTokens + toolTokens + overheadTokens;
-  const tokens = turnTokens + carryoverTokens;
-  if (tokens <= 0) {
+  const event = buildTokenEstimateInterceptEvent({
+    provider: "Copilot",
+    sessionId,
+    prompt,
+    output,
+    entries,
+    status,
+    failureReason,
+    attempt,
+    retryPlanned,
+    toolCallCount,
+    toolArgsTokens,
+    toolResultTokens,
+    contextCarryoverTokens,
+    requestOverheadTokens,
+    workDir,
+    promptIdPrefix: "tokens",
+  });
+  if (!event) {
     return;
   }
 
@@ -593,72 +464,7 @@ async function reportSessionTokenEstimateEvent({
     interceptServerUrl,
     interceptAuthToken,
     interceptTimeoutMs,
-    event: {
-      msg: `Session tokens estimated (${status}): ${sessionId || "-"}`,
-      entry: `Session tokens estimated (${status}): ${sessionId || "-"} (${tokens})`,
-      tokens,
-      tokenEstimate: {
-        sessionId,
-        status,
-        promptTokens: breakdown.promptTokens,
-        outputTokens: breakdown.outputTokens,
-        toolCallCount: Math.max(0, Number(toolCallCount) || 0),
-        toolArgsTokens: Math.max(0, Number(toolArgsTokens) || 0),
-        toolResultTokens: Math.max(0, Number(toolResultTokens) || 0),
-        toolTokens,
-        contextCarryoverTokens: carryoverTokens,
-        requestOverheadTokens: overheadTokens,
-        turnTokens,
-        totalTokens: breakdown.totalTokens,
-        totalEstimatedTokens: tokens,
-        promptPreview: breakdown.promptPreview,
-        outputPreview: breakdown.outputPreview,
-        attempt,
-        retryPlanned,
-        failureReason: truncateString(failureReason, 240),
-        estimatedAtMs: Date.now(),
-      },
-      prompt: {
-        id: sessionId || `tokens_${crypto.randomUUID()}`,
-        tool: "session",
-        hint: `Estimated tokens for Copilot session (${status}): ${tokens}`,
-      },
-      session: {
-        id: sessionId,
-        phase: status === "failed" ? "token-estimate-failed" : "token-estimate",
-        ts: Date.now(),
-        workDir,
-      },
-    },
-  });
-}
-
-async function requestInterceptDecision({ input, toolName, config, workDir }) {
-  return requestInterceptDecisionByApi({
-    interceptServerUrl: config.interceptServerUrl,
-    interceptAuthToken: config.interceptAuthToken,
-    interceptTimeoutMs: config.interceptTimeoutMs,
-    interceptPollIntervalMs: config.interceptPollIntervalMs,
-    interceptMaxWaitMs: config.interceptMaxWaitMs,
-    logPrefix: "[copilot-sdk][intercept]",
-    request: {
-      requestIdCandidates: [
-        input?.requestId,
-        input?.permissionRequestId,
-        input?.toolCallId,
-        input?.id,
-      ],
-      toolName,
-      hint: collectHumanReadableHint(toolName, input?.toolArgs),
-      msg: `Intercepted tool ${toolName}`,
-      sessionId: String(input?.sessionId ?? "").trim() || null,
-      workDir,
-      input: {
-        toolName,
-        toolArgs: safeCloneToolArgs(input?.toolArgs),
-        metadata: safeCloneToolArgs(input?.metadata),
-      },
-    },
+    event,
   });
 }
 
@@ -681,35 +487,61 @@ function buildCopilotHooks(config) {
 
       console.log(`[copilot-sdk][intercept] onPreToolUse will match tool=${toolName}`);
 
-      if (interceptEnabled && interceptTools.has(toolName)) {
-        try {
-          console.log(`[copilot-sdk][intercept] onPreToolUse matched tool=${toolName}`);
-          const interceptResult = await requestInterceptDecision({
-            input,
+      const gateResult = await runPreToolInterceptGate({
+        interceptEnabled,
+        interceptTools,
+        interceptServerUrl,
+        interceptAuthToken: config.interceptAuthToken,
+        interceptTimeoutMs: config.interceptTimeoutMs,
+        interceptPollIntervalMs: config.interceptPollIntervalMs,
+        interceptMaxWaitMs: config.interceptMaxWaitMs,
+        interceptFailOpen: config.interceptFailOpen,
+        logPrefix: "[copilot-sdk][intercept]",
+        request: {
+          requestIdCandidates: [
+            input?.requestId,
+            input?.permissionRequestId,
+            input?.toolCallId,
+            input?.id,
+          ],
+          toolName,
+          hint: collectHumanReadableHint(toolName, input?.toolArgs),
+          msg: `Intercepted tool ${toolName}`,
+          sessionId: String(input?.sessionId ?? "").trim() || null,
+          workDir,
+          input: {
             toolName,
-            config,
-            workDir,
-          });
-          const permission = mapInterceptDecisionToPermission(interceptResult, `tool ${toolName} intercepted`);
-          console.log(
-            `[copilot-sdk][intercept] onPreToolUse resolved tool=${toolName} permission=${permission.permissionDecision}`,
-          );
-          return permission;
-        } catch (error) {
-          const reason = `intercept request failed: ${String(error?.message ?? error)}`;
-          console.warn(`[copilot-sdk][intercept] onPreToolUse failed tool=${toolName} reason=${reason}`);
-          if (config.interceptFailOpen) {
-            console.warn(`[copilot-sdk][intercept] fail-open allow tool=${toolName}`);
-            return {
-              permissionDecision: "allow",
-              permissionDecisionReason: `${reason}; fail-open enabled`,
-            };
-          }
-          return {
-            permissionDecision: "deny",
-            permissionDecisionReason: reason,
-          };
-        }
+            toolArgs: safeCloneToolArgs(input?.toolArgs),
+            metadata: safeCloneToolArgs(input?.metadata),
+          },
+        },
+      });
+
+      if (gateResult.intercepted) {
+        console.log(
+          `[copilot-sdk][intercept] onPreToolUse resolved tool=${toolName} permission=${gateResult.decision}`,
+        );
+      }
+
+      if (gateResult.decision === "ask") {
+        return {
+          permissionDecision: "ask",
+          permissionDecisionReason: gateResult.reason,
+        };
+      }
+
+      if (gateResult.decision === "deny") {
+        return {
+          permissionDecision: "deny",
+          permissionDecisionReason: gateResult.reason,
+        };
+      }
+
+      if (gateResult.intercepted && gateResult.reason) {
+        return {
+          permissionDecision: "allow",
+          permissionDecisionReason: gateResult.reason,
+        };
       }
 
       return { permissionDecision: "allow" };
@@ -720,7 +552,7 @@ function buildCopilotHooks(config) {
       const safeResult = safeCloneToolArgs(input?.toolResult);
       const sessionId = String(invocation?.sessionId ?? input?.sessionId ?? "").trim() || "-";
 
-      recordToolUsageForSession({
+      sessionTokenTracker.recordToolUsageForSession({
         sessionId,
         toolName,
         toolArgs: safeArgs,
@@ -978,9 +810,9 @@ export async function runCopilotWithSession({
         onDone,
       });
 
-      const toolStats = consumeTurnToolStats(result.sessionId);
-      const carryoverTokens = getSessionCarryoverTokens(result.sessionId);
-      const requestOverheadTokens = estimateRequestOverheadTokens({
+      const toolStats = sessionTokenTracker.consumeTurnToolStats(result.sessionId);
+      const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(result.sessionId);
+      const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
         toolCallCount: toolStats.toolCallCount,
       });
 
@@ -1013,15 +845,15 @@ export async function runCopilotWithSession({
         + toolStats.toolArgsTokens
         + toolStats.toolResultTokens
         + requestOverheadTokens;
-      setSessionCarryoverTokens(result.sessionId, carryoverTokens + turnTokenContribution);
+      sessionTokenTracker.setSessionCarryoverTokens(result.sessionId, carryoverTokens + turnTokenContribution);
 
       return result;
     } catch (error) {
       const shouldRetry = !retried && isSessionNotFoundError(error);
       const failedSessionId = getErrorSessionId(error) || effectiveResumeSessionId;
-      const toolStats = consumeTurnToolStats(failedSessionId);
-      const carryoverTokens = getSessionCarryoverTokens(failedSessionId);
-      const requestOverheadTokens = estimateRequestOverheadTokens({
+      const toolStats = sessionTokenTracker.consumeTurnToolStats(failedSessionId);
+      const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(failedSessionId);
+      const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
         toolCallCount: toolStats.toolCallCount,
       });
 
@@ -1050,7 +882,7 @@ export async function runCopilotWithSession({
       }
 
       if (!shouldRetry) {
-        clearSessionTokenTracking(failedSessionId);
+        sessionTokenTracker.clearSessionTokenTracking(failedSessionId);
       }
 
       if (shouldRetry) {
@@ -1157,9 +989,9 @@ export async function runCopilotWithSharedSession({
           onDone,
         });
 
-        const toolStats = consumeTurnToolStats(result.sessionId);
-        const carryoverTokens = getSessionCarryoverTokens(result.sessionId);
-        const requestOverheadTokens = estimateRequestOverheadTokens({
+        const toolStats = sessionTokenTracker.consumeTurnToolStats(result.sessionId);
+        const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(result.sessionId);
+        const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
           toolCallCount: toolStats.toolCallCount,
         });
 
@@ -1192,16 +1024,16 @@ export async function runCopilotWithSharedSession({
           + toolStats.toolArgsTokens
           + toolStats.toolResultTokens
           + requestOverheadTokens;
-        setSessionCarryoverTokens(result.sessionId, carryoverTokens + turnTokenContribution);
+        sessionTokenTracker.setSessionCarryoverTokens(result.sessionId, carryoverTokens + turnTokenContribution);
 
         setSharedSessionIdForKey(key, result.sessionId);
         return result;
       } catch (error) {
         const shouldRetry = !retried && isSessionNotFoundError(error);
         const failedSessionId = getErrorSessionId(error) || getSharedSessionIdForKey(key);
-        const toolStats = consumeTurnToolStats(failedSessionId);
-        const carryoverTokens = getSessionCarryoverTokens(failedSessionId);
-        const requestOverheadTokens = estimateRequestOverheadTokens({
+        const toolStats = sessionTokenTracker.consumeTurnToolStats(failedSessionId);
+        const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(failedSessionId);
+        const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
           toolCallCount: toolStats.toolCallCount,
         });
 

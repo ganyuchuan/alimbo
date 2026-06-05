@@ -1,129 +1,31 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { createInterceptRequestIdFromCandidates, requestInterceptDecisionByApi } from "./intercept-decision.js";
+import { createInterceptRequestIdFromCandidates } from "./intercept-decision.js";
 import {
-  createEmptyTurnToolStats,
-  normalizeDecision,
-  normalizeSessionId,
+  buildPostToolInterceptEvent,
+  buildSessionLifecycleInterceptEvent,
+} from "./activity-event-builder.js";
+import {
   normalizeSet,
   safeCloneToolArgs,
   safeStringify,
   toPositiveInt,
   trimTrailingSlash,
-  truncateString,
 } from "./common.js";
 import { reportInterceptEventByApi } from "./intercept-event.js";
-import { estimateConversationTokenBreakdown, estimateToolCallTokens } from "./token-estimate.js";
+import { runPreToolInterceptGate } from "./pretool-gate.js";
+import { createSessionTokenTracker } from "./session-token-tracker.js";
+import { buildTokenEstimateInterceptEvent } from "./token-event-builder.js";
+import { estimateConversationTokenBreakdown } from "./token-estimate.js";
 
 const DEFAULT_SHARED_SESSION_KEY = "__global__";
 
 let sharedClaudeSessionIds: Map<string, string> = new Map();
 let sharedSessionQueues: Map<string, Promise<any>> = new Map();
-let sessionTurnToolStats: Map<string, any> = new Map();
-let sessionContextCarryoverTokens: Map<string, number> = new Map();
-
-const DEFAULT_REQUEST_OVERHEAD_TOKENS = 80;
-const PER_TOOL_CALL_OVERHEAD_TOKENS = 24;
-const MAX_SESSION_CARRYOVER_TOKENS = 240000;
+const sessionTokenTracker = createSessionTokenTracker();
 
 function normalizeTextOutput(value) {
   return String(value ?? "").trim();
-}
-
-function ensureTurnToolStats(sessionId) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) {
-    return createEmptyTurnToolStats();
-  }
-
-  const existing = sessionTurnToolStats.get(normalizedSessionId);
-  if (existing) {
-    return existing;
-  }
-
-  const created = createEmptyTurnToolStats();
-  sessionTurnToolStats.set(normalizedSessionId, created);
-  return created;
-}
-
-function consumeTurnToolStats(sessionId) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) {
-    return createEmptyTurnToolStats();
-  }
-
-  const existing = sessionTurnToolStats.get(normalizedSessionId);
-  if (!existing) {
-    return createEmptyTurnToolStats();
-  }
-
-  sessionTurnToolStats.set(normalizedSessionId, createEmptyTurnToolStats());
-  return existing;
-}
-
-function clearSessionTokenTracking(sessionId) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) {
-    return;
-  }
-  sessionTurnToolStats.delete(normalizedSessionId);
-  sessionContextCarryoverTokens.delete(normalizedSessionId);
-}
-
-function getSessionCarryoverTokens(sessionId) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) {
-    return 0;
-  }
-  const value = Number(sessionContextCarryoverTokens.get(normalizedSessionId) ?? 0);
-  return Number.isFinite(value) && value > 0 ? value : 0;
-}
-
-function setSessionCarryoverTokens(sessionId, tokens) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) {
-    return;
-  }
-
-  const normalized = Math.max(0, Math.min(MAX_SESSION_CARRYOVER_TOKENS, Number(tokens) || 0));
-  if (normalized <= 0) {
-    sessionContextCarryoverTokens.delete(normalizedSessionId);
-    return;
-  }
-  sessionContextCarryoverTokens.set(normalizedSessionId, normalized);
-}
-
-function recordToolUsageForSession({ sessionId, toolName, toolArgs, toolResult }) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) {
-    return;
-  }
-
-  const breakdown = estimateToolCallTokens({
-    toolName,
-    toolArgs,
-    toolResult,
-  });
-
-  const stats = ensureTurnToolStats(normalizedSessionId);
-  stats.toolCallCount += 1;
-  stats.toolArgsTokens += breakdown.argsTokens;
-  stats.toolResultTokens += breakdown.resultTokens;
-  stats.toolEntries.push(
-    truncateString(
-      `tool=${breakdown.toolName} argsTokens=${breakdown.argsTokens} resultTokens=${breakdown.resultTokens} args=${breakdown.argsPreview} result=${breakdown.resultPreview}`,
-      500,
-    ),
-  );
-
-  if (stats.toolEntries.length > 20) {
-    stats.toolEntries = stats.toolEntries.slice(-20);
-  }
-}
-
-function estimateRequestOverheadTokens({ toolCallCount }) {
-  const normalizedToolCallCount = Math.max(0, Number(toolCallCount) || 0);
-  return DEFAULT_REQUEST_OVERHEAD_TOKENS + (normalizedToolCallCount * PER_TOOL_CALL_OVERHEAD_TOKENS);
 }
 
 function mergeEntries(baseEntries, toolEntries = []) {
@@ -205,86 +107,33 @@ async function reportClaudeTokenEstimateEvent({
     return;
   }
 
-  const breakdown = estimateConversationTokenBreakdown({ prompt, output, entries });
-  const toolTokens = Math.max(0, Number(toolArgsTokens) || 0) + Math.max(0, Number(toolResultTokens) || 0);
-  const carryoverTokens = Math.max(0, Number(contextCarryoverTokens) || 0);
-  const overheadTokens = Math.max(0, Number(requestOverheadTokens) || 0);
-  const turnTokens = breakdown.totalTokens + toolTokens + overheadTokens;
-  const tokens = turnTokens + carryoverTokens;
+  const event = buildTokenEstimateInterceptEvent({
+    provider: "Claude",
+    sessionId,
+    prompt,
+    output,
+    entries,
+    status,
+    failureReason,
+    attempt,
+    retryPlanned,
+    toolCallCount,
+    toolArgsTokens,
+    toolResultTokens,
+    contextCarryoverTokens,
+    requestOverheadTokens,
+    workDir,
+    promptIdPrefix: "claude_tokens",
+  });
 
-  if (tokens <= 0) {
+  if (!event) {
     return;
   }
 
   await reportClaudeHookEvent({
     config,
     timeoutMs: toPositiveInt(config.interceptTimeoutMs, 5000),
-    event: {
-      msg: `Session tokens estimated (${status}): ${sessionId || "-"}`,
-      entry: `Session tokens estimated (${status}): ${sessionId || "-"} (${tokens})`,
-      tokens,
-      tokenEstimate: {
-        sessionId,
-        provider: "claude",
-        status,
-        promptTokens: breakdown.promptTokens,
-        outputTokens: breakdown.outputTokens,
-        toolCallCount: Math.max(0, Number(toolCallCount) || 0),
-        toolArgsTokens: Math.max(0, Number(toolArgsTokens) || 0),
-        toolResultTokens: Math.max(0, Number(toolResultTokens) || 0),
-        toolTokens,
-        contextCarryoverTokens: carryoverTokens,
-        requestOverheadTokens: overheadTokens,
-        turnTokens,
-        totalTokens: breakdown.totalTokens,
-        totalEstimatedTokens: tokens,
-        promptPreview: breakdown.promptPreview,
-        outputPreview: breakdown.outputPreview,
-        attempt,
-        retryPlanned,
-        failureReason: truncateString(failureReason, 240),
-        estimatedAtMs: Date.now(),
-      },
-      prompt: {
-        id: sessionId || `claude_tokens_${crypto.randomUUID()}`,
-        tool: "session",
-        hint: `Estimated tokens for Claude session (${status}): ${tokens}`,
-      },
-      session: {
-        id: sessionId,
-        phase: status === "failed" ? "token-estimate-failed" : "token-estimate",
-        ts: Date.now(),
-        workDir,
-      },
-    },
-  });
-}
-
-async function requestInterceptDecision({ input, toolName, config, workDir }) {
-  return requestInterceptDecisionByApi({
-    interceptServerUrl: config.interceptServerUrl,
-    interceptAuthToken: config.interceptAuthToken,
-    interceptTimeoutMs: config.interceptTimeoutMs,
-    interceptPollIntervalMs: config.interceptPollIntervalMs,
-    interceptMaxWaitMs: config.interceptMaxWaitMs,
-    logPrefix: "[claude-agent-sdk][intercept]",
-    request: {
-      requestIdCandidates: [
-        input?.requestId,
-        input?.permissionRequestId,
-        input?.toolCallId,
-        input?.id,
-        input?.tool_use_id,
-      ],
-      toolName,
-      msg: `Intercepted tool ${toolName}`,
-      sessionId: String(input?.session_id ?? "").trim() || null,
-      workDir,
-      input: {
-        toolName,
-        toolArgs: safeCloneToolArgs(input?.tool_input),
-      },
-    },
+    event,
   });
 }
 
@@ -305,33 +154,40 @@ function buildClaudeHooks(config) {
       return {};
     }
 
-    if (interceptEnabled && interceptTools.has(toolName)) {
-      try {
-        const interceptResult = await requestInterceptDecision({
-          input,
+    const gateResult = await runPreToolInterceptGate({
+      interceptEnabled,
+      interceptTools,
+      interceptServerUrl,
+      interceptAuthToken: config.interceptAuthToken,
+      interceptTimeoutMs: config.interceptTimeoutMs,
+      interceptPollIntervalMs: config.interceptPollIntervalMs,
+      interceptMaxWaitMs: config.interceptMaxWaitMs,
+      interceptFailOpen: config.interceptFailOpen,
+      logPrefix: "[claude-sdk][intercept]",
+      request: {
+        requestIdCandidates: [
+          input?.requestId,
+          input?.permissionRequestId,
+          input?.toolCallId,
+          input?.id,
+          input?.tool_use_id,
+        ],
+        toolName,
+        msg: `Intercepted tool ${toolName}`,
+        sessionId: String(input?.session_id ?? "").trim() || null,
+        workDir,
+        input: {
           toolName,
-          config,
-          workDir,
-        });
-        const decision = normalizeDecision(interceptResult?.decision, "deny");
-        if (["allow", "approved"].includes(decision)) {
-          return toPreToolHookOutput("PreToolUse", "allow", String(interceptResult?.reason ?? "approved"));
-        }
-        if (decision === "ask") {
-          return toPreToolHookOutput("PreToolUse", "ask", String(interceptResult?.reason ?? "approval required"));
-        }
-        return toPreToolHookOutput("PreToolUse", "deny", String(interceptResult?.reason ?? "intercept denied"));
-      } catch (error) {
-        const reason = `intercept request failed: ${String(error?.message ?? error)}`;
-        if (config.interceptFailOpen) {
-          return toPreToolHookOutput("PreToolUse", "allow", `${reason}; fail-open enabled`);
-        }
-        return toPreToolHookOutput("PreToolUse", "deny", reason);
-      }
+          toolArgs: safeCloneToolArgs(input?.tool_input),
+        },
+      },
+    });
+
+    if (gateResult.intercepted) {
+      console.log(`[claude-sdk][intercept] preToolHook resolved tool=${toolName} decision=${gateResult.decision}`);
     }
 
-
-    return toPreToolHookOutput("PreToolUse", "allow", "allowed by policy");
+    return toPreToolHookOutput("PreToolUse", gateResult.decision, gateResult.reason);
   };
 
   const postToolHook = async (input) => {
@@ -344,7 +200,7 @@ function buildClaudeHooks(config) {
     console.log(`  Args: ${safeStringify(safeArgs)}`);
     console.log(`  Result: ${safeStringify(safeResult)}`);
 
-    recordToolUsageForSession({
+    sessionTokenTracker.recordToolUsageForSession({
       sessionId,
       toolName,
       toolArgs: safeArgs,
@@ -352,28 +208,27 @@ function buildClaudeHooks(config) {
     });
 
     try {
+      const requestId = createInterceptRequestIdFromCandidates([
+        input?.tool_use_id,
+        input?.requestId,
+        input?.permissionRequestId,
+        input?.toolCallId,
+        input?.id,
+      ]);
+      const event = buildPostToolInterceptEvent({
+        toolName: toolName || "unknown",
+        requestId,
+        sessionId,
+        args: safeArgs,
+        result: safeResult,
+        workDir,
+        includePrompt: false,
+        entryText: `Tool result: ${toolName || "unknown"}`,
+      });
       await reportClaudeHookEvent({
         config,
         timeoutMs: toPositiveInt(config.interceptTimeoutMs, 5000),
-        event: {
-          msg: `Tool ${toolName || "unknown"} completed`,
-          entry: `Tool result: ${toolName || "unknown"}`,
-          toolCall: {
-            id: createInterceptRequestIdFromCandidates([
-              input?.tool_use_id,
-              input?.requestId,
-              input?.permissionRequestId,
-              input?.toolCallId,
-              input?.id,
-            ]),
-            sessionId,
-            tool: toolName || "unknown",
-            args: safeArgs,
-            result: safeResult,
-            ts: Date.now(),
-            workDir,
-          },
-        },
+        event,
       });
     } catch (error) {
       console.warn(
@@ -388,19 +243,16 @@ function buildClaudeHooks(config) {
     const sessionId = String(input?.session_id ?? "").trim() || "-";
     console.log(`[claude-agent-sdk][session] start sessionId=${sessionId}`);
     try {
+      const event = buildSessionLifecycleInterceptEvent({
+        phase: "start",
+        sessionId,
+        workDir,
+        includePrompt: false,
+      });
       await reportClaudeHookEvent({
         config,
         timeoutMs: toPositiveInt(config.interceptTimeoutMs, 5000),
-        event: {
-          msg: `Session start: ${sessionId}`,
-          entry: `Session start: ${sessionId}`,
-          session: {
-            id: sessionId,
-            phase: "start",
-            ts: Date.now(),
-            workDir,
-          },
-        },
+        event,
       });
     } catch (error) {
       console.warn(
@@ -414,19 +266,16 @@ function buildClaudeHooks(config) {
     const sessionId = String(input?.session_id ?? "").trim() || "-";
     console.log(`[claude-agent-sdk][session] end sessionId=${sessionId}`);
     try {
+      const event = buildSessionLifecycleInterceptEvent({
+        phase: "end",
+        sessionId,
+        workDir,
+        includePrompt: false,
+      });
       await reportClaudeHookEvent({
         config,
         timeoutMs: toPositiveInt(config.interceptTimeoutMs, 5000),
-        event: {
-          msg: `Session end: ${sessionId}`,
-          entry: `Session end: ${sessionId}`,
-          session: {
-            id: sessionId,
-            phase: "end",
-            ts: Date.now(),
-            workDir,
-          },
-        },
+        event,
       });
     } catch (error) {
       console.warn(
@@ -654,9 +503,9 @@ export async function runClaudeWithSession({
       onDelta,
     });
 
-    const toolStats = consumeTurnToolStats(result.sessionId);
-    const carryoverTokens = getSessionCarryoverTokens(result.sessionId);
-    const requestOverheadTokens = estimateRequestOverheadTokens({
+    const toolStats = sessionTokenTracker.consumeTurnToolStats(result.sessionId);
+    const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(result.sessionId);
+    const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
       toolCallCount: toolStats.toolCallCount,
     });
 
@@ -691,15 +540,15 @@ export async function runClaudeWithSession({
       + toolStats.toolArgsTokens
       + toolStats.toolResultTokens
       + requestOverheadTokens;
-    setSessionCarryoverTokens(result.sessionId, carryoverTokens + turnTokenContribution);
+    sessionTokenTracker.setSessionCarryoverTokens(result.sessionId, carryoverTokens + turnTokenContribution);
 
     onDone?.(result);
     return result;
   } catch (error) {
     const failedSessionId = getErrorSessionId(error) || resumeSessionId;
-    const toolStats = consumeTurnToolStats(failedSessionId);
-    const carryoverTokens = getSessionCarryoverTokens(failedSessionId);
-    const requestOverheadTokens = estimateRequestOverheadTokens({
+    const toolStats = sessionTokenTracker.consumeTurnToolStats(failedSessionId);
+    const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(failedSessionId);
+    const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
       toolCallCount: toolStats.toolCallCount,
     });
 
@@ -727,7 +576,7 @@ export async function runClaudeWithSession({
       );
     }
 
-    clearSessionTokenTracking(failedSessionId);
+    sessionTokenTracker.clearSessionTokenTracking(failedSessionId);
     throw error;
   }
 }
@@ -777,9 +626,9 @@ export async function runClaudeWithSharedSession({
         onDelta,
       });
 
-      const toolStats = consumeTurnToolStats(result.sessionId);
-      const carryoverTokens = getSessionCarryoverTokens(result.sessionId);
-      const requestOverheadTokens = estimateRequestOverheadTokens({
+      const toolStats = sessionTokenTracker.consumeTurnToolStats(result.sessionId);
+      const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(result.sessionId);
+      const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
         toolCallCount: toolStats.toolCallCount,
       });
 
@@ -814,16 +663,16 @@ export async function runClaudeWithSharedSession({
         + toolStats.toolArgsTokens
         + toolStats.toolResultTokens
         + requestOverheadTokens;
-      setSessionCarryoverTokens(result.sessionId, carryoverTokens + turnTokenContribution);
+      sessionTokenTracker.setSessionCarryoverTokens(result.sessionId, carryoverTokens + turnTokenContribution);
 
       sharedClaudeSessionIds.set(key, result.sessionId);
       onDone?.(result);
       return result;
     } catch (error) {
       const failedSessionId = getErrorSessionId(error) || resumeSessionId;
-      const toolStats = consumeTurnToolStats(failedSessionId);
-      const carryoverTokens = getSessionCarryoverTokens(failedSessionId);
-      const requestOverheadTokens = estimateRequestOverheadTokens({
+      const toolStats = sessionTokenTracker.consumeTurnToolStats(failedSessionId);
+      const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(failedSessionId);
+      const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
         toolCallCount: toolStats.toolCallCount,
       });
 
@@ -862,12 +711,12 @@ export function resetSharedClaudeSession(sessionKey = "") {
     const sessionId = sharedClaudeSessionIds.get(key) || "";
     sharedClaudeSessionIds.delete(key);
     sharedSessionQueues.delete(key);
-    clearSessionTokenTracking(sessionId);
+    sessionTokenTracker.clearSessionTokenTracking(sessionId);
     return;
   }
 
   for (const sessionId of sharedClaudeSessionIds.values()) {
-    clearSessionTokenTracking(sessionId);
+    sessionTokenTracker.clearSessionTokenTracking(sessionId);
   }
   sharedClaudeSessionIds.clear();
   sharedSessionQueues.clear();

@@ -4,7 +4,7 @@
     "preToolUse": [
       {
         "type": "command",
-        "bash": "node scripts/hooks/pretool.mjs",
+        "bash": "node scripts/hooks/copilot/pretool.mjs",
         "cwd": ".",
         "timeoutSec": 60
       }
@@ -12,7 +12,7 @@
     "postToolUse": [
       {
         "type": "command",
-        "bash": "node scripts/hooks/posttool.mjs",
+        "bash": "node scripts/hooks/copilot/posttool.mjs",
         "cwd": ".",
         "timeoutSec": 60
       }
@@ -20,7 +20,7 @@
     "sessionStart": [
       {
         "type": "command",
-        "bash": "node scripts/hooks/session-start.mjs",
+        "bash": "node scripts/hooks/copilot/session-start.mjs",
         "cwd": ".",
         "timeoutSec": 60
       }
@@ -28,7 +28,7 @@
     "sessionEnd": [
       {
         "type": "command",
-        "bash": "node scripts/hooks/session-end.mjs",
+        "bash": "node scripts/hooks/copilot/session-end.mjs",
         "cwd": ".",
         "timeoutSec": 60
       }
