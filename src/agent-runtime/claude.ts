@@ -1,6 +1,17 @@
 import crypto from "node:crypto";
 import path from "node:path";
 import { createInterceptRequestIdFromCandidates, requestInterceptDecisionByApi } from "./intercept-decision.js";
+import {
+  createEmptyTurnToolStats,
+  normalizeDecision,
+  normalizeSessionId,
+  normalizeSet,
+  safeCloneToolArgs,
+  safeStringify,
+  toPositiveInt,
+  trimTrailingSlash,
+  truncateString,
+} from "./common.js";
 import { reportInterceptEventByApi } from "./intercept-event.js";
 import { estimateConversationTokenBreakdown, estimateToolCallTokens } from "./token-estimate.js";
 
@@ -15,129 +26,8 @@ const DEFAULT_REQUEST_OVERHEAD_TOKENS = 80;
 const PER_TOOL_CALL_OVERHEAD_TOKENS = 24;
 const MAX_SESSION_CARRYOVER_TOKENS = 240000;
 
-const DEFAULT_RESTRICTED_DIR_TOOLS = [
-  "read",
-  "write",
-  "edit",
-  "bash",
-  "glob",
-  "grep",
-  "webfetch",
-];
-
-const DEFAULT_DESTRUCTIVE_TOOLS = [
-  "write",
-  "edit",
-  "bash",
-];
-
-function toPositiveInt(value, fallback) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 function normalizeTextOutput(value) {
   return String(value ?? "").trim();
-}
-
-function trimTrailingSlash(url) {
-  return String(url ?? "").trim().replace(/\/+$/, "");
-}
-
-function normalizeSet(values, fallback = []) {
-  const source = Array.isArray(values) && values.length > 0 ? values : fallback;
-  return new Set(source.map((item) => String(item ?? "").trim().toLowerCase()).filter(Boolean));
-}
-
-function isPathInsideAllowedDirs(filePath, allowedDirs) {
-  const normalizedPath = path.resolve(filePath);
-  return allowedDirs.some((dirPath) => {
-    const normalizedDir = path.resolve(dirPath);
-    return normalizedPath === normalizedDir || normalizedPath.startsWith(`${normalizedDir}${path.sep}`);
-  });
-}
-
-function collectPathCandidates(toolArgs) {
-  const candidates = [];
-  const seen = new Set();
-  const keys = new Set([
-    "path",
-    "filePath",
-    "file_path",
-    "targetPath",
-    "directory",
-    "dirPath",
-    "cwd",
-    "workingDirectory",
-    "source",
-    "destination",
-  ]);
-
-  const walk = (value) => {
-    if (!value) {
-      return;
-    }
-
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (!trimmed || seen.has(trimmed)) {
-        return;
-      }
-      seen.add(trimmed);
-      candidates.push(trimmed);
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        walk(item);
-      }
-      return;
-    }
-
-    if (typeof value === "object") {
-      for (const [key, nested] of Object.entries(value)) {
-        if (keys.has(key)) {
-          walk(nested);
-        }
-      }
-    }
-  };
-
-  walk(toolArgs);
-  return candidates;
-}
-
-function safeStringify(value, fallback = "{}") {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return fallback;
-  }
-}
-
-function truncateString(value, maxLength = 240) {
-  const text = String(value ?? "").trim();
-  if (!text) {
-    return "";
-  }
-  if (text.length <= maxLength) {
-    return text;
-  }
-  return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
-}
-
-function normalizeSessionId(sessionId) {
-  return String(sessionId ?? "").trim();
-}
-
-function createEmptyTurnToolStats() {
-  return {
-    toolCallCount: 0,
-    toolArgsTokens: 0,
-    toolResultTokens: 0,
-    toolEntries: [],
-  };
 }
 
 function ensureTurnToolStats(sessionId) {
@@ -252,52 +142,6 @@ function getErrorPartialOutput(error) {
 
 function getErrorSessionId(error) {
   return String(error?.sessionId ?? "").trim();
-}
-
-function safeCloneToolArgs(toolArgs) {
-  if (!toolArgs || typeof toolArgs !== "object") {
-    return toolArgs ?? null;
-  }
-
-  const sensitive = ["token", "secret", "password", "apiKey", "apikey", "authorization", "auth"];
-  const walk = (value) => {
-    if (value === null || value === undefined) {
-      return value ?? null;
-    }
-
-    if (typeof value === "string") {
-      return value.length > 500 ? `${value.slice(0, 497)}...` : value;
-    }
-
-    if (Array.isArray(value)) {
-      return value.slice(0, 20).map((item) => walk(item));
-    }
-
-    if (typeof value === "object") {
-      const result = {};
-      for (const [key, nested] of Object.entries(value)) {
-        const lowered = String(key ?? "").toLowerCase();
-        if (sensitive.some((item) => lowered.includes(item.toLowerCase()))) {
-          result[key] = "***";
-        } else {
-          result[key] = walk(nested);
-        }
-      }
-      return result;
-    }
-
-    return value;
-  };
-
-  return walk(toolArgs);
-}
-
-function normalizeDecision(value, fallback = "deny") {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  if (["allow", "deny", "ask", "wait", "waiting", "approved", "denied", "expired", "timeout"].includes(normalized)) {
-    return normalized;
-  }
-  return fallback;
 }
 
 function mapToolNameForPolicy(toolName) {
@@ -453,10 +297,6 @@ function buildClaudeHooks(config) {
   const interceptTools = normalizeSet(config.interceptTools, []);
   const interceptServerUrl = trimTrailingSlash(config.interceptServerUrl);
   const interceptEnabled = Boolean(config.interceptEnabled && interceptServerUrl && interceptTools.size > 0);
-  const allowedDirs = (Array.isArray(config.allowedDirs) ? config.allowedDirs : [])
-    .map((item) => String(item ?? "").trim())
-    .filter(Boolean)
-    .map((item) => path.resolve(path.isAbsolute(item) ? item : path.resolve(workDir, item)));
 
   const preToolHook = async (input) => {
     const originalToolName = String(input?.tool_name ?? "").trim();

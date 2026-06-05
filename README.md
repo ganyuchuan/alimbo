@@ -915,3 +915,58 @@ curl http://127.0.0.1:18790/health
 
 一句话：  
 “5 个 bridge 共用同一个飞书应用”不仅有场景，而且是做高可用/扩展时的标准形态。
+
+---
+
+## TODO
+
+结论先说：目前 Claude 与 Copilot 的“主流程能力”已经接近，但在权限链路、生命周期上报、失败恢复、以及重复代码治理上还没完全对齐。
+
+**还差哪些功能对齐**
+
+[ ] 生命周期事件结构未对齐  
+Copilot 在会话开始/结束会上报 state、entries、prompt、session 等完整结构；Claude 目前只上报 msg、entry、session。  
+参考：copilot.ts 与 claude.ts
+
+[ ] 权限请求模式语义未对齐  
+Copilot 有 permissionRequestMode 处理（approve/deny/默认 undefined），Claude 侧没有等价入口。  
+参考：copilot.ts 与 claude.ts
+
+[ ] 预工具拦截请求信息粒度未对齐  
+Copilot 的拦截请求带 hint（且有模板化 hint 生成）；Claude 的 requestInterceptDecision 目前没有 hint 字段。  
+参考：copilot.ts 与 claude.ts
+
+[ ] PostTool 事件结构未完全对齐  
+Copilot 的 post 事件包含 prompt 与 toolCall 更完整字段；Claude 的 post 上报字段更少。  
+参考：copilot.ts 与 claude.ts
+
+[ ] 失败恢复策略未对齐  
+Copilot 有 session not found 的单次重试策略；Claude 当前没有对应重试。  
+参考：copilot.ts 与 claude.ts
+
+[√] 现有残留死代码（Claude）  
+你这轮删掉三类工具策略后，Claude 里还有未使用的 allowedDirs 计算与相关常量/函数残留。  
+参考：claude.ts
+
+**建议下沉到公共组件的逻辑**
+[ ] Token 统计与 carryover 状态机  
+两边几乎同构，建议抽成共享模块（如 SessionTokenTracker），避免双份维护。  
+涉及文件：copilot.ts, claude.ts
+
+[ ] 拦截事件上报构造器  
+把 token estimate、post tool、session lifecycle 的事件体拼装抽成公共 builder，provider 只传差异字段（provider 名、tool 名映射等）。  
+涉及文件：intercept-event.ts, copilot.ts, claude.ts
+
+[ ] 预工具拦截流程骨架  
+intercept enabled 判断、fail-open 行为、decision 到 permission 映射可抽成通用 pretool gate；Copilot/Claude 只做输入字段适配。  
+涉及文件：intercept-decision.ts, copilot.ts, claude.ts
+
+[√] 公共工具函数  
+normalizeDecision、trimTrailingSlash、truncate、safeCloneToolArgs、safeStringify、session key lock 等可统一到一个 runtime-common。  
+涉及文件：copilot.ts, claude.ts
+
+[ ] 错误恢复策略  
+把 session not found 的重试策略做成共享 helper，Claude 直接复用。  
+涉及文件：copilot.ts, claude.ts
+
+如果你要，我可以下一步直接给你做一版“最小对齐改造”PR（先清理 Claude 死代码 + 生命周期上报结构对齐 + hint 字段对齐），不做大规模重构，风险最低。

@@ -5,6 +5,17 @@ import { getSkillDirectoriesForSession } from "../tool/skills.js";
 import { loadMcpServersForCopilot } from "../tool/mcp.js";
 import { requestInterceptDecisionByApi } from "./intercept-decision.js";
 import { reportInterceptEventByApi } from "./intercept-event.js";
+import {
+  createEmptyTurnToolStats,
+  normalizeDecision,
+  normalizeSessionId,
+  normalizeSet,
+  safeCloneToolArgs,
+  safeStringify,
+  toPositiveInt,
+  trimTrailingSlash,
+  truncateString,
+} from "./common.js";
 import { estimateConversationTokenBreakdown, estimateToolCallTokens } from "./token-estimate.js";
 
 const DEFAULT_SHARED_SESSION_KEY = "__global__";
@@ -26,19 +37,6 @@ const sessionLifecycleState = {
 const DEFAULT_REQUEST_OVERHEAD_TOKENS = 80;
 const PER_TOOL_CALL_OVERHEAD_TOKENS = 24;
 const MAX_SESSION_CARRYOVER_TOKENS = 240000;
-
-function normalizeSessionId(sessionId) {
-  return String(sessionId ?? "").trim();
-}
-
-function createEmptyTurnToolStats() {
-  return {
-    toolCallCount: 0,
-    toolArgsTokens: 0,
-    toolResultTokens: 0,
-    toolEntries: [],
-  };
-}
 
 function ensureTurnToolStats(sessionId) {
   const normalizedSessionId = normalizeSessionId(sessionId);
@@ -214,39 +212,6 @@ function resolvePermissionHandler(config) {
   return undefined;
 }
 
-function normalizeSet(values, fallback = []) {
-  const source = Array.isArray(values) && values.length > 0 ? values : fallback;
-  return new Set(source.map((item) => String(item ?? "").trim().toLowerCase()).filter(Boolean));
-}
-
-function toPositiveInt(value, fallback) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function normalizeDecision(value, fallback = "deny") {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  if (["allow", "deny", "ask", "wait", "waiting", "approved", "denied", "expired", "timeout"].includes(normalized)) {
-    return normalized;
-  }
-  return fallback;
-}
-
-function trimTrailingSlash(url) {
-  return String(url ?? "").trim().replace(/\/+$/, "");
-}
-
-function truncateString(value, maxLength = 240) {
-  const text = String(value ?? "").trim();
-  if (!text) {
-    return "";
-  }
-  if (text.length <= maxLength) {
-    return text;
-  }
-  return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
-}
-
 function truncateForViewPath(value) {
   const text = String(value ?? "").trim();
   return text;
@@ -386,44 +351,6 @@ function collectHumanReadableHint(toolName, toolArgs) {
   return generateInterceptHintWithTemplate(toolName, toolArgs);
 }
 
-function safeCloneToolArgs(toolArgs) {
-  if (!toolArgs || typeof toolArgs !== "object") {
-    return toolArgs ?? null;
-  }
-
-  const sensitive = ["token", "secret", "password", "apiKey", "apikey", "authorization", "auth"];
-  const walk = (value) => {
-    if (value === null || value === undefined) {
-      return value ?? null;
-    }
-
-    if (typeof value === "string") {
-      return value.length > 500 ? `${value.slice(0, 497)}...` : value;
-    }
-
-    if (Array.isArray(value)) {
-      return value.slice(0, 20).map((item) => walk(item));
-    }
-
-    if (typeof value === "object") {
-      const result = {};
-      for (const [key, nested] of Object.entries(value)) {
-        const lowered = String(key ?? "").toLowerCase();
-        if (sensitive.some((item) => lowered.includes(item.toLowerCase()))) {
-          result[key] = "***";
-        } else {
-          result[key] = walk(nested);
-        }
-      }
-      return result;
-    }
-
-    return value;
-  };
-
-  return walk(toolArgs);
-}
-
 function mapInterceptDecisionToPermission(result, fallbackReason) {
   const decision = normalizeDecision(result?.decision, "deny");
   const reason = String(result?.reason ?? fallbackReason ?? "intercept decision").trim() || "intercept decision";
@@ -454,14 +381,6 @@ function shortId(value) {
     return "-";
   }
   return text.length <= 14 ? text : `${text.slice(0, 6)}...${text.slice(-4)}`;
-}
-
-function safeStringify(value, fallback = "{}") {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return fallback;
-  }
 }
 
 function normalizeMessageEntry(value) {

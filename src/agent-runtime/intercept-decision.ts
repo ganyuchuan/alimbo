@@ -1,13 +1,5 @@
 import crypto from "node:crypto";
-
-function toPositiveInt(value: unknown, fallback: number) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function trimTrailingSlash(url: unknown) {
-  return String(url ?? "").trim().replace(/\/+$/, "");
-}
+import { toPositiveInt, trimTrailingSlash } from "./common.js";
 
 function shortId(value: unknown) {
   const text = String(value ?? "").trim();
