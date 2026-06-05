@@ -16,15 +16,13 @@ Alimbo 是一个桌面端助手，用来把你的 AI 助手与设备和服务连
 npm i -g alimbo
 ```
 
-2. 启动安装向导：
+2. 启动安装向导，按屏幕提示完成配置：
 
 ```bash
 alimbo setup
 ```
 
-3. 按屏幕提示完成配置。
-
-## 备选快速路径：从 GitHub Release 包安装
+## 或从 GitHub Release 包安装
 
 如果你不想全局安装 npm 包，可以使用这个路径。
 

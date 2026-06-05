@@ -16,15 +16,13 @@ This document is intended to help users install Alimbo on desktop, complete firs
 npm i -g alimbo
 ```
 
-2. Start setup:
+2. Start setup, answer the prompts on screen:
 
 ```bash
 alimbo setup
 ```
 
-3. Answer the prompts on screen.
-
-## Alternative Quick Path: Install From GitHub Release Package
+## or Install From GitHub Release Package
 
 Use this path when global npm install is not preferred.
 
