@@ -8,25 +8,29 @@ It helps you:
 
 This document is intended to help users install Alimbo on desktop, complete first-time setup, pair with Alimbo Buddy on Apple Watch, and optionally connect a Feishu bot.
 
+## Prerequisites
+
+- Node.js installed (recommended version 20 or above)
+- npm installed (comes with Node.js)
+- PM2 installed (optional, for managing background services)
+- If you usually use GitHub Copilot, make sure CLI is installed and signed in:
+
+```bash
+copilot --version
+```
+
+- If you usually use Claude Code, make sure CLI is installed and signed in:
+
+```bash
+claude --version
+```
+
 ## Quick Start
 
-1. Install Alimbo:
+1. Download a source archive from the [Release](https://github.com/ganyuchuan/alimbo/releases) page, for example:
 
-```bash
-npm i -g alimbo
-```
-
-2. Start setup, answer the prompts on screen:
-
-```bash
-alimbo setup
-```
-
-## Or Install From GitHub Release Package
-
-Use this path when global npm install is not preferred.
-
-1. Download a release source archive (for example, `alimbo-v0.2.2-source.tar.gz` or `.zip`).
+- [alimbo-v0.2.2-source.tar.gz](https://github.com/ganyuchuan/alimbo/releases/download/v0.2.2/alimbo-v0.2.2-source.tar.gz)
+- [alimbo-v0.2.2-source.zip](https://github.com/ganyuchuan/alimbo/releases/download/v0.2.2/alimbo-v0.2.2-source.zip)
 
 2. Extract and enter the folder:
 

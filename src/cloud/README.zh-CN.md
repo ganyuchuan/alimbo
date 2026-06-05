@@ -8,25 +8,30 @@ Alimbo 是一个桌面端助手，用来把你的 AI 助手与设备和服务连
 
 本说明用于帮助用户在桌面端安装 Alimbo、完成首次配置并与 Apple Watch 上的 Alimbo Buddy 进行配对，以及按需连接飞书机器人。
 
+## 前提
+
+- 已安装 Node.js（推荐版本 20 及以上，我的是 v25.6.1）
+- 已安装 npm（随 Node.js 一起安装）
+- 已安装 PM2（可选，用于管理后台服务）
+- 如果你平时使用 GitHub Copilot，请确保 CLI 安装并登录：
+
+```bash
+copilot --version
+```
+
+- 如果你平时使用 Claude Code，请确保 CLI 安装并登录：
+
+```bash
+claude --version
+```
+
 ## 快速开始
 
-1. 安装 Alimbo：
+1. 从 [Release](https://github.com/ganyuchuan/alimbo/releases) 页面下载源码包，例如：
 
-```bash
-npm i -g alimbo
-```
+- [alimbo-v0.2.2-source.tar.gz](https://github.com/ganyuchuan/alimbo/releases/download/v0.2.2/alimbo-v0.2.2-source.tar.gz)
 
-2. 启动安装向导，按屏幕提示完成配置：
-
-```bash
-alimbo setup
-```
-
-## 或从 GitHub Release 包安装
-
-如果你不想全局安装 npm 包，可以使用这个路径。
-
-1. 从 Release 页面下载源码包（例如 `alimbo-v0.2.2-source.tar.gz` 或 `.zip`）。
+- [alimbo-v0.2.2-source.zip](https://github.com/ganyuchuan/alimbo/releases/download/v0.2.2/alimbo-v0.2.2-source.zip)
 
 2. 解压并进入目录：
 
