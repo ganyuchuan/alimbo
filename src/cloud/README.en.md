@@ -29,21 +29,21 @@ claude --version
 
 1. Download a source archive from the [Release](https://github.com/ganyuchuan/alimbo/releases) page, for example:
 
-- [alimbo-v0.2.2-source.tar.gz](https://github.com/ganyuchuan/alimbo/releases/download/v0.2.2/alimbo-v0.2.2-source.tar.gz)
-- [alimbo-v0.2.2-source.zip](https://github.com/ganyuchuan/alimbo/releases/download/v0.2.2/alimbo-v0.2.2-source.zip)
+- [alimbo-v0.2.3-source.tar.gz](https://github.com/ganyuchuan/alimbo/releases/download/v0.2.3/alimbo-v0.2.3-source.tar.gz)
+- [alimbo-v0.2.3-source.zip](https://github.com/ganyuchuan/alimbo/releases/download/v0.2.3/alimbo-v0.2.3-source.zip)
 
 2. Extract and enter the folder:
 
 ```bash
-tar -xzf alimbo-v0.2.2-source.tar.gz
-cd alimbo-v0.2.2-source
+tar -xzf alimbo-v0.2.3-source.tar.gz
+cd alimbo-v0.2.3-source
 ```
 
 For zip:
 
 ```bash
-unzip alimbo-v0.2.2-source.zip
-cd alimbo-v0.2.2-source
+unzip alimbo-v0.2.3-source.zip
+cd alimbo-v0.2.3-source
 ```
 
 3. Install and build:
