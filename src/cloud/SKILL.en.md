@@ -1,137 +1,121 @@
-# Alimbo Desktop Onboarding Skill
+# Alimbo Desktop Onboarding
 
-## Goal
+Alimbo is a desktop companion that connects your AI assistant with your devices and services.
+It helps you:
+- pair with Apple Watch
+- run a local gateway safely
+- optionally connect Feishu for message bridge workflows
 
-Use this guide to install alimbo on desktop, finish first-time setup, and optionally start the Feishu bridge.
+This document is intended to help users install Alimbo on desktop, complete first-time setup, pair with Alimbo Buddy on Apple Watch, and optionally connect a Feishu bot.
 
-This document is written for both:
-- agents that need a reliable onboarding script to follow
-- users who want to read and run the steps manually
+## Quick Start
 
-## Recommended Flow
-
-1. Install alimbo globally:
+1. Install Alimbo:
 
 ```bash
 npm i -g alimbo
 ```
 
-2. Run setup:
+2. Start setup:
 
 ```bash
 alimbo setup
 ```
 
-3. Follow the interactive prompts.
+3. Answer the prompts on screen.
 
-The setup wizard will ask for:
-- Cloud URL
-- Pairing code
-- whether to start the Feishu bridge after setup
-- optional Feishu app credentials when Feishu bridge startup is requested
+## Alternative Quick Path: Install From GitHub Release Package
 
-## Pairing Behavior
+Use this path when global npm install is not preferred.
 
-### Normal pairing mode
+1. Download a release source archive (for example, `alimbo-v0.2.2-source.tar.gz` or `.zip`).
 
-Enter the 4-digit pairing code from the mobile or wearable device.
-
-In this mode, setup will:
-- call `/auth/pairing-token`
-- resolve the shared auth token
-- write the token into these env keys:
-  - `GATEWAY_TOKEN`
-  - `FEISHU_GATEWAY_TOKEN`
-  - `FEISHU_INTERCEPT_AUTH_TOKEN`
-  - `COPILOT_INTERCEPT_AUTH_TOKEN`
-- write or update `.env`
-- enable intercept-related env settings
-- stop any existing gateway process on the configured port
-- start the gateway in background
-- verify the gateway health endpoint
-- verify intercept decision API connectivity
-- report the setup intercept verification event
-
-### Skip-pairing mode
-
-You may leave the pairing code empty only when `.env` already contains these four keys and they are all non-empty and identical:
-- `GATEWAY_TOKEN`
-- `FEISHU_GATEWAY_TOKEN`
-- `FEISHU_INTERCEPT_AUTH_TOKEN`
-- `COPILOT_INTERCEPT_AUTH_TOKEN`
-
-In this mode, setup will:
-- reuse the existing shared token from `.env`
-- skip `/auth/pairing-token`
-- skip intercept verification and verification event reporting
-- still stop any old gateway process
-- still start the gateway in background
-- still verify gateway health
-
-## Feishu Bridge Startup
-
-After gateway setup succeeds, the wizard asks:
-
-```text
-Start Feishu bridge now? (y/N)
-```
-
-If the answer is yes, setup will:
-- request `FEISHU_APP_ID`
-- request `FEISHU_APP_SECRET`
-- allow pressing Enter to reuse existing `.env` values for those two keys
-- fail only if both the prompt input and `.env` value are empty
-- write Feishu config into `.env`
-- stop any previously running Feishu bridge process
-- start `bridge/feishu.js` in background
-
-If the answer is no, setup exits successfully after gateway startup.
-
-## Setup Success Output
-
-On success, setup prints:
-- gateway process name and PID
-- Feishu process name and PID, or `not-started`
-- a JSON summary including:
-  - `skipPairing`
-  - `startedFeishu`
-  - `gatewayProcess`
-  - `feishuProcess`
-
-## Logs
-
-After installation, logs can be viewed with:
+2. Extract and enter the folder:
 
 ```bash
-alimbo logs gateway
-alimbo logs feishu
-alimbo logs gateway --lines 200
-alimbo logs feishu --follow
+tar -xzf alimbo-v0.2.2-source.tar.gz
+cd alimbo-v0.2.2-source
 ```
 
-## Manual Mode
+For zip:
 
-If you do not use the wizard, you can configure manually:
+```bash
+unzip alimbo-v0.2.2-source.zip
+cd alimbo-v0.2.2-source
+```
 
-1. Create `.env` from `.env.example`.
-2. Fill these token keys with the same resolved token:
-   - `GATEWAY_TOKEN`
-   - `FEISHU_GATEWAY_TOKEN`
-   - `FEISHU_INTERCEPT_AUTH_TOKEN`
-   - `COPILOT_INTERCEPT_AUTH_TOKEN`
-3. Set cloud/intercept URLs as needed:
-   - `COPILOT_INTERCEPT_SERVER_URL`
-   - `FEISHU_INTERCEPT_SERVER_URL`
-4. If Feishu is needed, also set:
-   - `FEISHU_ENABLED=true`
-   - `FEISHU_APP_ID`
-   - `FEISHU_APP_SECRET`
-5. Run `alimbo setup` again and use skip-pairing mode to let the wizard stop old processes, start gateway, and optionally start Feishu.
+3. Install and build:
 
-## Notes For Agents
+```bash
+npm install
+npm run build
+```
 
-- Prefer `alimbo setup` over manual file editing when interactive setup is available.
-- If the user already has a valid `.env`, suggest leaving the pairing code empty to reuse the existing token.
-- If the user only wants gateway, answer `N` to the Feishu startup prompt.
-- If the user wants Feishu and `.env` already has app credentials, pressing Enter at the credential prompts is valid.
-- If setup fails after gateway health succeeds but token verification is mismatched, check for stale background processes using old env values.
+4. Run setup:
+
+```bash
+node dist/cli.js setup
+```
+
+## Pair With Apple Watch (Simple Setup Steps)
+
+Setup is short and guided. Most users finish in a few minutes.
+
+1. Enter your Cloud URL.
+- What you do: paste the URL shown by your service.
+
+2. Enter the 4-digit code from Apple Watch.
+- What you do: open the watch pairing screen and type the code.
+
+3. Choose whether to start Feishu bridge now.
+- What you do: type `y` for yes, or press Enter for no.
+
+4. If you chose yes, enter Feishu App ID and App Secret.
+- What you do: paste both values, or press Enter to reuse saved values.
+
+5. Wait for success output.
+- What you do: confirm that setup shows gateway started (and Feishu started if selected).
+
+## Stop Alimbo Desktop
+
+If you need to stop running services, use PM2:
+
+```bash
+pm2 list
+pm2 stop <gateway_process_name_or_id>
+pm2 stop <feishu_process_name_or_id>
+```
+
+If you are not sure of names, run `pm2 list` first and stop only Alimbo-related processes.
+
+## Uninstall Alimbo Desktop
+
+If installed globally with npm:
+
+```bash
+npm uninstall -g alimbo
+```
+
+Optional cleanup:
+- Remove local project folder (if you used release package/source install).
+- Remove or archive your `.env` file if you no longer need saved settings.
+- Remove related PM2 processes if still present:
+
+```bash
+pm2 delete <gateway_process_name_or_id>
+pm2 delete <feishu_process_name_or_id>
+```
+
+## Need Help?
+
+If anything fails, collect logs and send them to the developer.
+
+```bash
+alimbo logs gateway --lines 200
+alimbo logs feishu --lines 200
+```
+
+Please include in your message:
+- what step failed
+- a screenshot or pasted error text
+- the log output above
