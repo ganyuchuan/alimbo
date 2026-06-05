@@ -7,6 +7,7 @@ import {
   normalizeClaudeHookInput,
   readJsonFromStdin,
   safeCloneToolArgs,
+  withStdErrLogging,
   writeJson,
 } from "./_common.mjs";
 
@@ -20,30 +21,32 @@ async function main() {
     return;
   }
 
-  const gateResult = await runPreToolInterceptGate({
-    interceptEnabled: context.interceptEnabled,
-    interceptTools: context.interceptTools,
-    interceptServerUrl: context.interceptServerUrl,
-    interceptAuthToken: context.interceptAuthToken,
-    interceptTimeoutMs: context.interceptTimeoutMs,
-    interceptPollIntervalMs: context.interceptPollIntervalMs,
-    interceptMaxWaitMs: context.interceptMaxWaitMs,
-    interceptFailOpen: context.interceptFailOpen,
-    logPrefix: "[claude-code-hook][intercept]",
-    request: {
-      requestIdCandidates: buildClaudeRequestIdCandidates(input, normalized),
-      toolName: normalized.toolName,
-      hint: collectHumanReadableHint(normalized.toolName, normalized.toolArgs),
-      msg: `Intercepted tool ${normalized.toolName}`,
-      sessionId: normalized.sessionId || null,
-      workDir: normalized.workDir,
-      input: {
+  const gateResult = await withStdErrLogging(() =>
+    runPreToolInterceptGate({
+      interceptEnabled: context.interceptEnabled,
+      interceptTools: context.interceptTools,
+      interceptServerUrl: context.interceptServerUrl,
+      interceptAuthToken: context.interceptAuthToken,
+      interceptTimeoutMs: context.interceptTimeoutMs,
+      interceptPollIntervalMs: context.interceptPollIntervalMs,
+      interceptMaxWaitMs: context.interceptMaxWaitMs,
+      interceptFailOpen: context.interceptFailOpen,
+      logPrefix: "[claude-code-hook][intercept]",
+      request: {
+        requestIdCandidates: buildClaudeRequestIdCandidates(input, normalized),
         toolName: normalized.toolName,
-        toolArgs: safeCloneToolArgs(normalized.toolArgs),
-        metadata: safeCloneToolArgs(input?.metadata),
+        hint: collectHumanReadableHint(normalized.toolName, normalized.toolArgs),
+        msg: `Intercepted tool ${normalized.toolName}`,
+        sessionId: normalized.sessionId || null,
+        workDir: normalized.workDir,
+        input: {
+          toolName: normalized.toolName,
+          toolArgs: safeCloneToolArgs(normalized.toolArgs),
+          metadata: safeCloneToolArgs(input?.metadata),
+        },
       },
-    },
-  });
+    }),
+  );
 
   writeJson(buildClaudePreToolOutput(gateResult.decision, gateResult.reason));
 }

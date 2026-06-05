@@ -9,6 +9,7 @@ import {
   safeCloneToolArgs,
   toPositiveInt,
   toBool,
+  withStdErrLogging,
   writeJson,
 } from "../_common.mjs";
 
@@ -140,5 +141,6 @@ export {
   readJsonFromStdin,
   safeCloneToolArgs,
   toPositiveInt,
+  withStdErrLogging,
   writeJson,
 };

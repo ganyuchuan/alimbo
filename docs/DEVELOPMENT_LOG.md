@@ -2,6 +2,29 @@
 
 ## 2026-06-05
 
+### 33) 修复 Claude pretool 输出污染导致 deny 未生效
+
+变更目标：
+- 修复 Claude Code `PreToolUse` hook 中 stdout 被拦截日志污染的问题，确保返回 JSON 可被稳定解析。
+- 消除“cloud 已记录 deny，但本地仍出现权限确认并可继续执行”的不一致行为。
+
+主要改动：
+- `scripts/hooks/claude/_common.mjs`
+  - 导出 `withStdErrLogging`，用于将运行期日志重定向到 stderr。
+- `scripts/hooks/claude/pretool.mjs`
+  - 将 `runPreToolInterceptGate` 调用包裹在 `withStdErrLogging` 中。
+  - 保证 stdout 仅输出一段 `hookSpecificOutput` JSON，拦截日志全部写入 stderr。
+
+问题根因：
+- `runPreToolInterceptGate` 内部存在 `console.log/console.warn` 输出。
+- 未重定向时，这些日志会写入 stdout，与 hook 决策 JSON 混合，导致 Claude Code JSON 解析失败并回退到默认权限流程。
+
+验证记录：
+- `npm run build`：通过
+- `printf '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/test"},"session_id":"s1"}' | node scripts/hooks/claude/pretool.mjs > /tmp/claude-pretool-out.json 2>/tmp/claude-pretool-err.log`
+  - stdout：仅包含合法 JSON 决策
+  - stderr：包含拦截链路日志（不影响 JSON 解析）
+
 ### 32) 拦截与事件构建共享化 + Copilot/Claude hooks 拆分落地
 
 变更目标：
