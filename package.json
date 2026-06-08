@@ -29,7 +29,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "npm run build && node --title=alimbo-gateway dist/index.js",
     "dev": "tsc --watch -p tsconfig.json",
-    "bridge:feishu": "npm run build && node --title=alimbo-feishu dist/bridge/feishu.js",
+    "feishu": "npm run build && node --title=alimbo-feishu dist/bridge/feishu.js",
     "cloud": "npm run build && node --title=alimbo-cloud dist/cloud/intercept-server.js"
   },
   "engines": {

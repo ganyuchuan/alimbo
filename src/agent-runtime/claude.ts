@@ -720,6 +720,4 @@ export function resetSharedClaudeSession(sessionKey = "") {
   }
   sharedClaudeSessionIds.clear();
   sharedSessionQueues.clear();
-  sessionTurnToolStats.clear();
-  sessionContextCarryoverTokens.clear();
 }

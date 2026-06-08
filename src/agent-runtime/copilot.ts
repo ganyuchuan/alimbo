@@ -1,4 +1,4 @@
-import { CopilotClient } from "@github/copilot-sdk";
+import { CopilotClient, approveAll } from "@github/copilot-sdk";
 import crypto from "node:crypto";
 import path from "node:path";
 import { getSkillDirectoriesForSession } from "../tool/skills.js";
@@ -610,6 +610,8 @@ async function buildSessionConfig(config) {
   });
 
   const sessionConfig: any = {
+    // Copilot SDK requires this callback at session creation time.
+    onPermissionRequest: approveAll,
     workingDirectory: config.workDir || process.cwd(),
     streaming: true,
     skillDirectories,
@@ -1074,6 +1076,4 @@ export async function stopCopilotClient() {
   sharedCopilotSessionIds = new Map();
   sharedSessionQueues = new Map();
   sharedSkillSignatures = new Map();
-  sessionTurnToolStats = new Map();
-  sessionContextCarryoverTokens = new Map();
 }

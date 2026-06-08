@@ -42,7 +42,7 @@ npm start
 4. (Optional) Start Feishu bridge MVP:
 
 ```bash
-npm run bridge:feishu
+npm run feishu
 ```
 
 5. Pairing-based first-time setup (desktop):
@@ -154,7 +154,7 @@ npm start
 可选：启动飞书桥接：
 
 ```bash
-npm run bridge:feishu
+npm run feishu
 ```
 
 可选：启动云端服务：
@@ -294,7 +294,7 @@ MVP scope:
 Run:
 
 ```bash
-npm run bridge:feishu
+npm run feishu
 ```
 
 Notes:
@@ -499,7 +499,7 @@ Response payload (example):
 ```bash
 cd /Users/yuchuan/Desktop/alimbo
 ./node_modules/.bin/pm2 start npm --name alimbo-gateway -- run start
-./node_modules/.bin/pm2 start npm --name alimbo-feishu -- run bridge:feishu
+./node_modules/.bin/pm2 start npm --name alimbo-feishu -- run feishu
 ./node_modules/.bin/pm2 start npm --name alimbo-cloud -- run cloud
 ./node_modules/.bin/pm2 ls
 ```
@@ -966,6 +966,40 @@ normalizeDecision、trimTrailingSlash、truncate、safeCloneToolArgs、safeStrin
 涉及文件：copilot.ts, claude.ts
 
 如果你要，我可以下一步直接给你做一版“最小对齐改造”PR（先清理 Claude 死代码 + 生命周期上报结构对齐 + hint 字段对齐），不做大规模重构，风险最低。
+
+## 剩余差异
+
+核心能力已经比之前更接近，但还有 4 个明显未对齐点，外加 1 个共同缺陷。
+
+1. 高优先级：权限请求模式仍未对齐  
+Copilot 有单独的权限请求处理链路，Claude 没有等价入口。  
+证据：  
+- Copilot 有 permissionRequestMode 配置与处理器 config.ts、copilot.ts、copilot.ts  
+- Claude hooks 只注册了 Pre/Post/SessionStart/SessionEnd，没有 PermissionRequest claude.ts
+
+2. 高优先级：失败恢复策略未对齐  
+Copilot 有 session not found 的重试路径，Claude 没有。  
+证据：  
+- Copilot 的错误识别与重试分支 copilot.ts、copilot.ts  
+- Claude 没有对应重试逻辑（仅失败上报后抛错）claude.ts
+
+3. 中优先级：生命周期事件丰富度未对齐  
+Copilot 上报 session 生命周期时携带 state、entries、prompt；Claude 当前是精简版。  
+证据：  
+- Copilot includePrompt=true 且传 state/entries copilot.ts、copilot.ts、copilot.ts  
+- Claude includePrompt=false，且未传 state/entries claude.ts、claude.ts
+
+4. 中优先级：PreTool 请求 hint 粒度未对齐（runtime 层）  
+Copilot pretool 请求有 hint；Claude runtime pretool 请求目前没有 hint 字段。  
+证据：  
+- Copilot pretool request 带 hint copilot.ts  
+- Claude pretool request 仅 msg，无 hint claude.ts
+
+补充发现（共同缺陷，不是“差异”但建议尽快修）  
+- 两端会话清理函数还有旧变量残留引用，可能触发运行时异常。  
+证据：  
+- Copilot stop 时写入未定义变量 copilot.ts  
+- Claude reset 时清理未定义变量 claude.ts
 
 ## Claude permission 模式
 
