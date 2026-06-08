@@ -1,5 +1,41 @@
 # Development Log
 
+## 2026-06-08
+
+### 35) 生命周期事件结构对齐 + runtime 公共能力继续下沉
+
+变更目标：
+- 对齐 Copilot/Claude 生命周期事件结构，统一 requestId/source/schema/state/entries/prompt 的输出契约。
+- 将两端重复的 requestId 生成、lifecycle 状态机、session entries 归一/收集逻辑下沉到公共 builder，降低双份维护成本。
+
+主要改动：
+- `src/agent-runtime/activity-event-builder.ts`
+  - 新增 `createLifecycleRequestId(candidates, prefix)`。
+  - 新增 `createSessionLifecycleStateTracker(initialState)`。
+  - 新增 `normalizeLifecycleMessageEntry(value, options)` 与 `collectLifecycleSessionEntries(...)`。
+  - `buildSessionLifecycleInterceptEvent` 对齐为统一 schema：
+    - 补齐 `meta.requestId/sourceHook/provider/schemaVersion`
+    - `state/entries/prompt` 始终存在（空值走默认）
+    - `requestId` 无值时自动回落 `lifecycle_<uuid>`。
+- `src/agent-runtime/copilot.ts`
+  - 生命周期 requestId 改为调用 `createLifecycleRequestId`。
+  - 生命周期状态机改为 `createSessionLifecycleStateTracker`。
+  - session entries 归一/收集改为 `collectLifecycleSessionEntries`。
+  - lifecycle 事件补齐 `provider/sourceHook/schemaVersion`。
+- `src/agent-runtime/claude.ts`
+  - 生命周期 requestId 改为调用 `createLifecycleRequestId`。
+  - 生命周期状态机改为 `createSessionLifecycleStateTracker`。
+  - session entries 归一/收集改为 `collectLifecycleSessionEntries`。
+  - lifecycle 事件补齐 `provider/sourceHook/schemaVersion`，并携带 state/entries/hint。
+- `README.md`
+  - TODO 区同步：生命周期事件结构改为已对齐状态标记。
+
+验证记录：
+- `npm run build`：通过
+- 关键检索验证：
+  - `normalizeMessageEntry|normalizeClaudeEntry` 在 runtime 中已移除
+  - lifecycle 统一 helper 在 `activity-event-builder.ts`、`copilot.ts`、`claude.ts` 均已接入
+
 ## 2026-06-05
 
 ### 34) 移除 Copilot permissionRequestMode 并统一权限模式语义

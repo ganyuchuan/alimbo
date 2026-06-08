@@ -2,6 +2,9 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { createInterceptRequestIdFromCandidates } from "./intercept-decision.js";
 import {
+  collectLifecycleSessionEntries,
+  createLifecycleRequestId,
+  createSessionLifecycleStateTracker,
   buildPostToolInterceptEvent,
   buildSessionLifecycleInterceptEvent,
 } from "./activity-event-builder.js";
@@ -23,6 +26,25 @@ const DEFAULT_SHARED_SESSION_KEY = "__global__";
 let sharedClaudeSessionIds: Map<string, string> = new Map();
 let sharedSessionQueues: Map<string, Promise<any>> = new Map();
 const sessionTokenTracker = createSessionTokenTracker();
+const sessionLifecycleState = createSessionLifecycleStateTracker();
+
+function collectClaudeSessionEntries(input) {
+  return collectLifecycleSessionEntries({
+    sources: [
+      input?.messages,
+      input?.session?.messages,
+      input?.entries,
+      input?.conversation,
+    ],
+    fallbackFields: [input?.prompt, input?.text, input?.message],
+    maxEntries: 50,
+    normalizeOptions: {
+      maxLen: 500,
+      roleKeys: ["role", "type"],
+      contentKeys: ["content", "text", "message", "prompt"],
+    },
+  });
+}
 
 function normalizeTextOutput(value) {
   return String(value ?? "").trim();
@@ -243,11 +265,27 @@ function buildClaudeHooks(config) {
     const sessionId = String(input?.session_id ?? "").trim() || "-";
     console.log(`[claude-agent-sdk][session] start sessionId=${sessionId}`);
     try {
+      const requestId = createLifecycleRequestId([
+        input?.requestId,
+        input?.permissionRequestId,
+        input?.toolCallId,
+        input?.id,
+        input?.tool_use_id,
+        input?.session_id,
+      ]);
+      const state = sessionLifecycleState.markStart();
+      const entries = collectClaudeSessionEntries(input);
       const event = buildSessionLifecycleInterceptEvent({
         phase: "start",
         sessionId,
+        requestId,
         workDir,
-        includePrompt: false,
+        hint: "Claude session start",
+        provider: "claude",
+        sourceHook: "Claude:SessionStart",
+        schemaVersion: "v1.lifecycle.aligned",
+        state,
+        entries,
       });
       await reportClaudeHookEvent({
         config,
@@ -266,11 +304,27 @@ function buildClaudeHooks(config) {
     const sessionId = String(input?.session_id ?? "").trim() || "-";
     console.log(`[claude-agent-sdk][session] end sessionId=${sessionId}`);
     try {
+      const requestId = createLifecycleRequestId([
+        input?.requestId,
+        input?.permissionRequestId,
+        input?.toolCallId,
+        input?.id,
+        input?.tool_use_id,
+        input?.session_id,
+      ]);
+      const state = sessionLifecycleState.markEnd();
+      const entries = collectClaudeSessionEntries(input);
       const event = buildSessionLifecycleInterceptEvent({
         phase: "end",
         sessionId,
+        requestId,
         workDir,
-        includePrompt: false,
+        hint: "Claude session end",
+        provider: "claude",
+        sourceHook: "Claude:SessionEnd",
+        schemaVersion: "v1.lifecycle.aligned",
+        state,
+        entries,
       });
       await reportClaudeHookEvent({
         config,

@@ -6,6 +6,9 @@ import { loadMcpServersForCopilot } from "../tool/mcp.js";
 import { reportInterceptEventByApi } from "./intercept-event.js";
 import { runPreToolInterceptGate } from "./pretool-gate.js";
 import {
+  collectLifecycleSessionEntries,
+  createLifecycleRequestId,
+  createSessionLifecycleStateTracker,
   buildPostToolInterceptEvent,
   buildSessionLifecycleInterceptEvent,
 } from "./activity-event-builder.js";
@@ -31,12 +34,7 @@ let sharedSessions = new Map();
 let sharedCopilotSessionIds = new Map();
 let sharedSkillSignatures = new Map();
 const sessionTokenTracker = createSessionTokenTracker();
-const sessionLifecycleState = {
-  total: 0,
-  running: 0,
-  waiting: 0,
-  completed: false,
-};
+const sessionLifecycleState = createSessionLifecycleStateTracker();
 
 function normalizeSessionKey(sessionKey) {
   const normalized = String(sessionKey ?? "").trim();
@@ -237,75 +235,22 @@ function collectHumanReadableHint(toolName, toolArgs) {
   return generateInterceptHintWithTemplate(toolName, toolArgs);
 }
 
-function normalizeMessageEntry(value) {
-  if (typeof value === "string") {
-    return truncateString(value, 500);
-  }
-
-  if (!value || typeof value !== "object") {
-    return "";
-  }
-
-  const role = String(value.role ?? "").trim();
-  const content = String(value.content ?? value.text ?? value.message ?? "").trim();
-  if (!content) {
-    return "";
-  }
-
-  return truncateString(role ? `${role}: ${content}` : content, 500);
-}
-
 function collectSessionEntries(input, invocation) {
-  const sourceArrays = [
-    input?.messages,
-    input?.session?.messages,
-    invocation?.messages,
-    invocation?.session?.messages,
-  ];
-
-  const result = [];
-  for (const source of sourceArrays) {
-    if (!Array.isArray(source)) {
-      continue;
-    }
-    for (const item of source) {
-      const normalized = normalizeMessageEntry(item);
-      if (normalized) {
-        result.push(normalized);
-      }
-    }
-  }
-
-  if (result.length === 0) {
-    const fallbackPrompt = String(input?.prompt ?? invocation?.prompt ?? "").trim();
-    if (fallbackPrompt) {
-      result.push(truncateString(fallbackPrompt, 500));
-    }
-  }
-
-  return result.slice(-50);
-}
-
-function snapshotLifecycleState() {
-  return {
-    total: sessionLifecycleState.total,
-    running: sessionLifecycleState.running,
-    waiting: sessionLifecycleState.waiting,
-    completed: sessionLifecycleState.completed,
-  };
-}
-
-function markSessionStart() {
-  sessionLifecycleState.total += 1;
-  sessionLifecycleState.running += 1;
-  sessionLifecycleState.completed = false;
-  return snapshotLifecycleState();
-}
-
-function markSessionEnd() {
-  sessionLifecycleState.running = Math.max(0, sessionLifecycleState.running - 1);
-  sessionLifecycleState.completed = true;
-  return snapshotLifecycleState();
+  return collectLifecycleSessionEntries({
+    sources: [
+      input?.messages,
+      input?.session?.messages,
+      invocation?.messages,
+      invocation?.session?.messages,
+    ],
+    fallbackFields: [input?.prompt, invocation?.prompt],
+    maxEntries: 50,
+    normalizeOptions: {
+      maxLen: 500,
+      roleKeys: ["role"],
+      contentKeys: ["content", "text", "message"],
+    },
+  });
 }
 
 function createPostToolRequestId(input, invocation) {
@@ -373,9 +318,17 @@ async function reportSessionLifecycleEvent({ phase, input, invocation, config, w
 
   const interceptAuthToken = String(config.interceptAuthToken ?? "").trim();
   const interceptTimeoutMs = toPositiveInt(config.interceptTimeoutMs, 5000);
-  const requestId = createPostToolRequestId(input, invocation);
+  const requestId = createLifecycleRequestId([
+    input?.requestId,
+    input?.permissionRequestId,
+    input?.toolCallId,
+    input?.id,
+    invocation?.requestId,
+    invocation?.toolCallId,
+    invocation?.id,
+  ]);
   const sessionId = String(invocation?.sessionId ?? input?.sessionId ?? "").trim();
-  const state = phase === "start" ? markSessionStart() : markSessionEnd();
+  const state = phase === "start" ? sessionLifecycleState.markStart() : sessionLifecycleState.markEnd();
   const entries = collectSessionEntries(input, invocation);
   const event = buildSessionLifecycleInterceptEvent({
     phase,
@@ -383,9 +336,11 @@ async function reportSessionLifecycleEvent({ phase, input, invocation, config, w
     requestId,
     workDir,
     hint: `Copilot session ${phase}`,
+    provider: "copilot",
+    sourceHook: phase === "start" ? "Copilot:onSessionStart" : "Copilot:onSessionEnd",
+    schemaVersion: "v1.lifecycle.aligned",
     state,
     entries,
-    includePrompt: true,
   });
 
   await reportInterceptEventByApi({

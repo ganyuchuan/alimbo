@@ -920,7 +920,7 @@ curl http://127.0.0.1:18790/health
 
 **还差哪些功能对齐**
 
-[ ] 生命周期事件结构未对齐  
+[√] 生命周期事件结构未对齐  
 Copilot 在会话开始/结束会上报 state、entries、prompt、session 等完整结构；Claude 目前只上报 msg、entry、session。  
 参考：copilot.ts 与 claude.ts
 
