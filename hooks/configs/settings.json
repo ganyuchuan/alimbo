@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node scripts/hooks/claude/pretool.mjs"
+            "command": "node hooks/scripts/claude/pretool.mjs"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node scripts/hooks/claude/posttool.mjs"
+            "command": "node hooks/scripts/claude/posttool.mjs"
           }
         ]
       }
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node scripts/hooks/claude/session-start.mjs"
+            "command": "node hooks/scripts/claude/session-start.mjs"
           }
         ]
       }
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node scripts/hooks/claude/session-end.mjs"
+            "command": "node hooks/scripts/claude/session-end.mjs"
           }
         ]
       }
