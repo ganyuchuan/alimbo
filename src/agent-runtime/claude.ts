@@ -20,6 +20,7 @@ import { runPreToolInterceptGate } from "./pretool-gate.js";
 import { createSessionTokenTracker } from "./session-token-tracker.js";
 import { buildTokenEstimateInterceptEvent } from "./token-event-builder.js";
 import { estimateConversationTokenBreakdown } from "./token-estimate.js";
+import { buildPreToolInterceptHint } from "./intercept-hint.js";
 
 const DEFAULT_SHARED_SESSION_KEY = "__global__";
 
@@ -195,12 +196,14 @@ function buildClaudeHooks(config) {
           input?.tool_use_id,
         ],
         toolName,
+        hint: buildPreToolInterceptHint(toolName, input?.tool_input, "[claude-sdk][intercept][hint]"),
         msg: `Intercepted tool ${toolName}`,
         sessionId: String(input?.session_id ?? "").trim() || null,
         workDir,
         input: {
           toolName,
           toolArgs: safeCloneToolArgs(input?.tool_input),
+          metadata: safeCloneToolArgs(input?.metadata),
         },
       },
     });
@@ -244,8 +247,8 @@ function buildClaudeHooks(config) {
         args: safeArgs,
         result: safeResult,
         workDir,
-        includePrompt: false,
-        entryText: `Tool result: ${toolName || "unknown"}`,
+        hint: buildPreToolInterceptHint(toolName, safeArgs, "[claude-sdk][intercept][hint]"),
+        includePrompt: true,
       });
       await reportClaudeHookEvent({
         config,

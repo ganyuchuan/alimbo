@@ -1,5 +1,34 @@
 # Development Log
 
+## 2026-06-09
+
+### 36) Hook 配置迁移到 scripts + 预工具 hint 生成逻辑共享化
+
+变更目标：
+- 将默认 hook 配置模板从仓库根下隐藏目录迁移到 `scripts/`，便于作为可分发模板复用。
+- 清理 Copilot runtime 内重复的 hint 生成实现，与 Claude 侧统一复用公共构造器，减少双份维护。
+- 同步 README 对齐当前“预工具拦截与 PostTool 结构已对齐”的状态说明。
+
+主要改动：
+- 配置模板迁移
+  - 删除：`.github/hooks/alimbo-intercept.json`
+  - 新增：`scripts/alimbo-intercept.json`
+  - 新增：`scripts/settings.json`
+- runtime 共享化
+  - 新增：`src/agent-runtime/intercept-hint.ts`
+    - 统一 `read/bash/apply_patch` 三类工具的 hint 提取策略。
+  - `src/agent-runtime/copilot.ts`
+    - 移除本地 `collectHumanReadableHint` 与相关解析 helper。
+    - 改为统一调用 `buildPreToolInterceptHint(...)`。
+  - `src/agent-runtime/claude.ts`
+    - pretool 请求补齐 `hint` 与 `metadata`。
+    - posttool 事件改为 `includePrompt: true` 并附带统一 hint。
+- 文档同步
+  - `README.md` TODO 区将“预工具拦截请求信息粒度”与“PostTool 事件结构”标记为已对齐。
+
+验证记录：
+- `npm run build`：通过
+
 ## 2026-06-08
 
 ### 35) 生命周期事件结构对齐 + runtime 公共能力继续下沉

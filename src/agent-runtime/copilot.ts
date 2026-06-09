@@ -5,6 +5,7 @@ import { getSkillDirectoriesForSession } from "../tool/skills.js";
 import { loadMcpServersForCopilot } from "../tool/mcp.js";
 import { reportInterceptEventByApi } from "./intercept-event.js";
 import { runPreToolInterceptGate } from "./pretool-gate.js";
+import { buildPreToolInterceptHint } from "./intercept-hint.js";
 import {
   collectLifecycleSessionEntries,
   createLifecycleRequestId,
@@ -96,145 +97,6 @@ function withSharedSessionLock(sessionKey, task) {
   return run;
 }
 
-function truncateForViewPath(value) {
-  const text = String(value ?? "").trim();
-  return text;
-}
-
-function truncateForHintValue(value) {
-  const text = String(value ?? "").trim();
-  return text;
-}
-
-function summarizeHintArgsForLog(toolArgs) {
-  if (toolArgs === null || toolArgs === undefined) {
-    return "null";
-  }
-
-  if (typeof toolArgs === "string") {
-    return `string(len=${toolArgs.length}): ${truncateString(toolArgs, 80)}`;
-  }
-
-  if (Array.isArray(toolArgs)) {
-    return `array(len=${toolArgs.length})`;
-  }
-
-  if (typeof toolArgs === "object") {
-    const keys = Object.keys(toolArgs);
-    const shown = keys.slice(0, 8).join(",");
-    const suffix = keys.length > 8 ? ",..." : "";
-    return `object(keys=${shown}${suffix})`;
-  }
-
-  return String(typeof toolArgs);
-}
-
-function parseHintArgs(toolArgs) {
-  if (!toolArgs) {
-    return {};
-  }
-
-  if (typeof toolArgs === "string") {
-    try {
-      return JSON.parse(toolArgs);
-    } catch {
-      console.warn(
-        `[copilot-sdk][intercept][hint] parse args failed raw=${truncateString(toolArgs, 80)}`,
-      );
-      return {};
-    }
-  }
-
-  if (typeof toolArgs === "object") {
-    return toolArgs;
-  }
-
-  return {};
-}
-
-function extractPatchBody(toolArgs) {
-  const text = String(toolArgs ?? "");
-  const beginMarker = "*** Begin Patch";
-  const endMarker = "*** End Patch";
-  const beginIndex = text.indexOf(beginMarker);
-  const endIndex = text.lastIndexOf(endMarker);
-
-  if (beginIndex === -1 || endIndex === -1 || endIndex < beginIndex) {
-    return truncateForHintValue(text);
-  }
-
-  const start = beginIndex + beginMarker.length;
-  const body = text.slice(start, endIndex).trim();
-  return truncateForHintValue(body);
-}
-
-function buildViewHint(toolArgs) {
-  const args = parseHintArgs(toolArgs);
-  const pathValue = truncateForViewPath(args.path);
-  const rangeValue = args.view_range;
-
-  if (Array.isArray(rangeValue) && rangeValue.length > 0) {
-    const rangeText = truncateForHintValue(JSON.stringify(rangeValue));
-    if (pathValue) {
-      return `${pathValue} ${rangeText}`;
-    }
-    return rangeText;
-  }
-
-  return pathValue;
-}
-
-function buildBashHint(toolArgs) {
-  const args = parseHintArgs(toolArgs);
-  const commandValue = truncateForHintValue(args.command);
-  const descriptionValue = truncateForHintValue(args.description);
-
-  if (commandValue && descriptionValue) {
-    return `${commandValue}\n${descriptionValue}`;
-  }
-  if (commandValue) {
-    return commandValue;
-  }
-  return descriptionValue;
-}
-
-function generateInterceptHintWithTemplate(toolName, toolArgs) {
-  const normalizedTool = String(toolName ?? "").trim().toLowerCase();
-  const argsSummary = summarizeHintArgsForLog(toolArgs);
-
-  if (normalizedTool === "view") {
-    const hint = buildViewHint(toolArgs) || truncateForHintValue(JSON.stringify(toolArgs ?? {}));
-    console.log(
-      `[copilot-sdk][intercept][hint] tool=${normalizedTool} strategy=view args=${argsSummary} hint=${JSON.stringify(hint)}`,
-    );
-    return hint;
-  }
-  if (normalizedTool === "bash") {
-    const hint = buildBashHint(toolArgs) || truncateForHintValue(JSON.stringify(toolArgs ?? {}));
-    console.log(
-      `[copilot-sdk][intercept][hint] tool=${normalizedTool} strategy=bash args=${argsSummary} hint=${JSON.stringify(hint)}`,
-    );
-    return hint;
-  }
-  if (normalizedTool === "apply_patch") {
-    const hint = extractPatchBody(toolArgs) || truncateForHintValue(JSON.stringify(toolArgs ?? {}));
-    console.log(
-      `[copilot-sdk][intercept][hint] tool=${normalizedTool} strategy=apply_patch args=${argsSummary} hint=${JSON.stringify(hint)}`,
-    );
-    return hint;
-  }
-
-  const fallbackHint = truncateForHintValue(JSON.stringify(toolArgs ?? {}));
-  console.log(
-    `[copilot-sdk][intercept][hint] tool=${normalizedTool || "-"} strategy=fallback args=${argsSummary} hint=${JSON.stringify(fallbackHint)}`,
-  );
-  return fallbackHint;
-}
-
-function collectHumanReadableHint(toolName, toolArgs) {
-  return generateInterceptHintWithTemplate(toolName, toolArgs);
-}
-
 function collectSessionEntries(input, invocation) {
   return collectLifecycleSessionEntries({
     sources: [
@@ -298,7 +160,7 @@ async function reportPostToolUseEvent({ input, invocation, config, workDir }) {
     args: safeArgs,
     result: safeResult,
     workDir,
-    hint: collectHumanReadableHint(toolName, safeArgs),
+    hint: buildPreToolInterceptHint(toolName, safeArgs, "[copilot-sdk][intercept][hint]"),
     includePrompt: true,
   });
 
@@ -442,7 +304,7 @@ function buildCopilotHooks(config) {
             input?.id,
           ],
           toolName,
-          hint: collectHumanReadableHint(toolName, input?.toolArgs),
+          hint: buildPreToolInterceptHint(toolName, input?.toolArgs, "[copilot-sdk][intercept][hint]"),
           msg: `Intercepted tool ${toolName}`,
           sessionId: String(input?.sessionId ?? "").trim() || null,
           workDir,
