@@ -1,12 +1,12 @@
 import process from "node:process";
-import { requestInterceptDecisionByApi } from "../../../dist/agent-runtime/intercept-decision.js";
 import {
-  collectHumanReadableHint,
+  createCopilotHookRuntime,
+  handleCopilotOnPreToolUse,
+} from "../../../dist/agent-runtime/copilot-hook-handlers.js";
+import {
   getInterceptToolsSet,
   loadEnvFromCwd,
-  mapDecisionToPermission,
   readJsonFromStdin,
-  safeCloneToolArgs,
   toPositiveInt,
   withStdErrLogging,
   writeJson,
@@ -35,33 +35,26 @@ async function main() {
   const shouldUseIntercept = Boolean(interceptServerUrl && interceptTools.size > 0);
 
   if (shouldUseIntercept && interceptTools.has(toolName)) {
-    try {
-      const result = await withStdErrLogging(() =>
-        requestInterceptDecisionByApi({
-          interceptServerUrl,
-          interceptAuthToken,
-          interceptTimeoutMs,
-          interceptPollIntervalMs,
-          interceptMaxWaitMs,
-          logPrefix: "[copilot-cli-hook][intercept]",
-          request: {
-            requestIdCandidates: [input?.requestId, input?.permissionRequestId, input?.toolCallId, input?.id],
-            toolName,
-            hint: collectHumanReadableHint(toolName, input?.toolArgs),
-            msg: `Intercepted tool ${toolName}`,
-            sessionId: String(input?.sessionId ?? "").trim() || null,
-            workDir: String(input?.cwd ?? input?.workingDirectory ?? "").trim() || workDir,
-            input: {
-              toolName,
-              toolArgs: safeCloneToolArgs(input?.toolArgs),
-              metadata: safeCloneToolArgs(input?.metadata),
-            },
-          },
-        }),
-      );
+    const runtime = createCopilotHookRuntime(
+      {
+        interceptAuthToken,
+        interceptTimeoutMs,
+        interceptPollIntervalMs,
+        interceptMaxWaitMs,
+        interceptFailOpen: isFailOpen,
+      },
+      {
+        workDir,
+        interceptTools,
+        interceptServerUrl,
+        interceptEnabled: true,
+        logPrefix: "[copilot-cli-hook][intercept]",
+      },
+    );
 
-      const permission = mapDecisionToPermission(result?.decision, result?.reason || "intercept decision");
-      writeJson(permission);
+    try {
+      const permission = await withStdErrLogging(() => handleCopilotOnPreToolUse(runtime, input));
+      writeJson(permission || { permissionDecision: "allow" });
       return;
     } catch (error) {
       const reason = `intercept request failed: ${String(error?.message ?? error)}`;

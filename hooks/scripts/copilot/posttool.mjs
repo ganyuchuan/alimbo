@@ -1,10 +1,10 @@
-import { reportInterceptEventByApi } from "../../../dist/agent-runtime/intercept-event.js";
 import {
-  collectHumanReadableHint,
-  createPostToolRequestId,
+  createCopilotHookRuntime,
+  handleCopilotOnPostToolUse,
+} from "../../../dist/agent-runtime/copilot-hook-handlers.js";
+import {
   loadEnvFromCwd,
   readJsonFromStdin,
-  safeCloneToolArgs,
   toPositiveInt,
   writeJson,
 } from "../_common.mjs";
@@ -28,34 +28,30 @@ async function main() {
     return;
   }
 
-  const requestId = createPostToolRequestId(input, {});
-  const safeArgs = safeCloneToolArgs(input?.toolArgs);
-  const safeResult = safeCloneToolArgs(input?.toolResult);
   const workDir = String(input?.cwd ?? input?.workingDirectory ?? process.cwd()).trim();
-
-  await reportInterceptEventByApi({
-    interceptServerUrl,
-    interceptAuthToken,
-    interceptTimeoutMs,
-    event: {
-      msg: `Tool ${toolName} completed`,
-      entry: `Tool result: ${toolName} (${requestId})`,
-      prompt: {
-        id: requestId,
-        tool: toolName,
-        hint: collectHumanReadableHint(toolName, safeArgs),
-      },
-      toolCall: {
-        id: requestId,
-        sessionId: String(input?.sessionId ?? "").trim(),
-        tool: toolName,
-        args: safeArgs,
-        result: safeResult,
-        ts: Date.now(),
-        workDir,
-      },
+  const runtime = createCopilotHookRuntime(
+    {
+      interceptAuthToken,
+      interceptTimeoutMs,
     },
-  }).catch(() => {
+    {
+      workDir,
+      interceptServerUrl,
+      interceptEnabled: true,
+      logger: {
+        log: (...args) => {
+          process.stderr.write(`${args.map((item) => String(item)).join(" ")}\n`);
+        },
+        warn: (...args) => {
+          process.stderr.write(`${args.map((item) => String(item)).join(" ")}\n`);
+        },
+      },
+      logPrefix: "[copilot-cli-hook][intercept]",
+      sessionLogPrefix: "[copilot-cli-hook][session]",
+    },
+  );
+
+  await handleCopilotOnPostToolUse(runtime, input, {}).catch(() => {
     // Ignore event upload failures in hooks to avoid blocking tool flow.
   });
 

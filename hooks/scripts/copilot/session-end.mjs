@@ -1,11 +1,12 @@
-import { reportInterceptEventByApi } from "../../../dist/agent-runtime/intercept-event.js";
 import {
-  collectSessionEntries,
-  createPostToolRequestId,
+  createCopilotHookRuntime,
+  handleCopilotOnSessionEnd,
+} from "../../../dist/agent-runtime/copilot-hook-handlers.js";
+import {
   loadEnvFromCwd,
   markSessionEnd,
+  markSessionStart,
   readJsonFromStdin,
-  shortId,
   toPositiveInt,
   writeJson,
 } from "../_common.mjs";
@@ -23,34 +24,34 @@ async function main() {
     return;
   }
 
-  const requestId = createPostToolRequestId(input, {});
-  const sessionId = String(input?.sessionId ?? "").trim();
-  const state = markSessionEnd();
-  const entries = collectSessionEntries(input, {});
   const workDir = String(input?.cwd ?? input?.workingDirectory ?? process.cwd()).trim();
-
-  await reportInterceptEventByApi({
-    interceptServerUrl,
-    interceptAuthToken,
-    interceptTimeoutMs,
-    event: {
-      msg: `Session end: ${sessionId || shortId(requestId)}`,
-      entry: `Session end: ${sessionId || shortId(requestId)}`,
-      state,
-      entries,
-      prompt: {
-        id: sessionId || requestId,
-        tool: "session",
-        hint: "Copilot session end",
+  const runtime = createCopilotHookRuntime(
+    {
+      interceptAuthToken,
+      interceptTimeoutMs,
+    },
+    {
+      workDir,
+      interceptServerUrl,
+      interceptEnabled: true,
+      logger: {
+        log: (...args) => {
+          process.stderr.write(`${args.map((item) => String(item)).join(" ")}\n`);
+        },
+        warn: (...args) => {
+          process.stderr.write(`${args.map((item) => String(item)).join(" ")}\n`);
+        },
       },
-      session: {
-        id: sessionId,
-        phase: "end",
-        ts: Date.now(),
-        workDir,
+      logPrefix: "[copilot-cli-hook][intercept]",
+      sessionLogPrefix: "[copilot-cli-hook][session]",
+      lifecycleStateTracker: {
+        markStart: () => markSessionStart(),
+        markEnd: () => markSessionEnd(),
       },
     },
-  }).catch(() => {
+  );
+
+  await handleCopilotOnSessionEnd(runtime, input, {}).catch(() => {
     // Ignore event upload failures in hooks.
   });
 

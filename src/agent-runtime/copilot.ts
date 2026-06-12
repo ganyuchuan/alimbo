@@ -1,23 +1,11 @@
 import { CopilotClient, approveAll } from "@github/copilot-sdk";
-import crypto from "node:crypto";
 import path from "node:path";
 import { getSkillDirectoriesForSession } from "../tool/skills.js";
 import { loadMcpServersForCopilot } from "../tool/mcp.js";
 import { reportInterceptEventByApi } from "./intercept-event.js";
-import { runPreToolInterceptGate } from "./pretool-gate.js";
-import { buildPreToolInterceptHint } from "./intercept-hint.js";
-import {
-  collectLifecycleSessionEntries,
-  createLifecycleRequestId,
-  createSessionLifecycleStateTracker,
-  buildPostToolInterceptEvent,
-  buildSessionLifecycleInterceptEvent,
-} from "./activity-event-builder.js";
 import {
   normalizeSessionId,
   normalizeSet,
-  safeCloneToolArgs,
-  safeStringify,
   toPositiveInt,
   trimTrailingSlash,
   truncateString,
@@ -25,6 +13,13 @@ import {
 import { createSessionTokenTracker } from "./session-token-tracker.js";
 import { buildTokenEstimateInterceptEvent } from "./token-event-builder.js";
 import { estimateConversationTokenBreakdown } from "./token-estimate.js";
+import {
+  createCopilotHookRuntime,
+  handleCopilotOnPostToolUse,
+  handleCopilotOnPreToolUse,
+  handleCopilotOnSessionEnd,
+  handleCopilotOnSessionStart,
+} from "./copilot-hook-handlers.js";
 
 const DEFAULT_SHARED_SESSION_KEY = "__global__";
 
@@ -35,7 +30,6 @@ let sharedSessions = new Map();
 let sharedCopilotSessionIds = new Map();
 let sharedSkillSignatures = new Map();
 const sessionTokenTracker = createSessionTokenTracker();
-const sessionLifecycleState = createSessionLifecycleStateTracker();
 
 function normalizeSessionKey(sessionKey) {
   const normalized = String(sessionKey ?? "").trim();
@@ -95,122 +89,6 @@ function withSharedSessionLock(sessionKey, task) {
   // Keep queue alive even when one task fails.
   sharedSessionQueues.set(key, run.catch(() => {}));
   return run;
-}
-
-function collectSessionEntries(input, invocation) {
-  return collectLifecycleSessionEntries({
-    sources: [
-      input?.messages,
-      input?.session?.messages,
-      invocation?.messages,
-      invocation?.session?.messages,
-    ],
-    fallbackFields: [input?.prompt, invocation?.prompt],
-    maxEntries: 50,
-    normalizeOptions: {
-      maxLen: 500,
-      roleKeys: ["role"],
-      contentKeys: ["content", "text", "message"],
-    },
-  });
-}
-
-function createPostToolRequestId(input, invocation) {
-  const candidates = [
-    input?.requestId,
-    input?.permissionRequestId,
-    input?.toolCallId,
-    input?.id,
-    invocation?.requestId,
-    invocation?.toolCallId,
-    invocation?.id,
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = String(candidate ?? "").trim();
-    if (normalized) {
-      return normalized;
-    }
-  }
-
-  return `post_${crypto.randomUUID()}`;
-}
-
-async function reportPostToolUseEvent({ input, invocation, config, workDir }) {
-  const interceptServerUrl = trimTrailingSlash(config.interceptServerUrl);
-  if (!config.interceptEnabled || !interceptServerUrl) {
-    return;
-  }
-
-  const interceptAuthToken = String(config.interceptAuthToken ?? "").trim();
-  const interceptTimeoutMs = toPositiveInt(config.interceptTimeoutMs, 5000);
-  const toolName = String(input?.toolName ?? "").trim().toLowerCase();
-  if (!toolName) {
-    return;
-  }
-
-  const requestId = createPostToolRequestId(input, invocation);
-  const safeArgs = safeCloneToolArgs(input?.toolArgs);
-  const safeResult = safeCloneToolArgs(input?.toolResult);
-  const sessionId = String(invocation?.sessionId ?? input?.sessionId ?? "").trim();
-  const event = buildPostToolInterceptEvent({
-    toolName,
-    requestId,
-    sessionId,
-    args: safeArgs,
-    result: safeResult,
-    workDir,
-    hint: buildPreToolInterceptHint(toolName, safeArgs, "[copilot-sdk][intercept][hint]"),
-    includePrompt: true,
-  });
-
-  await reportInterceptEventByApi({
-    interceptServerUrl,
-    interceptAuthToken,
-    interceptTimeoutMs,
-    event,
-  });
-}
-
-async function reportSessionLifecycleEvent({ phase, input, invocation, config, workDir }) {
-  const interceptServerUrl = trimTrailingSlash(config.interceptServerUrl);
-  if (!config.interceptEnabled || !interceptServerUrl) {
-    return;
-  }
-
-  const interceptAuthToken = String(config.interceptAuthToken ?? "").trim();
-  const interceptTimeoutMs = toPositiveInt(config.interceptTimeoutMs, 5000);
-  const requestId = createLifecycleRequestId([
-    input?.requestId,
-    input?.permissionRequestId,
-    input?.toolCallId,
-    input?.id,
-    invocation?.requestId,
-    invocation?.toolCallId,
-    invocation?.id,
-  ]);
-  const sessionId = String(invocation?.sessionId ?? input?.sessionId ?? "").trim();
-  const state = phase === "start" ? sessionLifecycleState.markStart() : sessionLifecycleState.markEnd();
-  const entries = collectSessionEntries(input, invocation);
-  const event = buildSessionLifecycleInterceptEvent({
-    phase,
-    sessionId,
-    requestId,
-    workDir,
-    hint: `Copilot session ${phase}`,
-    provider: "copilot",
-    sourceHook: phase === "start" ? "Copilot:onSessionStart" : "Copilot:onSessionEnd",
-    schemaVersion: "v1.lifecycle.aligned",
-    state,
-    entries,
-  });
-
-  await reportInterceptEventByApi({
-    interceptServerUrl,
-    interceptAuthToken,
-    interceptTimeoutMs,
-    event,
-  });
 }
 
 async function reportSessionTokenEstimateEvent({
@@ -276,143 +154,28 @@ function buildCopilotHooks(config) {
   const interceptTools = normalizeSet(config.interceptTools, []);
   const interceptServerUrl = trimTrailingSlash(config.interceptServerUrl);
   const interceptEnabled = Boolean(config.interceptEnabled && interceptServerUrl && interceptTools.size > 0);
-
-  return {
-    onPreToolUse: async (input) => {
-      const toolName = String(input?.toolName ?? "").trim().toLowerCase();
-      if (!toolName) {
-        return null;
-      }
-
-      console.log(`[copilot-sdk][intercept] onPreToolUse will match tool=${toolName}`);
-
-      const gateResult = await runPreToolInterceptGate({
-        interceptEnabled,
-        interceptTools,
-        interceptServerUrl,
-        interceptAuthToken: config.interceptAuthToken,
-        interceptTimeoutMs: config.interceptTimeoutMs,
-        interceptPollIntervalMs: config.interceptPollIntervalMs,
-        interceptMaxWaitMs: config.interceptMaxWaitMs,
-        interceptFailOpen: config.interceptFailOpen,
-        logPrefix: "[copilot-sdk][intercept]",
-        request: {
-          requestIdCandidates: [
-            input?.requestId,
-            input?.permissionRequestId,
-            input?.toolCallId,
-            input?.id,
-          ],
-          toolName,
-          hint: buildPreToolInterceptHint(toolName, input?.toolArgs, "[copilot-sdk][intercept][hint]"),
-          msg: `Intercepted tool ${toolName}`,
-          sessionId: String(input?.sessionId ?? "").trim() || null,
-          workDir,
-          input: {
-            toolName,
-            toolArgs: safeCloneToolArgs(input?.toolArgs),
-            metadata: safeCloneToolArgs(input?.metadata),
-          },
-        },
-      });
-
-      if (gateResult.intercepted) {
-        console.log(
-          `[copilot-sdk][intercept] onPreToolUse resolved tool=${toolName} permission=${gateResult.decision}`,
-        );
-      }
-
-      if (gateResult.decision === "ask") {
-        return {
-          permissionDecision: "ask",
-          permissionDecisionReason: gateResult.reason,
-        };
-      }
-
-      if (gateResult.decision === "deny") {
-        return {
-          permissionDecision: "deny",
-          permissionDecisionReason: gateResult.reason,
-        };
-      }
-
-      if (gateResult.intercepted && gateResult.reason) {
-        return {
-          permissionDecision: "allow",
-          permissionDecisionReason: gateResult.reason,
-        };
-      }
-
-      return { permissionDecision: "allow" };
-    },
-    onPostToolUse: async (input, invocation) => {
-      const toolName = String(input?.toolName ?? "").trim().toLowerCase() || "unknown";
-      const safeArgs = safeCloneToolArgs(input?.toolArgs);
-      const safeResult = safeCloneToolArgs(input?.toolResult);
-      const sessionId = String(invocation?.sessionId ?? input?.sessionId ?? "").trim() || "-";
-
+  const runtime = createCopilotHookRuntime(config, {
+    workDir,
+    interceptTools,
+    interceptServerUrl,
+    interceptEnabled,
+    logPrefix: "[copilot-sdk][intercept]",
+    sessionLogPrefix: "[copilot-sdk][session]",
+    onPostToolCaptured: ({ sessionId, toolName, safeArgs, safeResult }) => {
       sessionTokenTracker.recordToolUsageForSession({
         sessionId,
         toolName,
         toolArgs: safeArgs,
         toolResult: safeResult,
       });
-
-      console.log(`[${sessionId}] Tool: ${toolName}`);
-      console.log(`  Args: ${safeStringify(safeArgs)}`);
-      console.log(`  Result: ${safeStringify(safeResult)}`);
-
-      try {
-        await reportPostToolUseEvent({
-          input,
-          invocation,
-          config,
-          workDir,
-        });
-      } catch (error) {
-        console.warn(
-          `[copilot-sdk][intercept] onPostToolUse upload failed tool=${toolName} reason=${String(error?.message ?? error)}`,
-        );
-      }
-
-      return null;
     },
-    onSessionStart: async (input, invocation) => {
-      const sessionId = String(invocation?.sessionId ?? input?.sessionId ?? "").trim() || "-";
-      console.log(`[copilot-sdk][session] start sessionId=${sessionId}`);
-      try {
-        await reportSessionLifecycleEvent({
-          phase: "start",
-          input,
-          invocation,
-          config,
-          workDir,
-        });
-      } catch (error) {
-        console.warn(
-          `[copilot-sdk][intercept] onSessionStart upload failed sessionId=${sessionId} reason=${String(error?.message ?? error)}`,
-        );
-      }
-      return null;
-    },
-    onSessionEnd: async (input, invocation) => {
-      const sessionId = String(invocation?.sessionId ?? input?.sessionId ?? "").trim() || "-";
-      console.log(`[copilot-sdk][session] end sessionId=${sessionId}`);
-      try {
-        await reportSessionLifecycleEvent({
-          phase: "end",
-          input,
-          invocation,
-          config,
-          workDir,
-        });
-      } catch (error) {
-        console.warn(
-          `[copilot-sdk][intercept] onSessionEnd upload failed sessionId=${sessionId} reason=${String(error?.message ?? error)}`,
-        );
-      }
-      return null;
-    },
+  });
+
+  return {
+    onPreToolUse: async (input) => handleCopilotOnPreToolUse(runtime, input),
+    onPostToolUse: async (input, invocation) => handleCopilotOnPostToolUse(runtime, input, invocation),
+    onSessionStart: async (input, invocation) => handleCopilotOnSessionStart(runtime, input, invocation),
+    onSessionEnd: async (input, invocation) => handleCopilotOnSessionEnd(runtime, input, invocation),
   };
 }
 

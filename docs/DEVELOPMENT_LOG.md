@@ -1,5 +1,44 @@
 # Development Log
 
+## 2026-06-12
+
+### 37) Copilot 四类 Hook 处理封装 + scripts 适配层复用
+
+变更目标：
+- 将 Copilot runtime 中 `onPreToolUse/onPostToolUse/onSessionStart/onSessionEnd` 的处理逻辑下沉为可复用封装，消除 SDK Hook 与脚本 Hook 的重复实现。
+- 让 `hooks/scripts/copilot` 下四个脚本改为薄适配层，直接调用统一封装能力，降低后续维护和行为漂移风险。
+
+主要改动：
+- 新增统一处理模块
+  - `src/agent-runtime/copilot-hook-handlers.ts`
+    - 新增 `createCopilotHookRuntime(...)`，统一构建运行时上下文（intercept 配置、logger、lifecycle tracker、回调注入）。
+    - 新增四个核心处理方法：
+      - `handleCopilotOnPreToolUse(...)`
+      - `handleCopilotOnPostToolUse(...)`
+      - `handleCopilotOnSessionStart(...)`
+      - `handleCopilotOnSessionEnd(...)`
+- runtime 接入
+  - `src/agent-runtime/copilot.ts`
+    - 移除本地重复的 pre/post/session 处理与事件上报拼装实现。
+    - `buildCopilotHooks` 改为创建 runtime 上下文并调用统一四个处理方法。
+    - 保留 token 统计逻辑，通过 `onPostToolCaptured` 注入回调接入 `sessionTokenTracker`。
+- hooks 脚本改造（薄适配层）
+  - `hooks/scripts/copilot/pretool.mjs`
+    - 由直接调用 intercept decision API 改为调用 `handleCopilotOnPreToolUse(...)`。
+  - `hooks/scripts/copilot/posttool.mjs`
+    - 由本地构造 posttool 事件并上报改为调用 `handleCopilotOnPostToolUse(...)`。
+  - `hooks/scripts/copilot/session-start.mjs`
+    - 改为调用 `handleCopilotOnSessionStart(...)`。
+  - `hooks/scripts/copilot/session-end.mjs`
+    - 改为调用 `handleCopilotOnSessionEnd(...)`。
+
+兼容性说明：
+- 保持脚本侧 stdout 仅输出 JSON，日志仍走 stderr。
+- session start/end 脚本继续注入持久化 lifecycle tracker（复用 `markSessionStart/markSessionEnd`），保持原有状态文件语义不变。
+
+验证记录：
+- `npm run build`：通过
+
 ## 2026-06-09
 
 ### 36) Hook 配置迁移到 scripts + 预工具 hint 生成逻辑共享化
