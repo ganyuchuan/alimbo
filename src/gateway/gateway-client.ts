@@ -1,13 +1,6 @@
 import crypto from "node:crypto";
 import WebSocket from "ws";
-
-function safeParseJson(raw) {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
+import { safeParseJson } from "./protocol.js";
 
 export function createGatewayClient({
   gatewayUrl,

@@ -1,1017 +1,165 @@
-# Alimbo MVP (Gateway v1)
+# Alimbo
 
-This is a minimal Gateway-only MVP inspired by OpenClaw.
+Alimbo 是一个基于 Node.js 的 AI 中转站：把本地 Copilot、Claude Code 等 Agent 消息转发到移动端（如飞书、Apple Watch），也把移动端指令安全地发回本地 Agent。
 
-## Features
+## 适合谁
 
-- WebSocket gateway at `/ws`
-- First-frame `connect` handshake with token auth
-- Minimal methods: `connect`, `health`, `send`, `agent`, `copilot`, `git`, `sql`, `service.list|start|stop|restart|logs`, `skills.*`, `mcp.*`, `cron.*`, `cron.nl`
-- In-memory sessions
-- Generic LLM adapter with one unified entrypoint
-- Supports `responses` and `chat_completions` protocols
-- HTTP health endpoint at `/health`
-- `copilot` method: call GitHub Copilot via `@github/copilot-sdk`
-- `git` method: run allowlisted git commands in the current working directory
-- `sql` method: use Copilot to translate NL to SQL and execute via local `sqlite3`
-- `service.*` methods: manage PM2 services (`list/start/stop/restart/logs`) with service-name + whitelist
-- `skills.*` methods: Copilot Skills 目录管理（list/add/remove）
-- `mcp.*` methods: MCP 服务配置管理（list/add/remove，持久化到 `config/mcporter.json`）
-- `cron.*` methods: 定时任务子系统（持久化 JSON、最近唤醒调度）
+适合想要“随时随地管理本地 Agent”的开发者与团队，尤其是希望在手机或手表上进行审批、下发 prompt、查看执行结果和 Agent 运行状态的场景。
 
-## Quick Start
+你可以把它理解为：
 
-1. Install dependencies:
+- 本地网关收口：统一接入 Copilot、Claude Code 等 Agent 消息
+- 移动消息桥接：飞书消息与本地 Agent 双向通信
+- 可控自动化入口：支持 git、sql、cron、service、skills、mcp 等能力
+
+## 如果你正在参与 Alimbo Watch 内测
+
+[点击进入 Alimbo Watch 内测说明与产品场景](docs/watch-alpha-tests.md)
+
+## 快速开始
+
+### 1) 开始之前
+
+- 本地环境
+    - Node.js >= 22
+    - npm >= 10
+    
+- 确保具备 Agent（任选其一，版本建议最新）：
+  - [GitHub Copilot CLI 安装和身份验证](https://docs.github.com/zh/copilot/how-tos/set-up/install-copilot-cli)：`copilot --version` 有输出 `GitHub Copilot CLI 1.0.59.`
+  - [Claude Code](https://code.claude.com/docs/en/agent-sdk/overview#typescript)：`claude --version` 有输出 `2.1.175 (Claude Code)`
+
+### 2) 安装与初始化
 
 ```bash
 npm install
-```
-
-2. Create env file:
-
-```bash
 cp .env.example .env
 ```
 
-3. Start server:
+### 3) 最小必填配置
+
+打开 `.env`，至少确认是否使用默认端口号：
+
+```dotenv
+PORT=18789
+```
+
+### 4) 启动网关
 
 ```bash
 npm start
 ```
 
-4. (Optional) Start Feishu bridge MVP:
-
-```bash
-npm run feishu
-```
-
-5. Pairing-based first-time setup (desktop):
-
-```bash
-alimbo setup
-```
-
-6. View PM2 logs via CLI:
-
-```bash
-# One-shot last 100 lines (default)
-alimbo logs gateway
-alimbo logs feishu --lines 200
-
-# Follow mode
-alimbo logs gateway --follow
-```
-
-The setup wizard will:
-- ask for pairing code
-- resolve token from cloud `/auth/pairing-token`
-- write `.env` using `.env.example` template
-- bind token to `GATEWAY_TOKEN`, `FEISHU_GATEWAY_TOKEN`, `FEISHU_INTERCEPT_AUTH_TOKEN`, `COPILOT_INTERCEPT_AUTH_TOKEN`
-- start gateway in background
-- verify gateway health
-
-## Cloud Auth API
-
-`/auth/token` 与 `/auth/pairing-token` 的完整接入说明已迁移至独立文档：
-
-- [docs/CLOUD_AUTH_API.md](docs/CLOUD_AUTH_API.md)
-
-## 使用 wscat 工具与网关进行通信
-
-- 安装（可选全局或用 npx）：  
-
-```bash
-npm install -g wscat
-# 或者不安装，直接用 npx
-npx wscat -c ws://127.0.0.1:18789/ws
-```
-
-- 交互式连接并发送 JSON 帧：运行上面命令后会进入交互模式，直接粘贴下面的握手帧并回车（替换 `dev-token`）：
-```json
-{ "type": "req", "id": "1", "method": "connect", "params": { "auth": { "token": "dev-token" }, "client": { "id": "cli", "version": "0.1.0" } } }
-```
-收到握手成功后，就可以开始发送各种方法的请求帧：
-```json
-{ "type": "req", "id": "2", "method": "cron.list", "params": {} }
-```
-服务器会返回类似的响应帧，查看 `payload.jobs`。
-
-- 非交互式（一次性发送并退出）：
-```bash
-printf '%s\n' '{"type":"req","id":"1","method":"connect","params":{"auth":{"token":"dev-token"},"client":{"id":"cli","version":"0.1.0"}}}' | npx wscat -c ws://127.0.0.1:18789/ws
-```
-（注意：一次性管道方式在需要多帧交互时不太方便，交互模式更适合连续请求/响应）
-
-- 其他常用提示：
-  - 使用 `wss://` 连接安全 WebSocket；若自签名证书可能需要额外参数或临时信任证书（这取决于本地环境）。
-  - 若想脚本化或自动重连/超时，考虑用 `websocket-as-promised` / `ws` 等库写小脚本（仓库已有 gateway-client.ts 可直接复用）。
-
-
-## Source Archive 安装与启动（无 Docker）
-
-适用于通过 Git Tag + Source Archive 发布的源码产物。
-
-### 1) 下载源码包
-
-从 GitHub Release 下载以下任一文件并解压：
-
-- `alimbo-v0.1.0-source.tar.gz`
-- `alimbo-v0.1.0-source.zip`
-
-### 2) 环境要求
-
-- Node.js `>=22`
-- npm `>=10`
-- （如需 copilot）已安装并登录 `gh` CLI
-
-### 3) 安装依赖
-
-```bash
-npm install
-```
-
-### 4) 配置环境变量
-
-```bash
-cp .env.example .env
-```
-
-按需编辑 `.env` 中以下关键项：
-
-- 网关：`PORT`、`GATEWAY_TOKEN`
-- 飞书桥接：`FEISHU_*`
-- Cron：`CRON_*`
-- 云端：`CLOUD_ENABLED`、`CLOUD_SERVER_URL`
-
-### 5) 启动服务
-
-启动核心网关：
-
-```bash
-npm start
-```
-
-可选：启动飞书桥接：
-
-```bash
-npm run feishu
-```
-
-可选：启动云端服务：
-
-```bash
-npm run cloud-server
-```
-
-### 6) 启动后检查
+### 5) 健康检查
 
 ```bash
 curl http://127.0.0.1:18789/health
-curl http://127.0.0.1:18790/health
 ```
 
-说明：若只启动网关，第二条命令会失败，这是预期行为。
+看到 `{"ok":true}` 或等价健康响应，即表示网关启动成功。
 
-## Environment Variables
+## 使用 WebSocket 网关发消息
 
-- `PORT`: gateway port (default `18789`)
-- `GATEWAY_TOKEN`: required token for websocket connect
-- `FEISHU_ENABLED`: enable Feishu bridge (`true`/`false`)
-- `FEISHU_APP_ID`: Feishu app id (required when bridge enabled)
-- `FEISHU_APP_SECRET`: Feishu app secret (required when bridge enabled)
-- `FEISHU_DOMAIN`: `feishu` or `lark`
-- `FEISHU_CONNECTION_MODE`: only `websocket` is supported in MVP
-- `FEISHU_REQUIRE_MENTION_IN_GROUP`: in group chat, require bot mention to trigger
-- `FEISHU_LOG_REPLY`: log outbound reply text in bridge logs (`true`/`false`, default `false`)
-- `FEISHU_REPLY_MARKDOWN`: when enabled, auto-detect markdown replies and send them as interactive cards; plain text replies still use `text` (`true`/`false`, default `true`)
-- `FEISHU_GATEWAY_URL`: alimbo gateway websocket url
-- `FEISHU_GATEWAY_TOKEN`: gateway token used by feishu bridge
-- `FEISHU_CLIENT_ID`: feishu bridge client id used in gateway connect
-- `FEISHU_REQUEST_TIMEOUT_MS`: gateway request timeout for feishu bridge
-- `FEISHU_IMAGE_TEMP_DIR`: local temp directory for downloaded Feishu images (default `data/feishu-images`)
-- `FEISHU_IMAGE_MAX_BYTES`: max accepted image size in bytes (default `10485760`)
-- `FEISHU_FILE_TEMP_DIR`: local temp directory for downloaded Feishu files (default `data/feishu-files`)
-- `FEISHU_FILE_MAX_BYTES`: max accepted file size in bytes (default `20971520`)
-- `FEISHU_FILE_MAX_TEXT_CHARS`: max chars kept when reading md/txt file content (default `20000`)
-- `FEISHU_COPILOT_STREAM_ENABLED`: enable delta streaming push in Feishu copilot replies (`true`/`false`, default `true`)
-- `FEISHU_COPILOT_STREAM_FLUSH_INTERVAL_MS`: min interval between streaming flushes in Feishu bridge (default `800`)
-- `FEISHU_COPILOT_STREAM_MIN_CHUNK_CHARS`: min buffered chars before early flush in Feishu bridge (default `120`)
-- `FEISHU_ROUTE_TOTAL_SHARDS`: fixed-routing shard total for Feishu bridge (`1` means disabled, default `1`)
-- `FEISHU_ROUTE_SHARD_INDEX`: current Feishu bridge shard index (`0`-based, default `0`)
-- `FEISHU_ROUTE_SALT`: hashing salt used by Feishu fixed routing (default `alimbo-feishu-route`)
-- `FEISHU_INTERCEPT_REVIEW_ENABLED`: enable Feishu approval worker for Copilot intercept queue (`true`/`false`, default `false`)
-- `FEISHU_INTERCEPT_SERVER_URL`: intercept server base URL used by Feishu approval worker (default `https://go.aigc4me.cloud`)
-- `FEISHU_INTERCEPT_AUTH_TOKEN`: optional bearer token for intercept APIs; falls back to `COPILOT_INTERCEPT_AUTH_TOKEN`
-- `FEISHU_INTERCEPT_REVIEW_CHAT_ID`: Feishu chat id for approval notification cards and button callbacks
-- `FEISHU_INTERCEPT_REVIEW_DECIDER`: decidedBy prefix written back to server (default `feishu-bridge`)
-- `FEISHU_INTERCEPT_REVIEW_POLL_INTERVAL_MS`: polling interval for waiting queue (default `3000`)
-- `FEISHU_INTERCEPT_REVIEW_QUEUE_LIMIT`: max waiting items per poll (default `20`)
-- `COPILOT_ENABLED`: enable gh copilot tool (`true`/`false`, default `true`)
-- `COPILOT_TIMEOUT_MS`: timeout for Copilot SDK `sendAndWait` (default `120000`)
-- `COPILOT_MODEL`: model to use (empty = copilot default)
-- `COPILOT_WORK_DIR`: working directory for copilot (empty = process cwd)
-- `COPILOT_REUSE_SESSION`: reuse shared copilot sessions in gateway `copilot` method (`true`/`false`, default `true`, keyed by `sessionKey` when provided)
-- `COPILOT_MCP_CONFIG_FILE`: MCP server config file for Copilot SDK session (`config/mcporter.json` by default)
-- `COPILOT_HOOK_ENABLED`: enable Copilot SDK hook policy layer (`true`/`false`, default `true`)
-- `COPILOT_ALLOWED_DIRS`: comma-separated allowed directories for file access checks (empty means no directory restriction)
-- `COPILOT_INTERCEPT_ENABLED`: enable intercept forwarding via `onPreToolUse` (`true`/`false`, default `false`)
-- `COPILOT_INTERCEPT_TOOLS`: comma-separated tool names that should be sent to intercept server before execution
-- `COPILOT_INTERCEPT_SERVER_URL`: intercept HTTP server base URL
-- `COPILOT_INTERCEPT_AUTH_TOKEN`: optional bearer token for intercept HTTP APIs
-- `COPILOT_INTERCEPT_TIMEOUT_MS`: timeout for each intercept HTTP request (default `5000`)
-- `COPILOT_INTERCEPT_FAIL_OPEN`: when intercept HTTP fails, allow tool execution (`true`) or deny (`false`, default)
-- `COPILOT_INTERCEPT_POLL_INTERVAL_MS`: polling interval for manual decision queue when server returns `wait` (default `1000`)
-- `COPILOT_INTERCEPT_MAX_WAIT_MS`: maximum local wait duration for manual decision polling (default `30000`)
-- `COPILOT_SKILLS_FILE`: persistence file for added copilot skill directories (default `data/copilot-skills.json`)
-- `GIT_ENABLED`: enable git tool (`true`/`false`, default `true`)
-- `GIT_WORK_DIR`: working directory for git tool (empty = process cwd)
-- `GIT_TIMEOUT_MS`: timeout for each git command in milliseconds (default `30000`)
-- `GIT_ALLOWED_COMMANDS`: comma-separated git subcommand allowlist
-- `SQL_ENABLED`: enable sql tool (`true`/`false`, default `true`)
-- `SQL_WORK_DIR`: working directory for sql tool (empty = `COPILOT_WORK_DIR` or process cwd)
-- `SQL_DB_FILE`: sqlite database file path (default `data/alimbo.db`)
-- `SQL_TIMEOUT_MS`: timeout for each sqlite query in milliseconds (default `30000`)
-- `SQL_SCHEMA_HINT`: optional schema hint text for Copilot NL->SQL translation
-- `SERVICE_ENABLED`: enable service management tool (`true`/`false`, default `false`)
-- `SERVICE_WORK_DIR`: working directory for service tool (empty = process cwd)
-- `SERVICE_TIMEOUT_MS`: timeout for PM2 command (default `30000`)
-- `SERVICE_PM2_BIN`: PM2 executable name/path (default `pm2`)
-- `SERVICE_WHITELIST`: comma-separated PM2 service names allowed for `/service <action> <name>` (default `alimbo-gateway,alimbo-feishu`)
-- `CRON_ENABLED`: enable cron subsystem (`true`/`false`, default `true`)
-- `CRON_JOBS_FILE`: jobs persistence file path (default `data/cron-jobs.json`)
-- `CRON_JOB_TIMEOUT_MS`: per-job execution timeout (default `600000` = 10 min)
-- `CRON_MAX_CONCURRENT`: max concurrent job executions (default `1`)
-- `CLOUD_ENABLED`: enable cron cloud client (`true`/`false`, default `false`)
-- `CLOUD_SERVER_URL`: cloud REST server base URL (default `https://go.aigc4me.cloud`)
-- `CLOUD_TIMEOUT_MS`: cloud request timeout (default `5000`)
-- `CLOUD_NODE_ID`: node identity written to cloud records (default `alimbo-local`)
-- `CLOUD_PORT`: cloud server port (default `18790`)
-- `CLOUD_DB_FILE`: cloud server persistence file (default `data/cloud.db`)
-- `CLOUD_INTERCEPT_AUTH_TOKEN`: optional bearer token required by `/api/copilot/intercepts/*`
-- `CLOUD_INTERCEPT_DEFAULT_DECISION`: default pretool decision (`allow|deny|wait`, default `allow`)
-- `CLOUD_INTERCEPT_MANUAL_QUEUE_ENABLED`: force manual queue mode for configured tools (`true`/`false`, default `false`)
-- `CLOUD_INTERCEPT_MANUAL_QUEUE_TOOLS`: comma-separated tools that enter manual queue; empty means all intercepted tools
-- `CLOUD_INTERCEPT_AUTO_ALLOW_TOOLS`: comma-separated tools auto-approved by server policy
-- `CLOUD_INTERCEPT_AUTO_DENY_TOOLS`: comma-separated tools auto-denied by server policy
-- `CLOUD_INTERCEPT_WAIT_TIMEOUT_MS`: server-side queue wait timeout before marking request expired (default `60000`)
-- `CLOUD_INTERCEPT_POLL_AFTER_MS`: suggested poll interval returned by pretool API (default `1000`)
+用 `wscat` 连接网关并完成一次握手 + 查询。
 
-When `FEISHU_INTERCEPT_REVIEW_ENABLED=true`, the bridge will poll `/api/copilot/intercepts/queue?status=waiting` and push each waiting request to the configured Feishu review chat as an interactive card. Operators can click the `Approve` or `Deny` button directly on the card, and the bridge will write the decision back to `/api/copilot/intercepts/decision`.
+```bash
+npx wscat -c ws://127.0.0.1:18789/ws
+```
 
-Important: the Feishu application must subscribe to `card.action.trigger`, otherwise button clicks will not reach the bridge.
-
-## WebSocket Protocol (MVP)
-
-Connect request (first frame only):
+连接后发送握手帧：
 
 ```json
-{
-  "type": "req",
-  "id": "1",
-  "method": "connect",
-  "params": {
-    "auth": { "token": "dev-token" },
-    "client": { "id": "demo-cli", "version": "0.1.0" }
-  }
-}
+{ "type": "req", "id": "1", "method": "connect", "params": { "auth": { "token": "dev-token" }, "client": { "id": "cli", "version": "0.1.0" } } }
 ```
 
-## Feishu Bridge MVP
+再发送一个最小请求（例如列出 cron 任务）：
 
-MVP scope:
+```json
+{ "type": "req", "id": "2", "method": "cron.list", "params": {} }
+```
 
-- Single account only (`FEISHU_APP_ID` + `FEISHU_APP_SECRET`).
-- Inbound event: `im.message.receive_v1` via Feishu WebSocket connection.
-- Supports `message_type=text`, `message_type=image`, and `message_type=file`.
-- For image messages in copilot mode, bridge downloads image to local temp file and passes file path to copilot prompt.
-- For file messages in copilot mode, bridge downloads the file; for md/txt it reads text content and forwards it to copilot.
-- Group policy: only trigger when bot is mentioned if `FEISHU_REQUIRE_MENTION_IN_GROUP=true`.
-- Session mapping:
-  - DM: `feishu:dm:<senderOpenId>`
-  - Group: `feishu:group:<chatId>`
-- Outbound: reply text to original message (`im.message.reply`).
+或是给本地 Copilot 打招呼：
 
-Run:
+```json
+{ "type": "req", "id": "3", "method": "copilot", "params": { "messages": [ { "role": "user", "content": [ { "type": "text", "text": "Hello!" } ] } ] } }
+```
+
+返回成功响应，说明途径1的链路已打通。
+
+## 使用飞书桥发消息
+
+首先开启飞书桥
+
+```dotenv
+FEISHU_ENABLED=true
+FEISHU_APP_ID=你的飞书应用 ID
+FEISHU_APP_SECRET=你的飞书应用 Secret
+```
+
+然后启动飞书桥
 
 ```bash
 npm run feishu
 ```
 
-Notes:
+最后打开飞书 App 给你的飞书应用（机器人）发消息
 
-- This bridge assumes gateway is already running (`npm start`).
-- If `FEISHU_ENABLED=false`, the process will fail fast by design.
-
-## Notes
-
-- This is intentionally minimal and not production hardened.
-- Sessions are kept in memory and reset on restart.
-
-## Copilot Tool
-
-The `copilot` gateway method calls GitHub Copilot through `@github/copilot-sdk`.
-
-Prerequisites:
-
-- GitHub account with Copilot access
-- Local Copilot auth available (for example through existing CLI login/session)
-
-Request:
-
-```json
-{
-  "type": "req",
-  "id": "4",
-  "method": "copilot",
-  "params": { "prompt": "帮我提交下当前项目的代码修改" }
-}
-```
-
-Response payload:
-
-```json
-{ "output": "git tag --sort=-creatordate" }
-```
-
-### Copilot Hook 安全策略（基于 .env）
-
-Alimbo uses Copilot SDK hooks (`onPreToolUse`) to enforce a policy layer per session:
-
-- safe tool allowlist
-- allowed directory scope check
-- ask-before-destructive operations
-
-建议隔离配置示例：
-
-```dotenv
-COPILOT_WORK_DIR=/Users/you/sandbox/project-a
-COPILOT_HOOK_ENABLED=true
-COPILOT_ALLOWED_DIRS=/Users/you/sandbox/project-a,/Users/you/sandbox/shared-readonly
-```
-
-说明：
-
-- permission checks are handled by hook and intercept flows in runtime
-
-重要说明
-
-- 这套是应用层策略，不是操作系统级沙箱；要强隔离还需结合独立用户或容器。
-
-#### 区别 COPILOT_WORK_DIR 和 COPILOT_ALLOWED_DIRS
-
-两者作用层级不一样：
-
-1. `COPILOT_WORK_DIR`：会话“工作根目录”  
-  - 用途：告诉 Copilot SDK 当前会话默认在哪个目录下运行。  
-  - 在代码里会传给 `workingDirectory`，影响相对路径解析、会话上下文、以及你当前工程默认操作范围。  
-  - 参考实现： copilot.ts, config.ts
-
-2. `COPILOT_ALLOWED_DIRS`：Hook 的“访问白名单目录”  
-  - 用途：在 `onPreToolUse` 里做二次权限校验，工具访问路径不在这些目录内就拒绝。  
-  - 这是权限策略层，不是工作目录本身。  
-  - 为空时通常表示不启用目录限制。  
-  - 参考实现： copilot.ts, README.md
-
-简单理解：
-- `COPILOT_WORK_DIR` = 默认从哪里开始工作  
-- `COPILOT_ALLOWED_DIRS` = 最终允许访问哪些目录
-
-最佳实践：
-- 让 `COPILOT_WORK_DIR` 落在 `COPILOT_ALLOWED_DIRS` 范围内。  
-- 例如把 `COPILOT_WORK_DIR` 设为项目 A，再把 `COPILOT_ALLOWED_DIRS` 设为“项目 A + 少量只读共享目录”。
-
-## Git Tool
-
-The `git` gateway method runs allowlisted git commands in the configured working directory.
-
-Request:
-
-```json
-{
-  "type": "req",
-  "id": "5",
-  "method": "git",
-  "params": { "command": "status -sb" }
-}
-```
-
-## SQL Tool (Copilot + sqlite3)
-
-The `sql` gateway method translates natural language to SQL with Copilot, then executes the SQL using local `sqlite3`.
-
-Prerequisites:
-
-- local `sqlite3` installed and in PATH (`sqlite3 --version`)
-- `COPILOT_ENABLED=true`
-- `SQL_DB_FILE` points to a valid sqlite database file
-
-Request:
-
-```json
-{
-  "type": "req",
-  "id": "5",
-  "method": "sql",
-  "params": { "text": "查询 users 表里最近 10 条注册记录" }
-}
-```
-
-Response payload (example):
-
-```json
-{
-  "ok": true,
-  "sql": "SELECT id, email, created_at FROM users ORDER BY created_at DESC LIMIT 10",
-  "rowCount": 2,
-  "rows": [
-    { "id": 1, "email": "a@example.com", "created_at": "2026-04-17 10:00:00" },
-    { "id": 2, "email": "b@example.com", "created_at": "2026-04-17 09:30:00" }
-  ]
-}
-```
-
-Response payload (example):
-
-```json
-{
-  "ok": true,
-  "subcommand": "status",
-  "output": "## main...origin/main"
-}
-```
-
-## Service Tool (PM2)
-
-支持方法：
-
-- `service.list`
-- `service.start`
-- `service.stop`
-- `service.restart`
-- `service.logs`
-
-`service.start|stop|restart|logs` 现在使用具体 PM2 服务名：`/service <action> <name>`。
-服务名必须存在于 `SERVICE_WHITELIST`，否则会拒绝执行。
-
-```dotenv
-SERVICE_WHITELIST=alimbo-gateway,alimbo-feishu,alimbo-cloud-server
-```
-
-Prerequisites:
-
-- PM2 installed and available in PATH (`pm2 -v`)
-- PM2 process names configured to match your actual runtime
-- If PM2 is only installed locally, set `SERVICE_PM2_BIN=./node_modules/.bin/pm2`
-
-Request:
-
-```json
-{
-  "type": "req",
-  "id": "6",
-  "method": "service.restart",
-  "params": { "name": "alimbo-gateway" }
-}
-```
-
-```json
-{
-  "type": "req",
-  "id": "6-2",
-  "method": "service.list",
-  "params": {}
-}
-```
-
-Response payload (example):
-
-```json
-{
-  "ok": true,
-  "name": "alimbo-gateway",
-  "serviceName": "alimbo-gateway",
-  "output": "[alimbo-gateway] ..."
-}
-```
-
-### 1. 在本地使用 PM2 启动
+## 常用命令速查
 
 ```bash
-cd /Users/yuchuan/Desktop/alimbo
-./node_modules/.bin/pm2 start npm --name alimbo-gateway -- run start
-./node_modules/.bin/pm2 start npm --name alimbo-feishu -- run feishu
-./node_modules/.bin/pm2 start npm --name alimbo-cloud -- run cloud
-./node_modules/.bin/pm2 ls
-```
-### 2. 测试远程重启
+# 启动网关
+npm start
 
-- 网关帧：
+# 启动飞书桥（可选）
+npm run feishu
 
-```json
-{
-  "type": "req",
-  "id": "svc-1",
-  "method": "service.restart",
-  "params": { "name": "alimbo-gateway" }
-}
-```
-
-- 飞书：
-
-```bash
-/service list
-/service start alimbo-gateway
-/service stop alimbo-feishu
-/service restart alimbo-gateway
-/service logs alimbo-gateway 100
-/service restart alimbo-cloud-server
-```
-
-## Skills Tool (Copilot SDK)
-
-`skills.*` 用于管理 Copilot SDK 的 `skillDirectories`。
-
-- `skills.list`: 列出当前已添加的技能目录
-- `skills.add`: 添加一个技能目录路径（支持相对路径）
-- `skills.remove`: 删除一个已添加的技能目录路径
-
-请求示例：
-
-```json
-{
-  "type": "req",
-  "id": "7",
-  "method": "skills.add",
-  "params": { "path": "./skills/openclaw/skills/imap-smtp-email" }
-}
-```
-
-持久化说明：
-
-- 默认写入 `data/copilot-skills.json`
-- 修改技能列表后会重置共享 Copilot session，使后续 `createSession` / `resumeSession` 重新加载最新 `skillDirectories`
-
-你现在可以直接在飞书里这样用：
-
-```
-/skills list
-/skills add ./skills/skills/gzlicanyi/imap-smtp-email
-/skills remove ./skills/skills/gzlicanyi/imap-smtp-email
-```
-
-也可以通过网关发送：
-
-```json
-{ "type": "req", "id": "1", "method": "skills.list", "params": {} }
-{ "type": "req", "id": "2", "method": "skills.add", "params": { "path": "./skills/skills/gzlicanyi/imap-smtp-email" } }
-{ "type": "req", "id": "3", "method": "skills.remove", "params": { "path": "./skills/skills/gzlicanyi/imap-smtp-email" } }
-```
-
-## Feishu × Copilot 交互
-
-Feishu bridge 通过 `config.copilot.enabled` 全局切换消息路由：
-
-- `COPILOT_ENABLED=true`：所有飞书消息走 gateway `copilot` 方法（`gh copilot` CLI）
-- `COPILOT_ENABLED=false`：所有飞书消息走 `send` + `agent` 方法（LLM）
-- 飞书命令支持 `/sql <自然语言查询>`，通过 gateway `sql` 方法调用 Copilot 翻译 SQL 并执行本地 sqlite3
-- 飞书命令支持 `/git <args>`，通过 gateway `git` 方法在当前目录执行 allowlist 内 git 子命令
-- 飞书命令支持 `/service <list|start|stop|restart|logs> [name] [lines]`，通过 gateway `service.*` 调用 PM2 执行服务管理
-- 当 `SERVICE_ENABLED=false` 时，`/help` 不显示任何 `/service` 项
-- 飞书命令支持 `/skills list|add|remove`，通过 gateway `skills.*` 管理 Copilot Skills 加载目录
-- 飞书命令支持 `/cron nl <自然语言>`，由 gateway `cron.nl` 调用 Copilot 解析后再执行 `cron.add|update|remove|run|list`
-- Copilot 模式下，Feishu bridge 会按 `appId + 会话类型(group|dm) + chatId/openId` 生成复合 `sessionKey`，用于隔离不同飞书会话的 Copilot 上下文
-- 可选固定路由：通过 `FEISHU_ROUTE_TOTAL_SHARDS/FEISHU_ROUTE_SHARD_INDEX` 让同一个飞书会话稳定落在同一个 bridge 实例处理
-
-交互流程：
-
-1. 收到飞书文本消息
-2. 对原消息贴飞书原生 `OnIt` 表情，提示用户"正在处理"
-3. 根据 `COPILOT_ENABLED` 分发到 copilot 或 agent
-4. 将结果以文本回复到原消息
-5. 处理过程中的任何错误都会以 `[error] ...` 文本回复到原消息
-
-### Feishu Copilot 流式参数使用说明
-
-可通过以下参数控制飞书侧流式回推行为：
-
-- `FEISHU_COPILOT_STREAM_ENABLED`
-  - `true`: 开启流式分片推送（边生成边回发）
-  - `false`: 关闭流式推送，等待完整输出后一次性回复
-- `FEISHU_COPILOT_STREAM_FLUSH_INTERVAL_MS`
-  - 分片推送的最小时间间隔（毫秒）
-  - 值越小越实时，但消息更频繁
-- `FEISHU_COPILOT_STREAM_MIN_CHUNK_CHARS`
-  - 缓冲区达到该字符数时可提前 flush
-  - 值越小越灵敏，值越大越省消息数
-
-推荐配置示例：
-
-```dotenv
-FEISHU_COPILOT_STREAM_ENABLED=true
-FEISHU_COPILOT_STREAM_FLUSH_INTERVAL_MS=800
-FEISHU_COPILOT_STREAM_MIN_CHUNK_CHARS=120
-```
-
-调优建议：
-
-- 偏实时：`FLUSH_INTERVAL_MS=300~500`，`MIN_CHUNK_CHARS=40~80`
-- 偏节流：`FLUSH_INTERVAL_MS=1000~1500`，`MIN_CHUNK_CHARS=160~260`
-
-## 超时配置
-
-两个模块各自有独立超时控制，需注意链路上的依赖关系：
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `FEISHU_REQUEST_TIMEOUT_MS` | `15000` | Feishu bridge 等待 gateway 响应的超时 |
-| `COPILOT_TIMEOUT_MS` | `120000` | gateway 内 `gh copilot` 子进程执行超时 |
-
-重要：`FEISHU_REQUEST_TIMEOUT_MS` 必须 **大于** `COPILOT_TIMEOUT_MS`，否则 Feishu bridge 会在 copilot 尚未完成时提前超时。推荐配置：
-
-```dotenv
-COPILOT_TIMEOUT_MS=120000
-FEISHU_REQUEST_TIMEOUT_MS=130000
-```
-
-超时链路：`飞书用户等待` → `FEISHU_REQUEST_TIMEOUT_MS` → `gateway` → `COPILOT_TIMEOUT_MS` → `gh copilot 子进程`
-
-## 并发场景
-
-### 飞书同时发送多条消息
-
-每条消息触发独立的 async handler，在 `await` 处交替执行。
-
-- **Copilot 模式**：各请求独立 spawn `gh copilot` 子进程，互不干扰，无共享状态。注意多个 `gh copilot` 并行会消耗 CPU 和 API 配额。
-- **Agent 模式**：`send` → `agent` 两步非原子操作，同一 session 的多条消息可能交错写入 history。MVP 可接受，生产环境建议加 per-session 串行队列。
-
-### 飞书 + 本地终端发送同一条消息
-
-- Feishu bridge 按 `messageId` 去重，终端 WebSocket 无 messageId，两者不会互相去重
-- Copilot 模式：两个独立请求，各自返回结果，无冲突
-- Agent 模式：若 sessionId 相同，同一文本会被 push 两次进 history
-
-### MVP 结论
-
-- Copilot 模式下 **不需要加锁**
-- Agent 模式下 MVP 不加锁，生产环境建议对 sessionId 加 async mutex
-
-## Cron 定时任务子系统
-
-最小可用的定时任务调度器，支持 6 个核心能力：创建、持久化、定时触发、手动触发、记录结果、重启恢复。
-
-### Schedule 类型
-
-| 类型 | value 含义 | 示例 |
-|------|-----------|------|
-| `at` | ISO 时间字符串或毫秒时间戳（一次性） | `"2026-04-01T08:00:00Z"` |
-| `every` | 间隔毫秒数 | `60000`（每分钟） |
-| `cron` | cron 表达式（由 croner 库解析） | `"0 9 * * 1-5"`（工作日 9 点） |
-
-### Payload Action
-
-| action | 说明 |
-|--------|------|
-| `log` | 打印 `params.message` 到控制台 |
-| `copilot` | 以 `params.prompt` 调用 gh copilot |
-
-### Gateway 方法
-
-**cron.list** — 列出所有任务
-
-```json
-{ "type": "req", "id": "10", "method": "cron.list", "params": {} }
-```
-
-**cron.add** — 创建任务
-
-```json
-{
-  "type": "req", "id": "11", "method": "cron.add",
-  "params": {
-    "name": "每分钟打日志",
-    "schedule": { "type": "every", "value": 60000 },
-    "payload": { "action": "log", "params": { "message": "heartbeat" } }
-  }
-}
-```
-
-如需将完成事件推送给 WebSocket 客户端，可选传入 `notify`（机制参考 feishu 通知）：
-
-```json
-{
-  "type": "req", "id": "11b", "method": "cron.add",
-  "params": {
-    "name": "一次性 copilot 任务",
-    "schedule": { "type": "at", "value": "2026-04-09T12:30:00+08:00" },
-    "payload": { "action": "copilot", "params": { "prompt": "总结今天工作" } },
-    "notify": { "type": "ws", "clientId": "cli" }
-  }
-}
-```
-
-`notify.type=ws` 支持以下目标字段：
-
-- `connId`：仅推送到指定连接
-- `clientId`：推送到握手 `connect.params.client.id` 匹配的连接
-- 不传目标字段：推送给全部已连接客户端
-
-如果任务不带 `notify`，默认也会广播 `cron.finished` 事件到全部已连接客户端。
-
-**cron.update** — 更新任务（传 id + 要改的字段）
-
-```json
-{
-  "type": "req", "id": "12", "method": "cron.update",
-  "params": { "id": "<job-id>", "enabled": false }
-}
-```
-
-**cron.remove** — 删除任务
-
-```json
-{ "type": "req", "id": "13", "method": "cron.remove", "params": { "id": "<job-id>" } }
-```
-
-**cron.run** — 手动强制执行一次
-
-```json
-{ "type": "req", "id": "14", "method": "cron.run", "params": { "id": "<job-id>" } }
-```
-
-**cron.nl** — 自然语言操作任务（由 Copilot 转换成结构化操作并执行）
-
-```json
-{
-  "type": "req",
-  "id": "15",
-  "method": "cron.nl",
-  "params": { "text": "每天早上 9 点执行一次 copilot，总结昨天工作并推送到当前会话" }
-}
-```
-
-### WebSocket 事件
-
-握手成功后，`hello-ok.features.events` 会包含：
-
-- `tick`
-- `cron.finished`
-
-`cron.finished` 事件示例：
-
-```json
-{
-  "type": "event",
-  "event": "cron.finished",
-  "payload": {
-    "ts": 1775709000000,
-    "job": { "id": "job-uuid", "name": "一次性 copilot 任务", "action": "copilot" },
-    "trigger": "scheduled",
-    "status": "ok",
-    "error": null,
-    "output": "...",
-    "notify": { "type": "ws", "clientId": "cli" }
-  }
-}
-```
-
-### 持久化
-
-- 任务存储在 `data/cron-jobs.json`（可通过 `CRON_JOBS_FILE` 配置）
-- 每次增删改后立即落盘（写临时文件 + rename 保证原子性）
-- `data/` 目录已加入 `.gitignore`
-
-### MVP 防护
-
-- 任务超时：默认 10 分钟（`CRON_JOB_TIMEOUT_MS`）
-- 并发上限：默认 1（`CRON_MAX_CONCURRENT`）
-- 防重复执行：`runningAtMs` 标记 + 持久化
-- 启动恢复：自动清理上次残留 running 标记，重算 nextRunAtMs
-- 一次性任务（`at`）：过期后自动禁用
-
-## Cron Cloud REST Server
-
-新增一个最小可用 Node.js HTTP 服务，用于汇总本地 cron job 与每次执行输出。其他终端可通过 REST API 拉取这些数据。
-
-启动：
-
-```bash
+# 启动云端服务（可选）
 npm run cloud-server
+
+# 通过 PM2 启动网关、飞书桥和云端服务
+pm2 start npm --name alimbo-gateway -- run start
+pm2 start npm --name alimbo-feishu -- run feishu
+pm2 start npm --name alimbo-cloud -- run cloud
 ```
 
-健康检查：
+## 核心功能一览
 
-```bash
-curl http://127.0.0.1:18790/health
-```
+| 功能 | 说明 |
+|------|------|
+| 比龙虾更轻的网关 | 将本地 Agent 会话/事件、各类渠道消息和第三方工具收口到一处管理 |
+| 支持多开 | 可以同时打开多个网关，从而实现多 Agent |
+| Agent 无缝对接 | 安装便已接入你本地的 Copilot、Claude Code 等智能体，无需额外配置 |
+| Apple Watch 远程监控 | 可以通过 Apple Watch 实时监控本地 Agent 的状态和事件，随处审批它的任务 |
+| 飞书消息渠道 | 你的消息可以通过飞书 App 触达本地 Agent，实现双向通信 |
+| Git 工具 | 允许通过网关或飞书执行 git 命令 |
+| SQL 工具 | 支持自然语言转 SQL 管理本地 sqlite 数据库 |
+| Cron 定时任务 | 支持自然语言调度 Agent 完成周期性任务 |
 
-主要 API：
 
-- `GET /api/jobs`：获取全部任务快照
-- `GET /api/jobs/:id`：获取单个任务
-- `GET /api/runs?jobId=<id>&limit=100`：获取执行记录
+## FAQ
 
-配对与安装引导新增接口：
+### 1) 健康检查通过，但连接报 token 错误
 
-- `POST /auth/token`：签发用户 token，并返回 `pairingCode` 与 `onboardingUrl`
-- `GET /`：cloud 根地址承接固定安装索引页（index.html）
-- `GET /SKILL.md`：安装技能文档原文（由 index 页面加载）
-- `POST /auth/pairing-token`：通过 4 位配对码换取 token（30 分钟有效期）
+先检查本机是否有旧网关进程占用了同端口（常见于旧 token 残留进程）。
 
-当 `CLOUD_ENABLED=true` 时，alimbo gateway 会自动将以下数据同步到该服务：
+### 2) 只启动了网关，为什么 18790 健康检查失败
 
-- cron 任务增删改（upsert/delete）
-- 每次任务执行完成事件（含 `status/error/output`）
+`18790` 是 cloud-server 默认端口，未启动 `npm run cloud-server` 时失败是正常现象。
 
-说明：
+### 3) 飞书不回复
 
-- 同步失败不会影响本地 cron 执行，仅记录 warning 日志
-- 服务端数据落盘为 JSON（写临时文件 + rename）
+确认这三项：
 
-## 多实例应用
+- 网关已启动且可连通
+- `FEISHU_ENABLED=true`
+- 飞书应用事件订阅配置正确（含你启用的能力）
 
-假设在一台电脑上运行5个 alimbo gateway 实例，同时也有对应的5个 feishu bridge 实例。可以按两种模式配：
 
-方案 A（推荐）：5 对 1:1 独立，5 个 bridge 各自不同飞书应用  
-这种情况下不需要分片路由，配置最简单。
+## 安全
 
-每一对实例要保证这几项唯一或一一对应：
+### 权限
 
-1. 网关端口  
-- 实例1: PORT=18789  
-- 实例2: PORT=18790  
-- 实例3: PORT=18791  
-- 实例4: PORT=18792  
-- 实例5: PORT=18793
+Alimbo 的权限控制是应用层策略（Hook + Intercept），不是操作系统级沙箱。若需要强隔离，请结合独立系统用户、容器或更强的运行时隔离方案。
 
-2. bridge 指向对应网关  
-- 实例1 bridge: FEISHU_GATEWAY_URL=ws://127.0.0.1:18789/ws  
-- 实例2 bridge: FEISHU_GATEWAY_URL=ws://127.0.0.1:18790/ws  
-- 依次类推
+### 隐私
 
-3. 飞书应用凭据（每个 bridge 自己的一套）  
-- FEISHU_APP_ID  
-- FEISHU_APP_SECRET
-
-4. bridge 客户端标识建议唯一  
-- FEISHU_CLIENT_ID=alimbo-feishu-1 到 alimbo-feishu-5
-
-5. 固定路由参数（可保持默认）  
-- FEISHU_ROUTE_TOTAL_SHARDS=1  
-- FEISHU_ROUTE_SHARD_INDEX=0  
-- FEISHU_ROUTE_SALT 任意（默认即可）
-
-6. 避免数据文件冲突（很重要）  
-每个网关实例建议分开这些文件：
-- CRON_JOBS_FILE
-- SQL_DB_FILE
-- COPILOT_MCP_CONFIG_FILE
-- COPILOT_SKILLS_FILE  
-例如加后缀 -1 到 -5。
-
-7. 如果启用 cloud-server，也要分开端口  
-- CLOUD_PORT 不能冲突。
-
-方案 B：5 个 bridge 共用同一个飞书应用  
-才需要启用分片路由：
-
-- 所有实例设置相同 FEISHU_ROUTE_TOTAL_SHARDS=5  
-- 每个实例 FEISHU_ROUTE_SHARD_INDEX 分别为 0,1,2,3,4  
-- 所有实例 FEISHU_ROUTE_SALT 必须一致  
-- FEISHU_APP_ID / FEISHU_APP_SECRET 相同  
-- 其它网关端口、文件路径仍要避免冲突
-
-### 关于5个 bridge 共用1个飞书机器人的场景
-
-这种场景挺常见，尤其在“一个机器人服务多个群/部门”的生产场景。比如：
-
-1. 高可用与故障切换  
-- 同一个飞书机器人要 7x24 服务，部署多实例避免单点故障。  
-- 某个实例挂了，其它实例接管。
-
-2. 高并发削峰  
-- 同一应用下消息量大（多个群同时高峰），需要横向扩容 bridge。
-
-3. 多租户但统一入口  
-- 对外只暴露一个机器人身份（同一个 app），内部按会话分片到不同实例处理。
-
-4. 灰度/金丝雀发布  
-- 同一 app 下部分会话走新版本实例，其他会话走旧版本，逐步放量。
-
-5. 资源隔离  
-- 同一 app 下将不同会话分散到不同实例，隔离 CPU/内存/模型调用压力。
-
-### 为什么要你现在这套“复合键 + 固定路由”
-
-1. 同 app 多实例是现实需求。  
-2. 没有固定路由时，同一会话可能被多个实例抢处理。  
-3. 你现在的分片参数正是为这个场景准备的：
-- FEISHU_ROUTE_TOTAL_SHARDS=5
-- 每实例 FEISHU_ROUTE_SHARD_INDEX=0..4
-- FEISHU_ROUTE_SALT 全实例一致
-
-一句话：  
-“5 个 bridge 共用同一个飞书应用”不仅有场景，而且是做高可用/扩展时的标准形态。
-
----
-
-## TODO
-
-结论先说：目前 Claude 与 Copilot 的“主流程能力”已经接近，但在权限链路、生命周期上报、失败恢复、以及重复代码治理上还没完全对齐。
-
-**还差哪些功能对齐**
-
-[√] 生命周期事件结构未对齐  
-Copilot 在会话开始/结束会上报 state、entries、prompt、session 等完整结构；Claude 目前只上报 msg、entry、session。  
-参考：copilot.ts 与 claude.ts
-
-[√] 权限模式已降级统一为最小公分母  
-Copilot 侧已移除 permissionRequestMode，和 Claude 统一为不暴露该模式配置。  
-参考：copilot.ts 与 claude.ts
-
-[√] 预工具拦截请求信息粒度已对齐
-Copilot 与 Claude 的拦截请求都已携带 hint，并统一走模板化 hint 生成逻辑。  
-参考：copilot.ts 与 claude.ts
-
-[√] PostTool 事件结构已对齐  
-Copilot 与 Claude 的 post 事件都包含 prompt 与 toolCall 字段，并统一通过公共 builder 构造。  
-参考：copilot.ts 与 claude.ts
-
-[ ] 失败恢复策略未对齐  
-Copilot 有 session not found 的单次重试策略；Claude 当前没有对应重试。  
-参考：copilot.ts 与 claude.ts
-
-[√] 现有残留死代码（Claude）  
-你这轮删掉三类工具策略后，Claude 里还有未使用的 allowedDirs 计算与相关常量/函数残留。  
-参考：claude.ts
-
-**建议下沉到公共组件的逻辑**
-[√] Token 统计与 carryover 状态机  
-两边几乎同构，建议抽成共享模块（如 SessionTokenTracker），避免双份维护。  
-涉及文件：copilot.ts, claude.ts
-
-[√] 拦截事件上报构造器  
-把 token estimate、post tool、session lifecycle 的事件体拼装抽成公共 builder，provider 只传差异字段（provider 名、tool 名映射等）。  
-涉及文件：intercept-event.ts, copilot.ts, claude.ts
-
-[√] 预工具拦截流程骨架  
-intercept enabled 判断、fail-open 行为、decision 到 permission 映射可抽成通用 pretool gate；Copilot/Claude 只做输入字段适配。  
-涉及文件：intercept-decision.ts, copilot.ts, claude.ts
-
-[√] 公共工具函数  
-normalizeDecision、trimTrailingSlash、truncate、safeCloneToolArgs、safeStringify、session key lock 等可统一到一个 runtime-common。  
-涉及文件：copilot.ts, claude.ts
-
-[ ] 错误恢复策略  
-把 session not found 的重试策略做成共享 helper，Claude 直接复用。  
-涉及文件：copilot.ts, claude.ts
-
-如果你要，我可以下一步直接给你做一版“最小对齐改造”PR（先清理 Claude 死代码 + 生命周期上报结构对齐 + hint 字段对齐），不做大规模重构，风险最低。
-
-## 剩余差异
-
-核心能力已经比之前更接近，但还有 4 个明显未对齐点，外加 1 个共同缺陷。
-
-1. 高优先级：权限请求模式仍未对齐  
-Copilot 有单独的权限请求处理链路，Claude 没有等价入口。  
-证据：  
-- Copilot 有 permissionRequestMode 配置与处理器 config.ts、copilot.ts、copilot.ts  
-- Claude hooks 只注册了 Pre/Post/SessionStart/SessionEnd，没有 PermissionRequest claude.ts
-
-2. 高优先级：失败恢复策略未对齐  
-Copilot 有 session not found 的重试路径，Claude 没有。  
-证据：  
-- Copilot 的错误识别与重试分支 copilot.ts、copilot.ts  
-- Claude 没有对应重试逻辑（仅失败上报后抛错）claude.ts
-
-3. 中优先级：生命周期事件丰富度未对齐  
-Copilot 上报 session 生命周期时携带 state、entries、prompt；Claude 当前是精简版。  
-证据：  
-- Copilot includePrompt=true 且传 state/entries copilot.ts、copilot.ts、copilot.ts  
-- Claude includePrompt=false，且未传 state/entries claude.ts、claude.ts
-
-4. 中优先级：PreTool 请求 hint 粒度未对齐（runtime 层）  
-Copilot pretool 请求有 hint；Claude runtime pretool 请求目前没有 hint 字段。  
-证据：  
-- Copilot pretool request 带 hint copilot.ts  
-- Claude pretool request 仅 msg，无 hint claude.ts
-
-补充发现（共同缺陷，不是“差异”但建议尽快修）  
-- 两端会话清理函数还有旧变量残留引用，可能触发运行时异常。  
-证据：  
-- Copilot stop 时写入未定义变量 copilot.ts  
-- Claude reset 时清理未定义变量 claude.ts
-
-## Claude permission 模式
-
-The permission mode option (`permission_mode` in Python, `permissionMode` in TypeScript) controls whether the agent asks for approval before using tools:
-
-| Mode                       | Behavior                                                                                                                                                                             |
-| :------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"default"`                | Tools not covered by allow rules trigger your approval callback; no callback means deny                                                                                              |
-| `"acceptEdits"`            | Auto-approves file edits and common filesystem commands (`mkdir`, `touch`, `mv`, `cp`, etc.); other Bash commands follow default rules                                               |
-| `"plan"`                   | Read-only tools run; Claude explores and produces a plan without editing your source files                                                                                           |
-| `"dontAsk"`                | Never prompts. Tools pre-approved by [permission rules](/en/settings#permission-settings) run, everything else is denied                                                             |
-| `"auto"` (TypeScript only) | Uses a model classifier to approve or deny each tool call. See [Auto mode](/en/permission-modes#eliminate-prompts-with-auto-mode) for availability and behavior                      |
-| `"bypassPermissions"`      | Runs all allowed tools without asking. Cannot be used when running as root on Unix. Use only in isolated environments where the agent's actions cannot affect systems you care about |
-
-For interactive applications, use `"default"` with a tool approval callback to surface approval prompts. For autonomous agents on a dev machine, `"acceptEdits"` auto-approves file edits and common filesystem commands (`mkdir`, `touch`, `mv`, `cp`, etc.) while still gating other `Bash` commands behind allow rules. Reserve `"bypassPermissions"` for CI, containers, or other isolated environments. See [Permissions](/en/agent-sdk/permissions) for full details.
+Alimbo 不会上传任何数据到云端，所有消息仅在本地处理和转发。飞书桥的消息转发也仅限于飞书服务器和本地网关之间。
