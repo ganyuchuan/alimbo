@@ -4,11 +4,17 @@ import { getSkillDirectoriesForSession } from "../tool/skills.js";
 import { loadMcpServersForCopilot } from "../tool/mcp.js";
 import { reportInterceptEventByApi } from "./intercept-event.js";
 import {
+  getErrorMessage,
+  getErrorPartialOutput,
+  getErrorSessionId,
+  mergeEntries,
   normalizeSessionId,
+  normalizeSessionKey,
   normalizeSet,
   toPositiveInt,
   trimTrailingSlash,
   truncateString,
+  withSharedSessionLock,
 } from "./common.js";
 import { createSessionTokenTracker } from "./session-token-tracker.js";
 import { buildTokenEstimateInterceptEvent } from "./token-event-builder.js";
@@ -31,17 +37,12 @@ let sharedCopilotSessionIds = new Map();
 let sharedSkillSignatures = new Map();
 const sessionTokenTracker = createSessionTokenTracker();
 
-function normalizeSessionKey(sessionKey) {
-  const normalized = String(sessionKey ?? "").trim();
-  return normalized || DEFAULT_SHARED_SESSION_KEY;
-}
-
 function getSharedSessionIdForKey(sessionKey) {
-  return sharedCopilotSessionIds.get(normalizeSessionKey(sessionKey)) || "";
+  return sharedCopilotSessionIds.get(normalizeSessionKey(sessionKey, DEFAULT_SHARED_SESSION_KEY)) || "";
 }
 
 function setSharedSessionIdForKey(sessionKey, sessionId) {
-  const key = normalizeSessionKey(sessionKey);
+  const key = normalizeSessionKey(sessionKey, DEFAULT_SHARED_SESSION_KEY);
   const normalizedSessionId = String(sessionId ?? "").trim();
   if (normalizedSessionId) {
     sharedCopilotSessionIds.set(key, normalizedSessionId);
@@ -51,7 +52,7 @@ function setSharedSessionIdForKey(sessionKey, sessionId) {
 }
 
 async function disconnectSharedSessionForKey(sessionKey) {
-  const key = normalizeSessionKey(sessionKey);
+  const key = normalizeSessionKey(sessionKey, DEFAULT_SHARED_SESSION_KEY);
   const existing = sharedSessions.get(key);
   const trackedSessionId = normalizeSessionId(existing?.sessionId) || getSharedSessionIdForKey(key);
   if (existing) {
@@ -80,15 +81,6 @@ async function resetAllSharedSessions() {
   sharedCopilotSessionIds = new Map();
   sharedSkillSignatures = new Map();
   sharedSessionQueues = new Map();
-}
-
-function withSharedSessionLock(sessionKey, task) {
-  const key = normalizeSessionKey(sessionKey);
-  const queue = sharedSessionQueues.get(key) || Promise.resolve();
-  const run = queue.then(task, task);
-  // Keep queue alive even when one task fails.
-  sharedSessionQueues.set(key, run.catch(() => {}));
-  return run;
 }
 
 async function reportSessionTokenEstimateEvent({
@@ -243,24 +235,6 @@ function normalizeOutput(event) {
 function isSessionNotFoundError(error) {
   const message = String(error?.message ?? error).toLowerCase();
   return message.includes("session not found");
-}
-
-function getErrorMessage(error) {
-  return String(error?.message ?? error).trim() || "unknown error";
-}
-
-function getErrorPartialOutput(error) {
-  return String(error?.partialOutput ?? "").trim();
-}
-
-function getErrorSessionId(error) {
-  return String(error?.sessionId ?? "").trim();
-}
-
-function mergeEntries(baseEntries, toolEntries = []) {
-  const normalizedBase = Array.isArray(baseEntries) ? baseEntries : [];
-  const normalizedTools = Array.isArray(toolEntries) ? toolEntries : [];
-  return [...normalizedBase, ...normalizedTools].slice(-80);
 }
 
 async function createOrResumeSession({ client, config, resumeSessionId = "" }) {
@@ -467,7 +441,7 @@ export function getSharedCopilotSessionId() {
 
 export function setSharedCopilotSessionId(sessionId, sessionKey = DEFAULT_SHARED_SESSION_KEY) {
   setSharedSessionIdForKey(sessionKey, sessionId);
-  sharedSessions.delete(normalizeSessionKey(sessionKey));
+  sharedSessions.delete(normalizeSessionKey(sessionKey, DEFAULT_SHARED_SESSION_KEY));
 }
 
 export function resetSharedCopilotSessionId(sessionKey = "") {
@@ -480,7 +454,7 @@ export function resetSharedCopilotSessionId(sessionKey = "") {
 }
 
 async function getOrCreateSharedSession(config, sessionKey) {
-  const key = normalizeSessionKey(sessionKey);
+  const key = normalizeSessionKey(sessionKey, DEFAULT_SHARED_SESSION_KEY);
   const client = await ensureSdkClient(config);
   const sessionConfig = await buildSessionConfig(config);
   const nextSkillSignature = makeSessionSignature({
@@ -536,7 +510,7 @@ export async function runCopilotWithSharedSession({
 
   const key = normalizeSessionKey(sessionKey);
 
-  return withSharedSessionLock(key, async () => {
+  return withSharedSessionLock(sharedSessionQueues, key, async () => {
     let retried = false;
     let attempt = 0;
 

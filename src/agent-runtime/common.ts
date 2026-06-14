@@ -3,6 +3,29 @@ export function toPositiveInt(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+export async function fetchJsonWithTimeout(
+  url,
+  { method = "GET", headers = {}, body = undefined, timeoutMs = 5000 } = {},
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), toPositiveInt(timeoutMs, 5000));
+  try {
+    const response = await fetch(url, {
+      method,
+      headers,
+      body,
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(`http ${response.status}: ${String(payload?.error ?? response.statusText)}`);
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function trimTrailingSlash(url) {
   return String(url ?? "").trim().replace(/\/+$/, "");
 }
@@ -33,6 +56,38 @@ export function truncateString(value, maxLength = 240) {
 
 export function normalizeSessionId(sessionId) {
   return String(sessionId ?? "").trim();
+}
+
+export function normalizeSessionKey(sessionKey, fallbackKey = "__global__") {
+  const normalized = String(sessionKey ?? "").trim();
+  return normalized || fallbackKey;
+}
+
+export function withSharedSessionLock(sessionQueues, sessionKey, task, fallbackKey = "__global__") {
+  const key = normalizeSessionKey(sessionKey, fallbackKey);
+  const queue = sessionQueues.get(key) ?? Promise.resolve();
+  const run = queue.then(task, task);
+  // Keep queue alive even when one task fails.
+  sessionQueues.set(key, run.catch(() => {}));
+  return run;
+}
+
+export function getErrorMessage(error) {
+  return String(error?.message ?? error).trim() || "unknown error";
+}
+
+export function getErrorPartialOutput(error) {
+  return String(error?.partialOutput ?? "").trim();
+}
+
+export function getErrorSessionId(error) {
+  return String(error?.sessionId ?? "").trim();
+}
+
+export function mergeEntries(baseEntries, toolEntries = []) {
+  const normalizedBase = Array.isArray(baseEntries) ? baseEntries : [];
+  const normalizedTools = Array.isArray(toolEntries) ? toolEntries : [];
+  return [...normalizedBase, ...normalizedTools].slice(-80);
 }
 
 export function createEmptyTurnToolStats() {

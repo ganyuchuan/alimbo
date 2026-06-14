@@ -1,5 +1,7 @@
 # Alimbo
 
+![fire](./assets/fire.png)
+
 Alimbo 是一个基于 Node.js 的 AI 中转站：把本地 Copilot、Claude Code 等 Agent 消息转发到移动端（如飞书、Apple Watch），也把移动端指令安全地发回本地 Agent。
 
 ## 适合谁

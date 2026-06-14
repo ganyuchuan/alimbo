@@ -1,32 +1,4 @@
-import { toPositiveInt, trimTrailingSlash } from "./common.js";
-
-async function fetchJsonWithTimeout(
-  url: string,
-  { method = "GET", headers = {}, body = undefined, timeoutMs = 5000 }: {
-    method?: string;
-    headers?: Record<string, string>;
-    body?: string | undefined;
-    timeoutMs?: number;
-  } = {},
-): Promise<any> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), toPositiveInt(timeoutMs, 5000));
-  try {
-    const response = await fetch(url, {
-      method,
-      headers,
-      body,
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(`http ${response.status}: ${String(payload?.error ?? response.statusText)}`);
-    }
-    return payload;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
+import { fetchJsonWithTimeout, toPositiveInt, trimTrailingSlash } from "./common.js";
 
 export async function reportInterceptEventByApi({
   interceptServerUrl,

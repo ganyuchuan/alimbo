@@ -9,11 +9,17 @@ import {
   buildSessionLifecycleInterceptEvent,
 } from "./activity-event-builder.js";
 import {
+  getErrorMessage,
+  getErrorPartialOutput,
+  getErrorSessionId,
+  mergeEntries,
+  normalizeSessionKey,
   normalizeSet,
   safeCloneToolArgs,
   safeStringify,
   toPositiveInt,
   trimTrailingSlash,
+  withSharedSessionLock,
 } from "./common.js";
 import { reportInterceptEventByApi } from "./intercept-event.js";
 import { runPreToolInterceptGate } from "./pretool-gate.js";
@@ -49,24 +55,6 @@ function collectClaudeSessionEntries(input) {
 
 function normalizeTextOutput(value) {
   return String(value ?? "").trim();
-}
-
-function mergeEntries(baseEntries, toolEntries = []) {
-  const normalizedBase = Array.isArray(baseEntries) ? baseEntries : [];
-  const normalizedTools = Array.isArray(toolEntries) ? toolEntries : [];
-  return [...normalizedBase, ...normalizedTools].slice(-80);
-}
-
-function getErrorMessage(error) {
-  return String(error?.message ?? error).trim() || "unknown error";
-}
-
-function getErrorPartialOutput(error) {
-  return String(error?.partialOutput ?? "").trim();
-}
-
-function getErrorSessionId(error) {
-  return String(error?.sessionId ?? "").trim();
 }
 
 function mapToolNameForPolicy(toolName) {
@@ -348,20 +336,6 @@ function buildClaudeHooks(config) {
     SessionStart: [{ hooks: [sessionStartHook] }],
     SessionEnd: [{ hooks: [sessionEndHook] }],
   };
-}
-
-function normalizeSessionKey(sessionKey) {
-  const normalized = String(sessionKey ?? "").trim();
-  return normalized || DEFAULT_SHARED_SESSION_KEY;
-}
-
-function withSharedSessionLock(sessionKey, task) {
-  const key = normalizeSessionKey(sessionKey);
-  const queue = sharedSessionQueues.get(key) ?? Promise.resolve();
-  const run = queue.then(task, task);
-  // Keep queue alive even when one task fails.
-  sharedSessionQueues.set(key, run.catch(() => {}));
-  return run;
 }
 
 function extractSessionId(message) {
@@ -669,9 +643,9 @@ export async function runClaudeWithSharedSession({
     });
   }
 
-  const key = normalizeSessionKey(sessionKey);
+  const key = normalizeSessionKey(sessionKey, DEFAULT_SHARED_SESSION_KEY);
 
-  return withSharedSessionLock(key, async () => {
+  return withSharedSessionLock(sharedSessionQueues, key, async () => {
     const resumeSessionId = sharedClaudeSessionIds.get(key) || "";
     const attempt = 1;
 

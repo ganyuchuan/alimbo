@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { toPositiveInt, trimTrailingSlash } from "./common.js";
+import { fetchJsonWithTimeout, toPositiveInt, trimTrailingSlash } from "./common.js";
 
 function shortId(value: unknown) {
   const text = String(value ?? "").trim();
@@ -29,34 +29,6 @@ export function createInterceptRequestIdFromCandidates(candidates: unknown[]) {
     }
   }
   return `perm_${crypto.randomUUID()}`;
-}
-
-async function fetchJsonWithTimeout(
-  url: string,
-  { method = "GET", headers = {}, body = undefined, timeoutMs = 5000 }: {
-    method?: string;
-    headers?: Record<string, string>;
-    body?: string | undefined;
-    timeoutMs?: number;
-  } = {},
-): Promise<any> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), toPositiveInt(timeoutMs, 5000));
-  try {
-    const response = await fetch(url, {
-      method,
-      headers,
-      body,
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(`http ${response.status}: ${String(payload?.error ?? response.statusText)}`);
-    }
-    return payload;
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 async function pollInterceptDecision({

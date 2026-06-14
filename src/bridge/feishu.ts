@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "../config.js";
+import { toPositiveInt, trimTrailingSlash } from "../agent-runtime/common.js";
 import { createGatewayClient } from "../gateway/gateway-client.js";
 import { buildFeishuReplyPayload } from "./reply-format.js";
 
@@ -367,21 +368,12 @@ function clipText(value, maxChars = 500) {
   return `${text.slice(0, maxChars)}...`;
 }
 
-function trimTrailingSlash(value) {
-  return String(value ?? "").replace(/\/+$/, "");
-}
-
 function formatTime(value) {
   const ts = Number(value);
   if (!Number.isFinite(ts) || ts <= 0) {
     return "-";
   }
   return new Date(ts).toLocaleString("zh-CN", { hour12: false });
-}
-
-function parsePositiveInt(value, fallback) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function isTextLikeFile({ fileName, contentType }) {
@@ -1124,7 +1116,7 @@ async function updateFeishuInteractiveMessage({ feishuClient, messageId, content
 function createInterceptReviewClient(feishuCfg) {
   const baseUrl = trimTrailingSlash(feishuCfg.interceptServerUrl || "https://go.aigc4me.cloud");
   const authToken = String(feishuCfg.interceptAuthToken ?? "").trim();
-  const timeoutMs = parsePositiveInt(feishuCfg.requestTimeoutMs, 15000);
+  const timeoutMs = toPositiveInt(feishuCfg.requestTimeoutMs, 15000);
 
   async function request(method, apiPath, body = undefined) {
     const controller = new AbortController();
@@ -1163,7 +1155,7 @@ function createInterceptReviewClient(feishuCfg) {
 
   return {
     async getWaitingQueue(limit) {
-      const safeLimit = parsePositiveInt(limit, 20);
+      const safeLimit = toPositiveInt(limit, 20);
       const payload = await request(
         "GET",
         `/api/copilot/intercepts/queue?status=waiting&limit=${encodeURIComponent(String(safeLimit))}`,
@@ -1224,8 +1216,8 @@ function createInterceptReviewWorker({ feishuCfg, feishuClient }) {
   const client = createInterceptReviewClient(feishuCfg);
   const seenSignatures = new Set();
   const trackedCards = new Map<string, InterceptTrackedCard>();
-  const queueLimit = parsePositiveInt(feishuCfg.interceptReviewQueueLimit, 20);
-  const pollIntervalMs = parsePositiveInt(feishuCfg.interceptReviewPollIntervalMs, 3000);
+  const queueLimit = toPositiveInt(feishuCfg.interceptReviewQueueLimit, 20);
+  const pollIntervalMs = toPositiveInt(feishuCfg.interceptReviewPollIntervalMs, 3000);
   const decider = String(feishuCfg.interceptReviewDecider ?? "").trim() || "feishu-bridge";
   let timer = null as NodeJS.Timeout | null;
   let polling = false;
