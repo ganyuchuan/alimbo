@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function printHelp() {
-  console.log(`alimbo CLI\n\nUsage:\n  alimbo                (defaults to setup)\n  alimbo setup\n  alimbo logs gateway [--lines N] [--follow]\n  alimbo logs feishu [--lines N] [--follow]\n  alimbo --help\n  alimbo --version`);
+  console.log(`alimbo CLI\n\nUsage:\n  alimbo [--port N]                        Start gateway on default port or override PORT in .env\n  alimbo watch --pairing-code XXXX [--cloud-url URL]\n  alimbo feishu --app-id XXX --app-secret XXX\n  alimbo init-hooks [--force]              Copy hook configs/scripts to current repo (.claude/.github)\n  alimbo unhook                            Remove hook configs/scripts from current repo (.claude/.github)\n  alimbo logs gateway [--lines N] [--follow]\n  alimbo logs feishu [--lines N] [--follow]\n  alimbo --help\n  alimbo --version`);
 }
 
 function runDistEntry(entryFile, args = []) {
@@ -115,14 +115,14 @@ function runLogsCommand(args = []) {
   runProcess("pm2", pm2Args, `pm2 ${pm2Args.join(" ")}`);
 }
 
-const [, , command = "setup", ...rest] = process.argv;
+const [, , commandOrOption = "", ...rest] = process.argv;
 
-if (command === "--help" || command === "-h" || command === "help") {
+if (commandOrOption === "--help" || commandOrOption === "-h" || commandOrOption === "help") {
   printHelp();
   process.exit(0);
 }
 
-if (command === "--version" || command === "-v" || command === "version") {
+if (commandOrOption === "--version" || commandOrOption === "-v" || commandOrOption === "version") {
   try {
     const pkgPath = path.resolve(__dirname, "../package.json");
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
@@ -134,12 +134,25 @@ if (command === "--version" || command === "-v" || command === "version") {
   }
 }
 
-if (command === "setup") {
-  runDistEntry("setup.js", rest);
-} else if (command === "logs") {
+if (!commandOrOption) {
+  runDistEntry("cli/gateway.js", []);
+} else if (commandOrOption === "logs") {
   runLogsCommand(rest);
+} else if (commandOrOption === "watch") {
+  runDistEntry("cli/watch.js", rest);
+} else if (commandOrOption === "feishu") {
+  runDistEntry("cli/feishu.js", rest);
+} else if (commandOrOption === "init-hooks") {
+  runDistEntry("cli/init-hooks.js", rest);
+} else if (commandOrOption === "unhook") {
+  runDistEntry("cli/unhook.js", rest);
+} else if (commandOrOption === "setup") {
+  console.error("[alimbo] `setup` is deprecated. use `alimbo watch --pairing-code <XXXX>` and `alimbo feishu --app-id ... --app-secret ...`");
+  process.exit(1);
+} else if (commandOrOption.startsWith("-")) {
+  runDistEntry("cli/gateway.js", [commandOrOption, ...rest]);
 } else {
-  console.error(`[alimbo] unknown command: ${command}`);
+  console.error(`[alimbo] unknown command: ${commandOrOption}`);
   printHelp();
   process.exit(1);
 }
