@@ -39,7 +39,7 @@ function toList(value, fallback = []) {
 
 function normalizeDecision(value, fallback = "deny") {
   const normalized = String(value ?? "").trim().toLowerCase();
-  if (["allow", "deny", "wait", "approved", "denied", "expired", "timeout", "waiting"].includes(normalized)) {
+  if (["allow", "deny", "ask", "wait", "waiting", "approved", "denied", "expired", "timeout"].includes(normalized)) {
     return normalized;
   }
   return fallback;
