@@ -1,6 +1,6 @@
 {
   "name": "alimbo",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": false,
   "description": "An AI agent gateway for tool orchestration, automation, and chat integrations.",
   "repository": {

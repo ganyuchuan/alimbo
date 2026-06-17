@@ -373,3 +373,96 @@ export async function withStdErrLogging(action) {
     console.warn = originalWarn;
   }
 }
+
+function parseGatewayBaseUrl(rawUrl) {
+  const text = String(rawUrl ?? "").trim();
+  if (!text) {
+    return "";
+  }
+
+  if (text.startsWith("ws://")) {
+    const withoutWs = text.slice("ws://".length);
+    const host = withoutWs.split("/")[0] || "127.0.0.1:18789";
+    return `http://${host}`;
+  }
+
+  if (text.startsWith("wss://")) {
+    const withoutWss = text.slice("wss://".length);
+    const host = withoutWss.split("/")[0] || "127.0.0.1:18789";
+    return `https://${host}`;
+  }
+
+  if (text.startsWith("http://") || text.startsWith("https://")) {
+    return text.replace(/\/+$/g, "");
+  }
+
+  return "";
+}
+
+export function resolveGatewayHookBaseUrl() {
+  const explicit = parseGatewayBaseUrl(process.env.COPILOT_HOOK_GATEWAY_URL);
+  if (explicit) {
+    return explicit;
+  }
+
+  const fromGatewayUrl = parseGatewayBaseUrl(process.env.FEISHU_GATEWAY_URL);
+  if (fromGatewayUrl) {
+    return fromGatewayUrl;
+  }
+
+  const port = toPositiveInt(process.env.PORT, 18789);
+  return `http://127.0.0.1:${port}`;
+}
+
+export function resolveGatewayHookToken() {
+  return String(
+    process.env.GATEWAY_TOKEN
+      ?? process.env.FEISHU_GATEWAY_TOKEN
+      ?? process.env.COPILOT_INTERCEPT_AUTH_TOKEN
+      ?? "",
+  ).trim();
+}
+
+export async function requestGatewayHook({
+  apiPath,
+  payload,
+  timeoutMs = 90_000,
+}) {
+  const baseUrl = resolveGatewayHookBaseUrl();
+  const token = resolveGatewayHookToken();
+  const normalizedPath = String(apiPath ?? "").trim();
+  if (!normalizedPath.startsWith("/")) {
+    throw new Error(`invalid apiPath: ${normalizedPath}`);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 90_000));
+
+  try {
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+
+    if (token) {
+      headers["x-gateway-token"] = token;
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${baseUrl}${normalizedPath}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload ?? {}),
+      signal: controller.signal,
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(`gateway hook request failed (${response.status}): ${String(data?.error ?? response.statusText ?? "request failed")}`);
+    }
+
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}

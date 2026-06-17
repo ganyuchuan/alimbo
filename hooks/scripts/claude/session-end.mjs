@@ -1,22 +1,10 @@
-import { reportInterceptEventByApi } from "../../../dist/agent-runtime/intercept-event.js";
-import { buildSessionLifecycleInterceptEvent } from "../../../dist/agent-runtime/activity-event-builder.js";
 import {
-  buildClaudeRequestIdCandidates,
   loadClaudeHookContext,
   normalizeClaudeHookInput,
   readJsonFromStdin,
+  requestGatewayHook,
   writeJson,
 } from "./_common.mjs";
-
-function pickRequestId(candidates) {
-  for (const item of candidates) {
-    const normalized = String(item ?? "").trim();
-    if (normalized) {
-      return normalized;
-    }
-  }
-  return "";
-}
 
 async function main() {
   const context = loadClaudeHookContext();
@@ -28,21 +16,30 @@ async function main() {
     return;
   }
 
-  const requestId = pickRequestId(buildClaudeRequestIdCandidates(input, normalized));
-  const event = buildSessionLifecycleInterceptEvent({
-    phase: "end",
-    sessionId: normalized.sessionId,
-    requestId,
+  const runtime = {
     workDir: normalized.workDir,
-    hint: "Claude session end",
-    includePrompt: true,
-  });
-
-  await reportInterceptEventByApi({
     interceptServerUrl: context.interceptServerUrl,
-    interceptAuthToken: context.interceptAuthToken,
-    interceptTimeoutMs: context.interceptTimeoutMs,
-    event,
+    interceptEnabled: context.interceptEnabled,
+    interceptTools: Array.from(context.interceptTools ?? []),
+    logPrefix: "[claude-code-hook][intercept]",
+    config: {
+      interceptAuthToken: context.interceptAuthToken,
+      interceptTimeoutMs: context.interceptTimeoutMs,
+      interceptPollIntervalMs: context.interceptPollIntervalMs,
+      interceptMaxWaitMs: context.interceptMaxWaitMs,
+      interceptFailOpen: context.interceptFailOpen,
+    },
+  };
+
+  await requestGatewayHook({
+    apiPath: "/api/hooks/session-end",
+    payload: {
+      provider: "claude",
+      input,
+      invocation: {},
+      runtime,
+    },
+    timeoutMs: Math.max(context.interceptTimeoutMs, 30000),
   }).catch(() => {
     // Ignore event upload failures in hooks.
   });

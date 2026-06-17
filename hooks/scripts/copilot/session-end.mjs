@@ -1,12 +1,7 @@
 import {
-  createCopilotHookRuntime,
-  handleCopilotOnSessionEnd,
-} from "../../../dist/agent-runtime/copilot-hook-handlers.js";
-import {
   loadEnvFromCwd,
-  markSessionEnd,
-  markSessionStart,
   readJsonFromStdin,
+  requestGatewayHook,
   toPositiveInt,
   writeJson,
 } from "../_common.mjs";
@@ -25,33 +20,28 @@ async function main() {
   }
 
   const workDir = String(input?.cwd ?? input?.workingDirectory ?? process.cwd()).trim();
-  const runtime = createCopilotHookRuntime(
-    {
+  const runtime = {
+    workDir,
+    interceptServerUrl,
+    interceptEnabled: true,
+    logPrefix: "[copilot-cli-hook][intercept]",
+    sessionLogPrefix: "[copilot-cli-hook][session]",
+    config: {
       interceptAuthToken,
       interceptTimeoutMs,
     },
-    {
-      workDir,
-      interceptServerUrl,
-      interceptEnabled: true,
-      logger: {
-        log: (...args) => {
-          process.stderr.write(`${args.map((item) => String(item)).join(" ")}\n`);
-        },
-        warn: (...args) => {
-          process.stderr.write(`${args.map((item) => String(item)).join(" ")}\n`);
-        },
-      },
-      logPrefix: "[copilot-cli-hook][intercept]",
-      sessionLogPrefix: "[copilot-cli-hook][session]",
-      lifecycleStateTracker: {
-        markStart: () => markSessionStart(),
-        markEnd: () => markSessionEnd(),
-      },
-    },
-  );
+  };
 
-  await handleCopilotOnSessionEnd(runtime, input, {}).catch(() => {
+  await requestGatewayHook({
+    apiPath: "/api/hooks/session-end",
+    payload: {
+      provider: "copilot",
+      input,
+      invocation: {},
+      runtime,
+    },
+    timeoutMs: Math.max(interceptTimeoutMs, 30000),
+  }).catch(() => {
     // Ignore event upload failures in hooks.
   });
 

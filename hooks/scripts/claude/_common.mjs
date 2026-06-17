@@ -5,6 +5,7 @@ import {
   loadEnvFromCwd,
   normalizeSet,
   parseCsv,
+  requestGatewayHook,
   readJsonFromStdin,
   safeCloneToolArgs,
   toPositiveInt,
@@ -138,6 +139,7 @@ export function buildClaudeRequestIdCandidates(input, normalizedInput) {
 
 export {
   collectHumanReadableHint,
+  requestGatewayHook,
   readJsonFromStdin,
   safeCloneToolArgs,
   toPositiveInt,

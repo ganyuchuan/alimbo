@@ -1,14 +1,10 @@
 import process from "node:process";
 import {
-  createCopilotHookRuntime,
-  handleCopilotOnPreToolUse,
-} from "../../../dist/agent-runtime/copilot-hook-handlers.js";
-import {
   getInterceptToolsSet,
   loadEnvFromCwd,
   readJsonFromStdin,
+  requestGatewayHook,
   toPositiveInt,
-  withStdErrLogging,
   writeJson,
 } from "../_common.mjs";
 
@@ -35,25 +31,33 @@ async function main() {
   const shouldUseIntercept = Boolean(interceptServerUrl && interceptTools.size > 0);
 
   if (shouldUseIntercept && interceptTools.has(toolName)) {
-    const runtime = createCopilotHookRuntime(
-      {
+    const runtime = {
+      workDir,
+      interceptServerUrl,
+      interceptEnabled: true,
+      interceptTools: Array.from(interceptTools),
+      logPrefix: "[copilot-cli-hook][intercept]",
+      sessionLogPrefix: "[copilot-cli-hook][session]",
+      config: {
         interceptAuthToken,
         interceptTimeoutMs,
         interceptPollIntervalMs,
         interceptMaxWaitMs,
         interceptFailOpen: isFailOpen,
       },
-      {
-        workDir,
-        interceptTools,
-        interceptServerUrl,
-        interceptEnabled: true,
-        logPrefix: "[copilot-cli-hook][intercept]",
-      },
-    );
+    };
 
     try {
-      const permission = await withStdErrLogging(() => handleCopilotOnPreToolUse(runtime, input));
+      const response = await requestGatewayHook({
+        apiPath: "/api/hooks/pretool",
+        payload: {
+          provider: "copilot",
+          input,
+          runtime,
+        },
+        timeoutMs: Math.max(interceptMaxWaitMs + 5000, interceptTimeoutMs, 60000),
+      });
+      const permission = response?.payload;
       writeJson(permission || { permissionDecision: "allow" });
       return;
     } catch (error) {
