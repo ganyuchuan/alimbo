@@ -184,9 +184,17 @@ type PairingCodeResolveBody = {
   pairingCode?: string;
 };
 
+type PairingCodeRefreshBody = {
+  authToken?: string;
+};
+
 function json(res, status, body) {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(body));
+}
+
+function logApi(req, pathname, message) {
+  console.log(`[cloud-server][api] ${String(req?.method ?? "-")} ${String(pathname ?? "-")} ${String(message ?? "")}`.trim());
 }
 
 function html(res, status, body) {
@@ -443,21 +451,27 @@ const server = createServer(async (req, res) => {
   const pathname = url.pathname;
 
   try {
+    logApi(req, pathname, "received");
+
     if (req.method === "GET" && (pathname === "/" || pathname === "/index.html")) {
+      logApi(req, pathname, "serve index page");
       return html(res, 200, renderIndexPage());
     }
 
     if (req.method === "GET" && pathname === "/SKILL.md") {
+      logApi(req, pathname, "serve onboarding markdown");
       res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8" });
       res.end(renderOnboardingMarkdown());
       return;
     }
 
     if (req.method === "GET" && pathname === "/intercepts/approve") {
+      logApi(req, pathname, "serve approval page");
       return html(res, 200, renderInterceptApprovalPage());
     }
 
     if (req.method === "GET" && pathname === "/health") {
+      logApi(req, pathname, "health ok");
       return json(res, 200, {
         ok: true
       });
@@ -466,7 +480,9 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && pathname === "/auth/token") {
       const body = await parseBody<AuthTokenBody>(req);
       const username = String(body?.username ?? "").trim();
+      logApi(req, pathname, `issue token requested username=${username || "-"}`);
       if (!username) {
+        logApi(req, pathname, "invalid request: username is required");
         return json(res, 400, { error: "username is required" });
       }
 
@@ -476,6 +492,7 @@ const server = createServer(async (req, res) => {
         userId: issued.userId,
         username: issued.username,
       });
+      logApi(req, pathname, `issued userId=${issued.userId} pairingCode=${pairing.pairingCode}`);
       return json(res, 200, {
         ok: true,
         userId: issued.userId,
@@ -491,14 +508,19 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && pathname === "/auth/pairing-token") {
       const body = await parseBody<PairingCodeResolveBody>(req);
       const pairingCode = String(body?.pairingCode ?? "").trim();
+      logApi(req, pathname, `resolve pairingCode=${pairingCode || "-"}`);
       if (!/^\d{4}$/.test(pairingCode)) {
+        logApi(req, pathname, "invalid request: pairingCode must be 4 digits");
         return json(res, 400, { error: "pairingCode must be 4 digits" });
       }
 
       const record = pairingCodeRegistry.resolve(pairingCode);
       if (!record) {
+        logApi(req, pathname, `pairingCode not found or expired code=${pairingCode}`);
         return json(res, 404, { error: "pairingCode not found or expired" });
       }
+
+      logApi(req, pathname, `resolved pairingCode=${pairingCode} userId=${record.userId}`);
 
       return json(res, 200, {
         ok: true,
@@ -510,9 +532,50 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    if (req.method === "POST" && pathname === "/auth/pairing-code/refresh") {
+      const authorization = String(req.headers.authorization ?? "").trim();
+      const tokenFromAuth = authorization.toLowerCase().startsWith("bearer ")
+        ? authorization.slice("bearer ".length).trim()
+        : "";
+
+      const body = await parseBody<PairingCodeRefreshBody>(req);
+      const tokenFromBody = String(body?.authToken ?? "").trim();
+      const authToken = tokenFromAuth || tokenFromBody;
+      logApi(req, pathname, `refresh requested tokenSource=${tokenFromAuth ? "header" : tokenFromBody ? "body" : "none"}`);
+
+      if (!authToken) {
+        logApi(req, pathname, "unauthorized: missing token");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      const principal = interceptStore.getUserByAuthToken(authToken);
+      if (!principal?.userId) {
+        logApi(req, pathname, "unauthorized: invalid token");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      const pairing = pairingCodeRegistry.issue({
+        authToken,
+        userId: principal.userId,
+        username: principal.username,
+      });
+      logApi(req, pathname, `refreshed pairingCode=${pairing.pairingCode} userId=${principal.userId}`);
+
+      return json(res, 200, {
+        ok: true,
+        pairingCode: pairing.pairingCode,
+        pairingCodeExpiresAtMs: pairing.expiresAtMs,
+        pairingCodeTtlMs,
+        userId: principal.userId,
+        username: principal.username,
+      });
+    }
+
     if (req.method === "GET" && pathname === "/auth/users") {
       const limit = toInt(url.searchParams.get("limit"), 100);
+      logApi(req, pathname, `list users limit=${limit}`);
       const users = interceptStore.listUsers(limit);
+      logApi(req, pathname, `list users count=${users.length}`);
       return json(res, 200, {
         ok: true,
         items: users,
@@ -522,12 +585,16 @@ const server = createServer(async (req, res) => {
     if (pathname.startsWith("/api/copilot/intercepts/")) {
       const principal = requireInterceptAuth(req, res);
       if (!principal) {
+        logApi(req, pathname, "auth failed");
         return;
       }
+
+      logApi(req, pathname, `auth ok userId=${principal.userId}`);
 
       const principalUserId = principal.userId;
 
       if (req.method === "GET" && pathname === "/api/copilot/intercepts/state") {
+        logApi(req, pathname, `load state userId=${principalUserId}`);
         const state = interceptStore.withTransaction(() => {
           const nextState = interceptStore.loadState(principalUserId);
           refreshTodayTokens(nextState);
@@ -544,6 +611,7 @@ const server = createServer(async (req, res) => {
       if (req.method === "GET" && pathname === "/api/copilot/intercepts/queue") {
         const statusFilter = String(url.searchParams.get("status") ?? "").trim().toLowerCase();
         const limit = toInt(url.searchParams.get("limit"), 100);
+        logApi(req, pathname, `load queue userId=${principalUserId} status=${statusFilter || "*"} limit=${limit}`);
         const items = interceptStore.withTransaction(() => {
           const state = interceptStore.loadState(principalUserId);
           const waitingItems = interceptStore.listRequests(principalUserId, { status: "waiting", limit: 1000000 });
@@ -566,12 +634,15 @@ const server = createServer(async (req, res) => {
           }).map(toQueueItem);
         });
 
+        logApi(req, pathname, `queue items=${items.length}`);
+
         return json(res, 200, { items });
       }
 
       if (req.method === "GET" && pathname === "/api/copilot/intercepts/tool-calls") {
         const requested = toInt(url.searchParams.get("limit"), 100);
         const limit = Math.min(requested, 500);
+        logApi(req, pathname, `load tool-calls userId=${principalUserId} requested=${requested} effective=${limit}`);
         const items = interceptStore.listToolCalls(principalUserId, limit).map((item) => ({
           id: item.id,
           sessionId: item.sessionId,
@@ -593,6 +664,7 @@ const server = createServer(async (req, res) => {
         const body = await parseBody<InterceptPretoolBody>(req);
         const request = body?.request;
         if (!request || typeof request !== "object") {
+          logApi(req, pathname, "invalid request payload");
           return json(res, 400, { error: "invalid request payload" });
         }
 
@@ -600,6 +672,7 @@ const server = createServer(async (req, res) => {
         const id = String(request.id ?? "").trim() || `perm_${crypto.randomUUID()}`;
         const tool = String(request.tool ?? "").trim().toLowerCase();
         if (!tool) {
+          logApi(req, pathname, "invalid request: request.tool is required");
           return json(res, 400, { error: "request.tool is required" });
         }
 
@@ -702,7 +775,9 @@ const server = createServer(async (req, res) => {
 
       if (req.method === "GET" && pathname === "/api/copilot/intercepts/decision") {
         const id = String(url.searchParams.get("id") ?? "").trim();
+        logApi(req, pathname, `get decision userId=${principalUserId} id=${id || "-"}`);
         if (!id) {
+          logApi(req, pathname, "invalid request: id is required");
           return json(res, 400, { error: "id is required" });
         }
 
@@ -724,8 +799,11 @@ const server = createServer(async (req, res) => {
         });
 
         if (!item) {
+          logApi(req, pathname, `decision not found id=${id}`);
           return notFound(res);
         }
+
+        logApi(req, pathname, `decision status=${item.status} id=${id}`);
 
         return json(res, 200, {
           id: item.id,
@@ -744,10 +822,13 @@ const server = createServer(async (req, res) => {
         const body = await parseBody<InterceptDecisionBody>(req);
         const id = String(body?.id ?? "").trim();
         const decision = normalizeDecision(body?.decision, "deny");
+        logApi(req, pathname, `set decision userId=${principalUserId} id=${id || "-"} decision=${decision}`);
         if (!id) {
+          logApi(req, pathname, "invalid request: id is required");
           return json(res, 400, { error: "id is required" });
         }
         if (!["allow", "deny", "approved", "denied"].includes(decision)) {
+          logApi(req, pathname, "invalid request: decision must be allow or deny");
           return json(res, 400, { error: "decision must be allow or deny" });
         }
 
@@ -789,8 +870,11 @@ const server = createServer(async (req, res) => {
         });
 
         if (!result) {
+          logApi(req, pathname, `decision target not found id=${id}`);
           return notFound(res);
         }
+
+        logApi(req, pathname, `decision saved id=${result.item.id} status=${result.item.status}`);
 
         return json(res, 200, {
           ok: true,
@@ -806,8 +890,11 @@ const server = createServer(async (req, res) => {
         const body = await parseBody<InterceptEventBody>(req);
         const event = body?.event;
         if (!event || typeof event !== "object") {
+          logApi(req, pathname, "invalid event payload");
           return json(res, 400, { error: "invalid event payload" });
         }
+
+        logApi(req, pathname, `event accepted userId=${principalUserId}`);
 
         const eventMsg = String(event.msg ?? "").trim();
         const eventEntry = String(event.entry ?? "").trim();
@@ -913,11 +1000,14 @@ const server = createServer(async (req, res) => {
         return json(res, 200, { ok: true, state: toPublicInterceptState(state) });
       }
 
+      logApi(req, pathname, "intercept route not found");
       return notFound(res);
     }
 
+    logApi(req, pathname, "route not found");
     return notFound(res);
   } catch (error) {
+    console.error(`[cloud-server][api] ${String(req?.method ?? "-")} ${String(pathname ?? "-")} error=${String(error?.message ?? error)}`);
     return json(res, 500, { error: String(error?.message ?? error) });
   }
 });

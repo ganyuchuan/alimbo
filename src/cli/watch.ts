@@ -35,7 +35,10 @@ function printHelp() {
 }
 
 async function resolveTokenByPairingCode({ cloudBaseUrl, pairingCode }: { cloudBaseUrl: string; pairingCode: string }) {
-  const payload = await fetchJson(`${cloudBaseUrl}/auth/pairing-token`, {
+  const endpoint = `${cloudBaseUrl}/auth/pairing-token`;
+  console.log(`[alimbo-watch] POST ${endpoint}`);
+
+  const payload = await fetchJson(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -61,6 +64,9 @@ async function verifyInterceptDecisionApi({
   authToken: string;
   workDir: string;
 }) {
+  const endpoint = `${cloudBaseUrl}/api/copilot/intercepts/pretool`;
+  console.log(`[alimbo-watch] POST ${endpoint}`);
+
   const result = await requestInterceptDecisionByApi({
     interceptServerUrl: cloudBaseUrl,
     interceptAuthToken: authToken,
@@ -108,6 +114,9 @@ async function reportWatchInterceptVerificationEvent({
     reason: string;
   };
 }) {
+  const endpoint = `${cloudBaseUrl}/api/copilot/intercepts/event`;
+  console.log(`[alimbo-watch] POST ${endpoint}`);
+
   const estimatedAtMs = Date.now();
   const promptTokens = 28;
   const outputTokens = 12;
@@ -161,7 +170,7 @@ async function main() {
 
   const cloudBaseUrl = readOption(args, "--cloud-url") || "https://go.aigc4me.cloud";
 
-  console.log("[alimbo-watch] Resolve token via /auth/pairing-token ...");
+  console.log(`[alimbo-watch] Resolve token via ${cloudBaseUrl}/auth/pairing-token ...`);
   const pairingPayload = await resolveTokenByPairingCode({ cloudBaseUrl, pairingCode });
   const token = String(pairingPayload.authToken ?? "").trim();
 
