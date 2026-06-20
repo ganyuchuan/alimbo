@@ -1,6 +1,8 @@
 .env
 .env.backup.*
 .DS_Store
+.claude/
+.github/
 node_modules/
 data/
 dist/

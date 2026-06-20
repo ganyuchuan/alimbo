@@ -148,8 +148,10 @@
         <div class="row" style="margin-top:8px;">
           <label>Pairing Code <input id="pairingCode" type="text" placeholder="4 digits" maxlength="4" /></label>
           <button id="resolvePairing" class="primary">Resolve Token by Pairing Code</button>
+          <button id="refreshPairing" class="primary">Refresh Pairing Code</button>
         </div>
         <p class="meta" id="tokenStatus">Issue a token to start.</p>
+        <p class="meta" id="pairingStatus"></p>
         <p class="meta" id="onboardingStatus"></p>
         <div id="usersTable"></div>
       </div>
@@ -190,9 +192,11 @@
       const refreshUsersBtn = $("refreshUsers");
       const pairingCodeInput = $("pairingCode");
       const resolvePairingBtn = $("resolvePairing");
+      const refreshPairingBtn = $("refreshPairing");
       const decidedByInput = $("decidedBy");
       const statusEl = $("status");
       const tokenStatusEl = $("tokenStatus");
+      const pairingStatusEl = $("pairingStatus");
       const onboardingStatusEl = $("onboardingStatus");
       const usersTableEl = $("usersTable");
       const listEl = $("list");
@@ -304,6 +308,45 @@
           ts(payload.expiresAtMs || 0);
         onboardingStatusEl.className = "meta";
         onboardingStatusEl.textContent = "";
+
+        return payload;
+      }
+
+      async function refreshPairingCode() {
+        const token = String(tokenInput.value || "").trim();
+        if (!token) {
+          throw new Error("auth token is required to refresh pairing code");
+        }
+
+        const response = await fetch("/auth/pairing-code/refresh", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: "Bearer " + token,
+          },
+          body: JSON.stringify({}),
+        });
+
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || response.statusText || "refresh pairing code failed");
+        }
+
+        const pairingCode = String(payload.pairingCode || "").trim();
+        if (!pairingCode) {
+          throw new Error("empty pairing code returned");
+        }
+
+        pairingCodeInput.value = pairingCode;
+        pairingStatusEl.className = "meta";
+        pairingStatusEl.textContent =
+          "Refreshed pairingCode=" +
+          pairingCode +
+          ", expires=" +
+          ts(payload.pairingCodeExpiresAtMs || 0) +
+          ", ttlMs=" +
+          String(payload.pairingCodeTtlMs || 0);
 
         return payload;
       }
@@ -566,12 +609,25 @@
         resolvePairingBtn.disabled = true;
         try {
           await resolvePairingToken();
+          pairingStatusEl.className = "meta";
+          pairingStatusEl.textContent = "Resolved pairing code at " + new Date().toLocaleTimeString();
           await refresh();
         } catch (error) {
           tokenStatusEl.textContent = String(error.message || error);
           tokenStatusEl.className = "error";
         } finally {
           resolvePairingBtn.disabled = false;
+        }
+      });
+      refreshPairingBtn.addEventListener("click", async () => {
+        refreshPairingBtn.disabled = true;
+        try {
+          await refreshPairingCode();
+        } catch (error) {
+          pairingStatusEl.textContent = String(error.message || error);
+          pairingStatusEl.className = "error";
+        } finally {
+          refreshPairingBtn.disabled = false;
         }
       });
       autoBtn.addEventListener("click", toggleAuto);

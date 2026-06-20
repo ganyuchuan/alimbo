@@ -35,9 +35,7 @@ export function createGatewayHttpServer(config: any) {
           return;
         }
 
-        let payload: any = {};
-        if (provider === "copilot") {
-          const phase = pathname === "/api/hooks/pretool"
+        const phase = pathname === "/api/hooks/pretool"
             ? "pretool"
             : pathname === "/api/hooks/posttool"
               ? "posttool"
@@ -45,6 +43,9 @@ export function createGatewayHttpServer(config: any) {
                 ? "session-start"
                 : "session-end";
 
+        let payload: any = {};
+        
+        if (provider === "copilot") {
           payload = await handleCopilotHookPhase({
             phase,
             input,
@@ -53,14 +54,6 @@ export function createGatewayHttpServer(config: any) {
             lifecycleTracker: copilotLifecycleTracker,
           });
         } else {
-          const phase = pathname === "/api/hooks/pretool"
-            ? "pretool"
-            : pathname === "/api/hooks/posttool"
-              ? "posttool"
-              : pathname === "/api/hooks/session-start"
-                ? "session-start"
-                : "session-end";
-
           payload = await handleClaudeHookPhase({
             phase,
             input,
