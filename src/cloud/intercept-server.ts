@@ -904,9 +904,11 @@ const server = createServer(async (req, res) => {
         const hasToolCall = Boolean(event.toolCall && typeof event.toolCall === "object");
         const hasTokenEstimate = Boolean(event.tokenEstimate && typeof event.tokenEstimate === "object");
         const hasStatePatch = Boolean(event.state && typeof event.state === "object");
+        const stateCompleted = typeof event?.state?.completed === "boolean" ? String(event.state.completed) : "unset";
+        const directCompleted = typeof event?.completed === "boolean" ? String(event.completed) : "unset";
 
         console.log(
-          `[cloud-server][intercept] event received user=${principalUserId} msg=${eventMsg ? "yes" : "no"} entry=${eventEntry ? "yes" : "no"} promptId=${eventPromptId || "-"} promptTool=${eventPromptTool || "-"} tokens=${Number.isFinite(eventTokens) ? eventTokens : 0} toolCall=${hasToolCall ? "yes" : "no"} tokenEstimate=${hasTokenEstimate ? "yes" : "no"} statePatch=${hasStatePatch ? "yes" : "no"} completed=${event.completed === true ? "yes" : "no"}`,
+          `[cloud-server][intercept] event received user=${principalUserId} msg=${eventMsg ? "yes" : "no"} entry=${eventEntry ? "yes" : "no"} promptId=${eventPromptId || "-"} promptTool=${eventPromptTool || "-"} tokens=${Number.isFinite(eventTokens) ? eventTokens : 0} toolCall=${hasToolCall ? "yes" : "no"} tokenEstimate=${hasTokenEstimate ? "yes" : "no"} statePatch=${hasStatePatch ? "yes" : "no"} completed=${event.completed === true ? "yes" : "no"} stateCompleted=${stateCompleted} directCompleted=${directCompleted}`,
         );
 
         const state = interceptStore.withTransaction(() => {
@@ -956,7 +958,7 @@ const server = createServer(async (req, res) => {
             }
 
             console.log(
-              `[cloud-server][intercept] event state patch user=${principalUserId} total=${nextState.total} running=${nextState.running} waiting=${nextState.waiting} completed=${nextState.completed ? "yes" : "no"}`,
+              `[cloud-server][intercept] event state patch user=${principalUserId} incomingCompleted=${typeof event.state.completed === "boolean" ? String(event.state.completed) : "unset"} total=${nextState.total} running=${nextState.running} waiting=${nextState.waiting} completed=${nextState.completed ? "yes" : "no"}`,
             );
           }
 
@@ -985,6 +987,7 @@ const server = createServer(async (req, res) => {
           if (event.completed === true) {
             nextState.completed = true;
             nextState.last_completed_at_ms = Date.now();
+            console.log(`[cloud-server][intercept] event direct completed user=${principalUserId} source=event.completed`);
           }
 
           updateStateCounters(nextState);

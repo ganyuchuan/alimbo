@@ -43,6 +43,20 @@ export function createGatewayHttpServer(config: any) {
                 ? "session-start"
                 : "session-end";
 
+        const sessionId = String(
+            input?.session_id
+              ?? input?.sessionId
+              ?? input?.session?.id
+              ?? invocation?.session_id
+              ?? invocation?.sessionId
+              ?? invocation?.session?.id
+              ?? "",
+          ).trim() || "-";
+
+        console.log(
+            `[gateway][http-server] received provider=${provider} sessionId=${sessionId} interceptEnabled=${runtime.interceptEnabled ? "yes" : "no"} interceptUrl=${runtime.interceptServerUrl || "-"}`,
+        );
+
         let payload: any = {};
         
         if (provider === "copilot") {
