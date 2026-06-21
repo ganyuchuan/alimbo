@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import fs from "node:fs";
 import os from "node:os";
 import { createApnsClient, loadApnsPrivateKeyFromEnv } from "./apns-client.js";
+import { apnsStore } from "./apns-store.js";
 import { interceptStore } from "./intercept-store.js";
 import { createPairingCodeRegistry } from "./pairing-code-registry.js";
 
@@ -211,6 +212,11 @@ type ApnsAlertBody = {
   mutableContent?: boolean;
   contentAvailable?: boolean;
   data?: Record<string, unknown>;
+};
+
+type ApnsRegisterBody = {
+  authToken?: string;
+  deviceToken?: string;
 };
 
 function json(res, status, body) {
@@ -593,6 +599,38 @@ const server = createServer(async (req, res) => {
         pairingCodeTtlMs,
         userId: principal.userId,
         username: principal.username,
+      });
+    }
+
+    if (req.method === "POST" && pathname === "/api/apns/register") {
+      const body = await parseBody<ApnsRegisterBody>(req);
+      const authToken = String(body?.authToken ?? "").trim();
+      const deviceToken = String(body?.deviceToken ?? "").replace(/\s+/g, "").trim();
+
+      if (!authToken) {
+        logApi(req, pathname, "unauthorized: authToken is required");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      if (!deviceToken) {
+        logApi(req, pathname, "invalid request: deviceToken is required");
+        return json(res, 400, { error: "deviceToken is required" });
+      }
+
+      const principal = interceptStore.getUserByAuthToken(authToken);
+      if (!principal?.userId) {
+        logApi(req, pathname, "unauthorized: invalid authToken");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      const bound = apnsStore.bindDeviceToken(principal.userId, deviceToken);
+      logApi(req, pathname, `registered apns device userId=${bound.userId}`);
+
+      return json(res, 200, {
+        ok: true,
+        userId: bound.userId,
+        deviceToken: bound.deviceToken,
+        updatedAtMs: bound.updatedAtMs,
       });
     }
 
