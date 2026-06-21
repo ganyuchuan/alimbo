@@ -2,6 +2,31 @@
 
 ## 2026-06-21
 
+### 41) queue 轮询日志限流修复 + APNs 拦截通知调试日志增强
+
+变更目标：
+- 修复 `GET /api/copilot/intercepts/queue` 在 `items>0` 场景下仍高频刷日志的问题。
+- 为 APNs 拦截通知链路增加关键调试日志，便于定位“为何未推送/是否被防重/实际发送结果”。
+
+主要改动：
+- `src/cloud/intercept-server.ts`
+  - queue 日志输出策略改为：
+    - 首次出现打印
+    - 队列数量变化立即打印
+    - 数量不变时按节流窗口打印（避免轮询刷屏）
+  - 新增 APNs 通知关键日志（`sendApnsInterceptNotification`）：
+    - start：记录 `userId/requestId/tool/decision/eventKey`
+    - skip：记录跳过原因（disabled/not-configured/invalid-args/duplicate/no-device-tokens）
+    - dedupe：记录 `eventKey` 与 `isNew`
+    - send begin/done：记录设备数与成功/失败统计
+    - send failed：逐条记录 APNs `status/reason`
+- `src/cloud/apns-store.ts`
+  - 新增 `apns_push_events` 防重表与索引。
+  - 新增 `listDeviceTokensByUserId` 与 `markPushEventIfNew`，用于按 `eventKey` 持久化防重。
+
+验证记录：
+- `npm run build`：通过
+
 ### 40) APNs 推送最小闭环接入（http2 client + cloud alert API + smoke test）
 
 变更目标：

@@ -174,6 +174,9 @@ type InterceptEventPayload = {
     outputPreview?: string;
     estimatedAtMs?: number | string;
   };
+  meta?: {
+    requestId?: string;
+  };
   completed?: boolean;
 };
 
@@ -225,6 +228,14 @@ function json(res, status, body) {
 }
 
 function logApi(req, pathname, message) {
+  const ignorePaths = new Set([
+    "/api/copilot/intercepts/state",
+    "/api/copilot/intercepts/queue",
+    "/api/copilot/intercepts/tool-calls",
+  ]);
+  if (ignorePaths.has(pathname)) {
+    return;
+  }
   console.log(`[cloud-server][api] ${String(req?.method ?? "-")} ${String(pathname ?? "-")} ${String(message ?? "")}`.trim());
 }
 
@@ -475,6 +486,108 @@ function toPublicInterceptState(state) {
     prompt: state.prompt,
     last_token_estimate: state.last_token_estimate,
   };
+}
+
+async function sendApnsInterceptNotification({
+  userId,
+  requestId,
+  tool,
+  decision,
+  title,
+  message,
+  eventKey,
+}: {
+  userId: string;
+  requestId: string;
+  tool: string;
+  decision: string;
+  title: string;
+  message: string;
+  eventKey: string;
+}) {
+  const normalizedUserId = String(userId ?? "").trim();
+  const normalizedRequestId = String(requestId ?? "").trim();
+  const normalizedTool = String(tool ?? "").trim().toLowerCase() || "unknown";
+  const normalizedDecision = String(decision ?? "").trim().toLowerCase() || "unknown";
+  const normalizedEventKey = String(eventKey ?? "").trim();
+
+  console.log(
+    `[cloud-server][apns] intercept notify start userId=${normalizedUserId || "-"} requestId=${normalizedRequestId || "-"} tool=${normalizedTool} decision=${normalizedDecision} eventKey=${normalizedEventKey || "-"}`,
+  );
+
+  if (!apnsEnabled) {
+    console.log("[cloud-server][apns] intercept notify skip reason=apns_disabled");
+    return;
+  }
+
+  if (!apnsClient.isConfigured()) {
+    console.log("[cloud-server][apns] intercept notify skip reason=apns_not_configured");
+    return;
+  }
+
+  if (!normalizedUserId || !normalizedRequestId || !normalizedEventKey) {
+    console.log(
+      `[cloud-server][apns] intercept notify skip reason=invalid_args userId=${normalizedUserId ? "ok" : "missing"} requestId=${normalizedRequestId ? "ok" : "missing"} eventKey=${normalizedEventKey ? "ok" : "missing"}`,
+    );
+    return;
+  }
+
+  const isNewEvent = apnsStore.markPushEventIfNew({
+    eventKey: normalizedEventKey,
+    userId: normalizedUserId,
+    requestId: normalizedRequestId,
+    tool: normalizedTool,
+    decision: normalizedDecision,
+  });
+
+  console.log(
+    `[cloud-server][apns] intercept notify dedupe eventKey=${normalizedEventKey} isNew=${isNewEvent ? "yes" : "no"}`,
+  );
+
+  if (!isNewEvent) {
+    console.log("[cloud-server][apns] intercept notify skip reason=duplicate_event");
+    return;
+  }
+
+  const deviceTokens = apnsStore.listDeviceTokensByUserId(normalizedUserId);
+  if (deviceTokens.length === 0) {
+    console.log(
+      `[cloud-server][apns] intercept notify skip reason=no_device_tokens userId=${normalizedUserId}`,
+    );
+    return;
+  }
+
+  console.log(
+    `[cloud-server][apns] intercept notify send begin userId=${normalizedUserId} deviceTokens=${deviceTokens.length}`,
+  );
+
+  const results = await Promise.all(deviceTokens.map((deviceToken) => apnsClient.sendAlert({
+    deviceToken,
+    title,
+    body: `${message}\nrequestId=${normalizedRequestId} tool=${normalizedTool} decision=${normalizedDecision}`,
+    sound: "default",
+    data: {
+      source: "intercept-server",
+      requestId: normalizedRequestId,
+      tool: normalizedTool,
+      decision: normalizedDecision,
+      eventKey: normalizedEventKey,
+    },
+  })));
+
+  const successCount = results.filter((item) => item?.ok).length;
+  const failureCount = results.length - successCount;
+  console.log(
+    `[cloud-server][apns] intercept notify send done userId=${normalizedUserId} requestId=${normalizedRequestId} success=${successCount} failure=${failureCount}`,
+  );
+
+  for (const result of results) {
+    if (!result?.ok) {
+      console.warn(
+        `[cloud-server][apns] intercept notify send failed requestId=${normalizedRequestId} apnsStatus=${String(result?.status ?? "-")} reason=${String(result?.reason ?? "-")}`,
+      );
+    }
+  }
 }
 
 const server = createServer(async (req, res) => {
@@ -823,6 +936,18 @@ const server = createServer(async (req, res) => {
           };
         });
 
+        if (result.item.status === "waiting") {
+          await sendApnsInterceptNotification({
+            userId: principalUserId,
+            requestId: result.item.id,
+            tool: result.item.tool,
+            decision: "wait",
+            title: "Approval Required",
+            message: "A tool call is waiting for manual approval.",
+            eventKey: `pretool-wait:${principalUserId}:${result.item.id}`,
+          });
+        }
+
         return json(res, 200, {
           ok: true,
           id,
@@ -1062,6 +1187,25 @@ const server = createServer(async (req, res) => {
 
           return nextState;
         });
+
+        const lifecycleCompleted = event?.state?.completed === true || event?.completed === true;
+        if (lifecycleCompleted) {
+          const requestId = String(event?.prompt?.id ?? event?.meta?.requestId ?? "").trim();
+          if (!requestId) {
+            logApi(req, pathname, `skip apns completed push userId=${principalUserId} reason=missing_request_id`);
+            return json(res, 200, { ok: true, state: toPublicInterceptState(state) });
+          }
+          const tool = String(event?.prompt?.tool ?? "session").trim() || "session";
+          await sendApnsInterceptNotification({
+            userId: principalUserId,
+            requestId,
+            tool,
+            decision: "completed",
+            title: "Session Completed",
+            message: String(event?.msg ?? "Session completed.").trim() || "Session completed.",
+            eventKey: `session-completed:${principalUserId}:${requestId}`,
+          });
+        }
 
         return json(res, 200, { ok: true, state: toPublicInterceptState(state) });
       }

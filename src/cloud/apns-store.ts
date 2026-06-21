@@ -25,6 +25,18 @@ function openDatabase(dbFile: string) {
 
     CREATE INDEX IF NOT EXISTS idx_apns_device_bindings_user_id
       ON apns_device_bindings(user_id, updated_at_ms DESC);
+
+    CREATE TABLE IF NOT EXISTS apns_push_events (
+      event_key TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      request_id TEXT NOT NULL,
+      tool TEXT NOT NULL,
+      decision TEXT NOT NULL,
+      created_at_ms INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_apns_push_events_user_created_at
+      ON apns_push_events(user_id, created_at_ms DESC);
   `);
 
   return database;
@@ -77,6 +89,65 @@ class ApnsStore {
       deviceToken: normalizedToken,
       updatedAtMs: now,
     };
+  }
+
+  listDeviceTokensByUserId(userId: string) {
+    const normalizedUserId = String(userId ?? "").trim();
+    if (!normalizedUserId) {
+      return [];
+    }
+
+    const rows = this.db.prepare(`
+      SELECT device_token
+      FROM apns_device_bindings
+      WHERE user_id = ?
+      ORDER BY updated_at_ms DESC, device_token DESC
+    `).all(normalizedUserId);
+
+    return rows
+      .map((row: any) => normalizeDeviceToken(row?.device_token))
+      .filter((token: string) => isLikelyDeviceToken(token));
+  }
+
+  markPushEventIfNew({
+    eventKey,
+    userId,
+    requestId,
+    tool,
+    decision,
+    now = Date.now(),
+  }: {
+    eventKey: string;
+    userId: string;
+    requestId: string;
+    tool: string;
+    decision: string;
+    now?: number;
+  }) {
+    const normalizedEventKey = String(eventKey ?? "").trim();
+    const normalizedUserId = String(userId ?? "").trim();
+    const normalizedRequestId = String(requestId ?? "").trim();
+    const normalizedTool = String(tool ?? "").trim().toLowerCase() || "unknown";
+    const normalizedDecision = String(decision ?? "").trim().toLowerCase() || "unknown";
+
+    if (!normalizedEventKey || !normalizedUserId || !normalizedRequestId) {
+      return false;
+    }
+
+    const result = this.db.prepare(`
+      INSERT INTO apns_push_events (event_key, user_id, request_id, tool, decision, created_at_ms)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(event_key) DO NOTHING
+    `).run(
+      normalizedEventKey,
+      normalizedUserId,
+      normalizedRequestId,
+      normalizedTool,
+      normalizedDecision,
+      now,
+    );
+
+    return Number(result?.changes ?? 0) > 0;
   }
 }
 
