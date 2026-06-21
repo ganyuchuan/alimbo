@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import dotenv from "dotenv";
 import fs from "node:fs";
 import os from "node:os";
+import { createApnsClient, loadApnsPrivateKeyFromEnv } from "./apns-client.js";
 import { interceptStore } from "./intercept-store.js";
 import { createPairingCodeRegistry } from "./pairing-code-registry.js";
 
@@ -64,6 +65,16 @@ const interceptPollAfterMs = toInt(process.env.CLOUD_INTERCEPT_POLL_AFTER_MS, 10
 const maxStateEntries = 50;
 const pairingCodeTtlMs = 30 * 60 * 1000;
 const pairingCodeRegistry = createPairingCodeRegistry({ ttlMs: pairingCodeTtlMs });
+const apnsEnabled = toBool(process.env.APNS_ENABLED, false);
+const apnsUseSandbox = toBool(process.env.APNS_USE_SANDBOX, true);
+const apnsClient = createApnsClient({
+  enabled: apnsEnabled,
+  teamId: String(process.env.APNS_TEAM_ID ?? "").trim(),
+  keyId: String(process.env.APNS_KEY_ID ?? "").trim(),
+  topic: String(process.env.APNS_TOPIC ?? "").trim(),
+  privateKey: loadApnsPrivateKeyFromEnv(),
+  useSandbox: apnsUseSandbox,
+});
 
 function setToArray(setLike) {
   return Array.isArray(setLike) ? setLike : [...setLike];
@@ -186,6 +197,20 @@ type PairingCodeResolveBody = {
 
 type PairingCodeRefreshBody = {
   authToken?: string;
+};
+
+type ApnsAlertBody = {
+  deviceToken?: string;
+  title?: string;
+  body?: string;
+  subtitle?: string;
+  sound?: string;
+  badge?: number | string;
+  threadId?: string;
+  category?: string;
+  mutableContent?: boolean;
+  contentAvailable?: boolean;
+  data?: Record<string, unknown>;
 };
 
 function json(res, status, body) {
@@ -1003,6 +1028,68 @@ const server = createServer(async (req, res) => {
         return json(res, 200, { ok: true, state: toPublicInterceptState(state) });
       }
 
+      if (req.method === "POST" && pathname === "/api/copilot/intercepts/apns/alert") {
+        const body = await parseBody<ApnsAlertBody>(req);
+        const deviceToken = String(body?.deviceToken ?? "").replace(/\s+/g, "").trim();
+        const title = String(body?.title ?? "").trim();
+        const message = String(body?.body ?? "").trim();
+        const badge = Number.parseInt(String(body?.badge ?? ""), 10);
+
+        logApi(
+          req,
+          pathname,
+          `apns alert request userId=${principalUserId} enabled=${apnsClient.isEnabled() ? "yes" : "no"} configured=${apnsClient.isConfigured() ? "yes" : "no"}`,
+        );
+
+        if (!apnsClient.isEnabled()) {
+          logApi(req, pathname, "apns alert rejected: APNS_ENABLED=false");
+          return json(res, 503, { ok: false, error: "apns disabled" });
+        }
+
+        if (!apnsClient.isConfigured()) {
+          logApi(req, pathname, "apns alert rejected: APNS not configured");
+          return json(res, 503, { ok: false, error: "apns not configured" });
+        }
+
+        if (!deviceToken) {
+          logApi(req, pathname, "apns alert invalid request: deviceToken is required");
+          return json(res, 400, { ok: false, error: "deviceToken is required" });
+        }
+
+        if (!title || !message) {
+          logApi(req, pathname, "apns alert invalid request: title and body are required");
+          return json(res, 400, { ok: false, error: "title and body are required" });
+        }
+
+        const result = await apnsClient.sendAlert({
+          deviceToken,
+          title,
+          body: message,
+          subtitle: String(body?.subtitle ?? "").trim() || undefined,
+          sound: String(body?.sound ?? "").trim() || undefined,
+          badge: Number.isFinite(badge) ? badge : undefined,
+          threadId: String(body?.threadId ?? "").trim() || undefined,
+          category: String(body?.category ?? "").trim() || undefined,
+          mutableContent: body?.mutableContent === true,
+          contentAvailable: body?.contentAvailable === true,
+          data: body?.data && typeof body.data === "object" ? body.data : undefined,
+        });
+
+        logApi(
+          req,
+          pathname,
+          `apns alert result userId=${principalUserId} ok=${result.ok ? "yes" : "no"} apnsStatus=${result.status} reason=${result.reason || "-"}`,
+        );
+
+        const statusCode = result.ok ? 200 : 502;
+        return json(res, statusCode, {
+          ok: result.ok,
+          apnsStatus: result.status,
+          apnsId: result.apnsId,
+          reason: result.reason,
+        });
+      }
+
       logApi(req, pathname, "intercept route not found");
       return notFound(res);
     }
@@ -1017,6 +1104,9 @@ const server = createServer(async (req, res) => {
 
 server.listen(port, "0.0.0.0", () => {
   console.log(`[cloud-server] listening on http://0.0.0.0:${port}`);
+  console.log(
+    `[cloud-server][apns] enabled=${apnsClient.isEnabled() ? "yes" : "no"} configured=${apnsClient.isConfigured() ? "yes" : "no"} endpoint=${apnsClient.endpoint}`,
+  );
   console.log(
     `[cloud-server][intercept] policy snapshot ${JSON.stringify(buildInterceptPolicySnapshot())}`,
   );

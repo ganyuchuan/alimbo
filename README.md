@@ -123,6 +123,22 @@ pm2 start npm --name alimbo-feishu -- run feishu
 pm2 start npm --name alimbo-cloud -- run cloud
 ```
 
+## APNs 联调（最小 smoke test）
+
+先确保 cloud-server 已启动，并在 `.env` 中配置好 APNs 相关变量（`APNS_ENABLED=true` 等）。
+
+一条命令验证 APNs alert 连通性：
+
+```bash
+bash scripts/apns-smoke.sh <ios_device_token>
+```
+
+可选参数：
+
+```bash
+bash scripts/apns-smoke.sh <ios_device_token> "自定义标题" "自定义正文"
+```
+
 ## 核心功能一览
 
 | 功能 | 说明 |

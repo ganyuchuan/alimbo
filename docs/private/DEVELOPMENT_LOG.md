@@ -1,5 +1,49 @@
 # Development Log
 
+## 2026-06-21
+
+### 40) APNs 推送最小闭环接入（http2 client + cloud alert API + smoke test）
+
+变更目标：
+- 新增原生 `http2` APNs client，支持通过 Apple Push Notification service 发送基础 alert。
+- 在 cloud intercept server 增加 APNs alert 路由，复用现有 Bearer 鉴权体系。
+- 提供一条命令可执行的联调脚本，降低 APNs 接入验证成本。
+- 收敛 APNs 私钥输入方式，移除 `APNS_PRIVATE_KEY`，仅保留 `APNS_PRIVATE_KEY_PATH`。
+
+主要改动：
+- APNs client 新增
+  - 新增：`src/cloud/apns-client.ts`
+    - 原生 `node:http2` 连接 APNs 网关（sandbox / production）。
+    - Provider Token（ES256 JWT）生成与缓存。
+    - alert payload 组装与 APNs 响应解析（`apns-id` / `status` / `reason`）。
+    - 私钥统一从 `APNS_PRIVATE_KEY_PATH` 读取。
+- cloud 路由接入
+  - `src/cloud/intercept-server.ts`
+    - 新增 `POST /api/copilot/intercepts/apns/alert`。
+    - 新增 APNs 配置加载与启动日志：`enabled/configured/endpoint`。
+    - 路由内增加参数校验（`deviceToken/title/body`）与结果日志。
+- 联调脚本与文档
+  - 新增：`scripts/apns-smoke.sh`
+    - 调用 `/auth/token` 获取临时 auth token。
+    - 调用 `/api/copilot/intercepts/apns/alert` 发送示例 payload。
+    - 输出结构化结果（`ok/apnsStatus/apnsId/reason`）。
+    - `.env` 读取改为按键解析，避免 `source .env` 对多行私钥内容报错。
+  - `README.md`
+    - 新增 APNs 最小 smoke test 使用说明。
+- 配置与忽略规则
+  - `.env.example`
+    - 新增 APNs 配置项：`APNS_ENABLED/APNS_USE_SANDBOX/APNS_TEAM_ID/APNS_KEY_ID/APNS_TOPIC/APNS_PRIVATE_KEY_PATH`。
+  - `.gitignore`
+    - 新增 `.APNs/`，避免本地私钥目录误入库。
+
+兼容性说明：
+- `APNS_PRIVATE_KEY` 已从代码与配置模板移除，不再支持直接在 `.env` 中传私钥内容。
+- 当前仅支持通过 `APNS_PRIVATE_KEY_PATH` 指向 `.p8` 文件。
+
+验证记录：
+- `npm run build`：通过
+- `bash scripts/apns-smoke.sh <device_token>`：通过（`ok=yes`, `apnsStatus=200`）
+
 ## 2026-06-17
 
 ### 39) Gateway WebSocket 抽离 + HTTP hooks 接口统一
