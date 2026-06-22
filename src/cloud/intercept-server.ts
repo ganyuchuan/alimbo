@@ -256,6 +256,8 @@ function buildOnboardingUrl(req) {
 
 const interceptApprovalPagePath = new URL("./intercept-approval.html", import.meta.url);
 let interceptApprovalPageCache = "";
+const authUsersPagePath = new URL("./auth-users.html", import.meta.url);
+let authUsersPageCache = "";
 const indexPagePath = new URL("./index.html", import.meta.url);
 let indexPageCache = "";
 const onboardingMarkdownPath = new URL("./SKILL.md", import.meta.url);
@@ -274,6 +276,21 @@ function renderInterceptApprovalPage() {
   }
 
   return interceptApprovalPageCache;
+}
+
+function renderAuthUsersPage() {
+  if (authUsersPageCache) {
+    return authUsersPageCache;
+  }
+
+  try {
+    authUsersPageCache = fs.readFileSync(authUsersPagePath, "utf8");
+  } catch (error) {
+    console.warn(`[cloud-server][auth-users] failed to load users page: ${String(error?.message ?? error)}`);
+    authUsersPageCache = "<!doctype html><html><body><h1>Users page unavailable</h1></body></html>";
+  }
+
+  return authUsersPageCache;
 }
 
 function renderIndexPage() {
@@ -614,6 +631,11 @@ const server = createServer(async (req, res) => {
       return html(res, 200, renderInterceptApprovalPage());
     }
 
+    if (req.method === "GET" && pathname === "/auth/users-ui") {
+      logApi(req, pathname, "serve auth users page");
+      return html(res, 200, renderAuthUsersPage());
+    }
+
     if (req.method === "GET" && pathname === "/health") {
       logApi(req, pathname, "health ok");
       return json(res, 200, {
@@ -819,15 +841,23 @@ const server = createServer(async (req, res) => {
         const requested = toInt(url.searchParams.get("limit"), 100);
         const limit = Math.min(requested, 500);
         logApi(req, pathname, `load tool-calls userId=${principalUserId} requested=${requested} effective=${limit}`);
-        const items = interceptStore.listToolCalls(principalUserId, limit).map((item) => ({
-          id: item.id,
-          sessionId: item.sessionId,
-          tool: item.tool,
-          args: item.args ?? null,
-          result: item.result ?? null,
-          ts: item.ts,
-          workDir: item.workDir,
-        }));
+        const items = interceptStore.listToolCalls(principalUserId, limit).map((item) => {
+          const request = interceptStore.getRequestById(principalUserId, item.id);
+          return {
+            id: item.id,
+            sessionId: item.sessionId,
+            tool: item.tool,
+            args: item.args ?? null,
+            result: item.result ?? null,
+            ts: item.ts,
+            workDir: item.workDir,
+            interceptStatus: request?.status || "unknown",
+            interceptDecision: request?.decision || "unknown",
+            interceptReason: request?.reason || "",
+            interceptDecidedBy: request?.decidedBy || "",
+            interceptDecidedAtMs: request?.decidedAtMs || 0,
+          };
+        });
 
         return json(res, 200, {
           items,

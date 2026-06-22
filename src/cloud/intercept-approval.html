@@ -33,6 +33,19 @@
         margin-bottom: 14px;
         box-shadow: 0 6px 20px rgba(17, 29, 45, 0.05);
       }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 14px;
+        align-items: start;
+      }
+      .main {
+        min-width: 0;
+      }
+      .sidebar .panel {
+        position: sticky;
+        top: 16px;
+      }
       .title {
         margin: 0 0 10px;
         font-size: 18px;
@@ -94,6 +107,33 @@
       .tool {
         font-weight: 700;
       }
+      .decision-pill {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        background: #f7f9fb;
+        text-transform: uppercase;
+        letter-spacing: 0.2px;
+      }
+      .decision-allow {
+        color: #0f7a3a;
+        border-color: #89d6aa;
+        background: #ecfff3;
+      }
+      .decision-deny {
+        color: #b12a1e;
+        border-color: #edb0aa;
+        background: #fff1f0;
+      }
+      .decision-wait {
+        color: #8b6b11;
+        border-color: #e7d5a1;
+        background: #fff9e8;
+      }
       .empty {
         color: var(--muted);
       }
@@ -130,79 +170,73 @@
       th {
         background: #f7f9fb;
       }
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
       .token-cell {
         max-width: 320px;
         word-break: break-all;
+      }
+      @media (max-width: 920px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        .sidebar .panel {
+          position: static;
+        }
       }
     </style>
   </head>
   <body>
     <div class="wrap">
-      <div class="panel">
-        <h1 class="title">Auth Token Manager</h1>
-        <div class="row">
-          <label>User Name <input id="username" value="admin" placeholder="required" /></label>
-          <button id="issueToken" class="primary">Issue Token</button>
-          <button id="refreshUsers">Refresh Users</button>
+      <div class="hero">
+        <h1 class="title">Approval Workspace</h1>
+        <div class="row" style="justify-content: space-between;">
+          <a href="/auth/users-ui" style="color: var(--accent); text-decoration: none; font-weight: 700;">Open user management</a>
         </div>
-        <div class="row" style="margin-top:8px;">
-          <label>Pairing Code <input id="pairingCode" type="text" placeholder="4 digits" maxlength="4" /></label>
-          <button id="resolvePairing" class="primary">Resolve Token by Pairing Code</button>
-          <button id="refreshPairing" class="primary">Refresh Pairing Code</button>
+      </div>
+
+      <div class="layout">
+        <div class="main">
+          <div class="panel" id="summary"></div>
+
+          <div class="panel">
+            <div id="list"></div>
+          </div>
+
+          <div class="panel">
+            <h2 class="title">Recent Tool Calls</h2>
+            <div id="toolCalls"></div>
+          </div>
         </div>
-        <p class="meta" id="tokenStatus">Issue a token to start.</p>
-        <p class="meta" id="pairingStatus"></p>
-        <p class="meta" id="onboardingStatus"></p>
-        <div id="usersTable"></div>
-      </div>
 
-      <div class="panel">
-        <h1 class="title">Intercept Waiting Approval</h1>
-        <div class="row">
-          <label>Auth Token <input id="token" type="text" placeholder="paste or issue token" /></label>
-          <label>Decided By <input id="decidedBy" value="web-ui" /></label>
-          <button id="refresh" class="primary">Refresh</button>
-          <button id="auto">Auto 3s: ON</button>
-        </div>
-        <p class="meta" id="status">Loading...</p>
-      </div>
-
-      <div class="panel" id="summary"></div>
-
-      <div class="panel">
-        <h2 class="title">Latest Token Estimate</h2>
-        <div id="tokenEstimate"></div>
-      </div>
-
-      <div class="panel">
-        <div id="list"></div>
-      </div>
-
-      <div class="panel">
-        <h2 class="title">Recent Tool Calls</h2>
-        <div id="toolCalls"></div>
+        <aside class="sidebar">
+          <div class="panel">
+            <h1 class="title">Profile</h1>
+            <div class="column" style="gap:12px;">
+              <label>Auth Token <input id="token" type="text" placeholder="paste or issue token" /></label>
+              <label>Decided By <input id="decidedBy" value="web-ui" /></label>
+              <button id="refresh" class="primary">Refresh</button>
+              <button id="auto">Auto 3s: ON</button>
+            </div>
+            <p class="meta" id="status">Loading...</p>
+          </div>
+        </aside>
       </div>
     </div>
 
     <script>
       const $ = (id) => document.getElementById(id);
       const tokenInput = $("token");
-      const usernameInput = $("username");
-      const issueTokenBtn = $("issueToken");
-      const refreshUsersBtn = $("refreshUsers");
-      const pairingCodeInput = $("pairingCode");
-      const resolvePairingBtn = $("resolvePairing");
-      const refreshPairingBtn = $("refreshPairing");
       const decidedByInput = $("decidedBy");
       const statusEl = $("status");
-      const tokenStatusEl = $("tokenStatus");
-      const pairingStatusEl = $("pairingStatus");
-      const onboardingStatusEl = $("onboardingStatus");
-      const usersTableEl = $("usersTable");
       const listEl = $("list");
       const toolCallsEl = $("toolCalls");
       const summaryEl = $("summary");
-      const tokenEstimateEl = $("tokenEstimate");
       const refreshBtn = $("refresh");
       const autoBtn = $("auto");
       let timer = null;
@@ -214,141 +248,6 @@
           base.Authorization = "Bearer " + token;
         }
         return base;
-      }
-
-      async function issueAuthToken() {
-        const username = String(usernameInput.value || "").trim();
-        if (!username) {
-          throw new Error("username is required");
-        }
-
-        const response = await fetch("/auth/token", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({ username }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.error || response.statusText || "issue token failed");
-        }
-
-        const token = String(payload.authToken || "").trim();
-        if (!token) {
-          throw new Error("empty auth token returned");
-        }
-
-        const pairingCode = String(payload.pairingCode || "").trim();
-        if (pairingCode) {
-          pairingCodeInput.value = pairingCode;
-        }
-
-        const onboardingURL = String(payload.onboardingUrl || "").trim();
-
-        tokenInput.value = token;
-        tokenStatusEl.className = "meta";
-        tokenStatusEl.textContent =
-          "Token issued for userId=" +
-          (payload.userId || "-") +
-          ", pairingCode=" +
-          (pairingCode || "-") +
-          ", expires=" +
-          ts(payload.pairingCodeExpiresAtMs || 0);
-
-        onboardingStatusEl.className = "meta";
-        if (onboardingURL) {
-          onboardingStatusEl.innerHTML =
-            'Onboarding URL: <a href="' +
-            onboardingURL.replace(/"/g, "&quot;") +
-            '" target="_blank" rel="noopener noreferrer">' +
-            onboardingURL +
-            "</a>";
-        } else {
-          onboardingStatusEl.textContent = "Onboarding URL: -";
-        }
-
-        return payload;
-      }
-
-      async function resolvePairingToken() {
-        const pairingCode = String(pairingCodeInput.value || "").trim();
-        if (!/^\d{4}$/.test(pairingCode)) {
-          throw new Error("pairingCode must be 4 digits");
-        }
-
-        const response = await fetch("/auth/pairing-token", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({ pairingCode }),
-        });
-
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.error || response.statusText || "resolve pairing token failed");
-        }
-
-        const token = String(payload.authToken || "").trim();
-        if (!token) {
-          throw new Error("empty auth token returned");
-        }
-
-        tokenInput.value = token;
-        tokenStatusEl.className = "meta";
-        tokenStatusEl.textContent =
-          "Resolved token for userId=" +
-          (payload.userId || "-") +
-          ", pairingCode=" +
-          (payload.pairingCode || pairingCode) +
-          ", expires=" +
-          ts(payload.expiresAtMs || 0);
-        onboardingStatusEl.className = "meta";
-        onboardingStatusEl.textContent = "";
-
-        return payload;
-      }
-
-      async function refreshPairingCode() {
-        const token = String(tokenInput.value || "").trim();
-        if (!token) {
-          throw new Error("auth token is required to refresh pairing code");
-        }
-
-        const response = await fetch("/auth/pairing-code/refresh", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: "Bearer " + token,
-          },
-          body: JSON.stringify({}),
-        });
-
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.error || response.statusText || "refresh pairing code failed");
-        }
-
-        const pairingCode = String(payload.pairingCode || "").trim();
-        if (!pairingCode) {
-          throw new Error("empty pairing code returned");
-        }
-
-        pairingCodeInput.value = pairingCode;
-        pairingStatusEl.className = "meta";
-        pairingStatusEl.textContent =
-          "Refreshed pairingCode=" +
-          pairingCode +
-          ", expires=" +
-          ts(payload.pairingCodeExpiresAtMs || 0) +
-          ", ttlMs=" +
-          String(payload.pairingCodeTtlMs || 0);
-
-        return payload;
       }
 
       function ts(ms) {
@@ -387,30 +286,11 @@
 
       function renderState(state) {
         summaryEl.innerHTML =
+          '<h1 class="title">State</h1>' +
           '<span class="stat"><strong>Total:</strong> ' + (state.total ?? 0) + "</span>" +
           '<span class="stat"><strong>Waiting:</strong> ' + (state.waiting ?? 0) + "</span>" +
           '<span class="stat"><strong>Running:</strong> ' + (state.running ?? 0) + "</span>" +
-          '<span class="stat"><strong>Tokens:</strong> ' + (state.tokens ?? 0) + "</span>" +
-          '<span class="stat"><strong>Today:</strong> ' + (state.tokens_today ?? 0) + "</span>" +
-          '<span class="stat"><strong>Msg:</strong> ' + (state.msg || "-") + "</span>";
-      }
-
-      function renderTokenEstimate(detail) {
-        if (!detail || typeof detail !== "object") {
-          tokenEstimateEl.innerHTML = '<p class="empty">No token estimate yet.</p>';
-          return;
-        }
-
-        tokenEstimateEl.innerHTML =
-          '<div class="kv">' +
-          '<strong>Session</strong><span>' + (detail.sessionId || '-') + '</span>' +
-          '<strong>Total</strong><span>' + (detail.totalTokens ?? 0) + '</span>' +
-          '<strong>Prompt</strong><span>' + (detail.promptTokens ?? 0) + '</span>' +
-          '<strong>Output</strong><span>' + (detail.outputTokens ?? 0) + '</span>' +
-          '<strong>Estimated At</strong><span>' + ts(detail.estimatedAtMs) + '</span>' +
-          '</div>' +
-          '<div style="margin-top:10px;"><strong>Prompt Preview</strong><div class="preview">' + (detail.promptPreview || '-') + '</div></div>' +
-          '<div style="margin-top:10px;"><strong>Output Preview</strong><div class="preview">' + (detail.outputPreview || '-') + '</div></div>';
+          '<span class="stat"><strong>Completed:</strong> ' + (state.completed ?? 0) + "</span>";
       }
 
       function renderList(items) {
@@ -479,6 +359,20 @@
         return text.slice(0, max - 3) + "...";
       }
 
+      function decisionLabel(decision) {
+        const value = String(decision || "").trim().toLowerCase();
+        if (value === "allow" || value === "approved") {
+          return { text: "APPROVED", className: "decision-pill decision-allow" };
+        }
+        if (value === "deny" || value === "denied") {
+          return { text: "DENIED", className: "decision-pill decision-deny" };
+        }
+        if (value === "wait" || value === "waiting") {
+          return { text: "WAITING", className: "decision-pill decision-wait" };
+        }
+        return { text: "UNKNOWN", className: "decision-pill" };
+      }
+
       function renderToolCalls(items) {
         if (!Array.isArray(items) || items.length === 0) {
           toolCallsEl.innerHTML = '<p class="empty">No tool calls yet.</p>';
@@ -489,11 +383,24 @@
         for (const item of items) {
           const card = document.createElement("div");
           card.className = "item";
+          const decision = decisionLabel(item.interceptDecision);
           const argsText = shorten(JSON.stringify(item.args ?? null, null, 2));
           const resultText = shorten(JSON.stringify(item.result ?? null, null, 2));
+          const decisionMeta =
+            "status: " +
+            (item.interceptStatus || "-") +
+            " | by: " +
+            (item.interceptDecidedBy || "-") +
+            " | at: " +
+            ts(item.interceptDecidedAtMs || 0);
           card.innerHTML =
             '<div class="tool">' +
             (item.tool || "unknown") +
+            '<span class="' +
+            decision.className +
+            '">' +
+            decision.text +
+            "</span>" +
             ' <span class="meta">(' +
             (item.id || "-") +
             ")</span></div>" +
@@ -502,6 +409,12 @@
             " | time: " +
             ts(item.ts) +
             "</div>" +
+            '<div class="meta">' +
+            decisionMeta +
+            "</div>" +
+            (item.interceptReason
+              ? '<div class="meta">reason: ' + shorten(item.interceptReason, 200) + "</div>"
+              : "") +
             "<div><strong>Args</strong></div>" +
             "<pre>" +
             argsText +
@@ -514,39 +427,6 @@
         }
       }
 
-      function renderUsersTable(items) {
-        if (!Array.isArray(items) || items.length === 0) {
-          usersTableEl.innerHTML = '<p class="empty">No users yet.</p>';
-          return;
-        }
-
-        let html =
-          "<table><thead><tr>" +
-          "<th>User ID</th>" +
-          "<th>User Name</th>" +
-          "<th>Auth Token</th>" +
-          "<th>Updated</th>" +
-          "</tr></thead><tbody>";
-
-        for (const item of items) {
-          html +=
-            "<tr>" +
-            "<td>" + (item.userId || "-") + "</td>" +
-            "<td>" + (item.username || "-") + "</td>" +
-            '<td class="token-cell">' + (item.authToken || "-") + "</td>" +
-            "<td>" + ts(item.updatedAtMs || item.createdAtMs || 0) + "</td>" +
-            "</tr>";
-        }
-
-        html += "</tbody></table>";
-        usersTableEl.innerHTML = html;
-      }
-
-      async function refreshUsers() {
-        const payload = await fetchJson("/auth/users?limit=100");
-        renderUsersTable(payload.items || []);
-      }
-
       async function refresh() {
         statusEl.className = "meta";
         statusEl.textContent = "Refreshing...";
@@ -557,7 +437,6 @@
             fetchJson("/api/copilot/intercepts/tool-calls?limit=20"),
           ]);
           renderState(stateRes.state || {});
-          renderTokenEstimate((stateRes.state || {}).last_token_estimate || null);
           renderList(queueRes.items || []);
           renderToolCalls(toolCallsRes.items || []);
           statusEl.textContent = "Updated at " + new Date().toLocaleTimeString();
@@ -579,59 +458,7 @@
       }
 
       refreshBtn.addEventListener("click", refresh);
-      issueTokenBtn.addEventListener("click", async () => {
-        issueTokenBtn.disabled = true;
-        try {
-          await issueAuthToken();
-          await refreshUsers();
-          await refresh();
-        } catch (error) {
-          tokenStatusEl.textContent = String(error.message || error);
-          tokenStatusEl.className = "error";
-        } finally {
-          issueTokenBtn.disabled = false;
-        }
-      });
-      refreshUsersBtn.addEventListener("click", async () => {
-        refreshUsersBtn.disabled = true;
-        try {
-          await refreshUsers();
-          tokenStatusEl.className = "meta";
-          tokenStatusEl.textContent = "Users refreshed at " + new Date().toLocaleTimeString();
-        } catch (error) {
-          tokenStatusEl.textContent = String(error.message || error);
-          tokenStatusEl.className = "error";
-        } finally {
-          refreshUsersBtn.disabled = false;
-        }
-      });
-      resolvePairingBtn.addEventListener("click", async () => {
-        resolvePairingBtn.disabled = true;
-        try {
-          await resolvePairingToken();
-          pairingStatusEl.className = "meta";
-          pairingStatusEl.textContent = "Resolved pairing code at " + new Date().toLocaleTimeString();
-          await refresh();
-        } catch (error) {
-          tokenStatusEl.textContent = String(error.message || error);
-          tokenStatusEl.className = "error";
-        } finally {
-          resolvePairingBtn.disabled = false;
-        }
-      });
-      refreshPairingBtn.addEventListener("click", async () => {
-        refreshPairingBtn.disabled = true;
-        try {
-          await refreshPairingCode();
-        } catch (error) {
-          pairingStatusEl.textContent = String(error.message || error);
-          pairingStatusEl.className = "error";
-        } finally {
-          refreshPairingBtn.disabled = false;
-        }
-      });
       autoBtn.addEventListener("click", toggleAuto);
-      refreshUsers();
       refresh();
       timer = setInterval(refresh, 3000);
     </script>

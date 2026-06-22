@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cloud Auth Users</title>
+    <style>
+      :root {
+        --bg: #f3f6fb;
+        --card: #ffffff;
+        --border: #dbe3ec;
+        --text: #1f2a37;
+        --muted: #607080;
+        --accent: #0d8ddb;
+        --accent-2: #0967ab;
+        --danger: #c4382b;
+      }
+      body {
+        margin: 0;
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        background: linear-gradient(135deg, #eef5ff 0%, #f8fafc 48%, #eef6ef 100%);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 24px auto;
+        padding: 0 16px 24px;
+      }
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .hero h1 {
+        margin: 0;
+        font-size: 22px;
+      }
+      .hero p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .nav a {
+        display: inline-block;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        text-decoration: none;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.8);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.5fr 0.5fr;
+        gap: 16px;
+      }
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 16px;
+        box-shadow: 0 12px 30px rgba(16, 24, 40, 0.06);
+      }
+      .panel h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .stack {
+        display: grid;
+        gap: 10px;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      input {
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        min-width: 220px;
+        font: inherit;
+        color: var(--text);
+        background: #fff;
+      }
+      button {
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #fff;
+        cursor: pointer;
+        font: inherit;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      button.primary:hover {
+        background: var(--accent-2);
+        border-color: var(--accent-2);
+      }
+      button.danger {
+        background: var(--danger);
+        border-color: var(--danger);
+        color: #fff;
+      }
+      button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .error {
+        color: var(--danger);
+      }
+      .status-box {
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: #f8fbff;
+      }
+      .token-cell {
+        max-width: 320px;
+        word-break: break-all;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      th,
+      td {
+        border: 1px solid var(--border);
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: #f7f9fb;
+      }
+      .empty {
+        color: var(--muted);
+      }
+      @media (max-width: 900px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .hero {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="hero">
+        <div>
+          <h1>Auth Token Manager</h1>
+          <p>Issue tokens, refresh pairing codes, and inspect known users from a dedicated page.</p>
+        </div>
+        <div class="nav"><a href="/intercepts/approve">Open approval page</a></div>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <h2>Known Users</h2>
+          <div class="meta" id="usersSummary">Loading users...</div>
+          <div id="usersTable" style="margin-top: 12px;"></div>
+        </div>
+        <div class="panel">
+          <h2>User Management</h2>
+          <div class="stack">
+            <div class="row">
+              <label>Username <input id="username" value="admin" placeholder="required" /></label>
+              <button id="issueToken" class="primary">Issue Token</button>
+              <button id="refreshUsers">Refresh Users</button>
+            </div>
+            <div class="row">
+              <label>Pairing Code <input id="pairingCode" type="text" placeholder="4 digits" maxlength="4" /></label>
+              <button id="resolvePairing" class="primary">Resolve Token by Pairing Code</button>
+              <button id="refreshPairing" class="primary">Refresh Pairing Code</button>
+            </div>
+            <div class="status-box">
+              <div class="meta" id="tokenStatus">Issue a token to start.</div>
+              <div class="meta" id="pairingStatus"></div>
+              <div class="meta" id="onboardingStatus"></div>
+            </div>
+            <div>
+              <label>Auth Token <input id="token" type="text" placeholder="paste or issue token" /></label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const tokenInput = $("token");
+      const usernameInput = $("username");
+      const issueTokenBtn = $("issueToken");
+      const refreshUsersBtn = $("refreshUsers");
+      const pairingCodeInput = $("pairingCode");
+      const resolvePairingBtn = $("resolvePairing");
+      const refreshPairingBtn = $("refreshPairing");
+      const tokenStatusEl = $("tokenStatus");
+      const pairingStatusEl = $("pairingStatus");
+      const onboardingStatusEl = $("onboardingStatus");
+      const usersTableEl = $("usersTable");
+      const usersSummaryEl = $("usersSummary");
+
+      function ts(ms) {
+        if (!ms) return "-";
+        return new Date(ms).toLocaleString();
+      }
+
+      async function fetchJson(path, options = {}) {
+        const token = String(tokenInput.value || "").trim();
+        const response = await fetch(path, {
+          ...options,
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            ...(options.headers || {}),
+            ...(token ? { Authorization: "Bearer " + token } : {}),
+          },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || response.statusText || "request failed");
+        }
+        return payload;
+      }
+
+      async function issueAuthToken() {
+        const username = String(usernameInput.value || "").trim();
+        if (!username) {
+          throw new Error("username is required");
+        }
+
+        const response = await fetch("/auth/token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ username }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || response.statusText || "issue token failed");
+        }
+
+        const token = String(payload.authToken || "").trim();
+        if (!token) {
+          throw new Error("empty auth token returned");
+        }
+
+        const pairingCode = String(payload.pairingCode || "").trim();
+        if (pairingCode) {
+          pairingCodeInput.value = pairingCode;
+        }
+
+        tokenInput.value = token;
+        tokenStatusEl.className = "meta";
+        tokenStatusEl.textContent =
+          "Token issued for userId=" +
+          (payload.userId || "-") +
+          ", pairingCode=" +
+          (pairingCode || "-") +
+          ", expires=" +
+          ts(payload.pairingCodeExpiresAtMs || 0);
+
+        const onboardingURL = String(payload.onboardingUrl || "").trim();
+        onboardingStatusEl.className = "meta";
+        onboardingStatusEl.textContent = onboardingURL ? "Onboarding URL: " + onboardingURL : "Onboarding URL: -";
+
+        return payload;
+      }
+
+      async function resolvePairingToken() {
+        const pairingCode = String(pairingCodeInput.value || "").trim();
+        if (!/^\d{4}$/.test(pairingCode)) {
+          throw new Error("pairingCode must be 4 digits");
+        }
+
+        const response = await fetch("/auth/pairing-token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ pairingCode }),
+        });
+
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || response.statusText || "resolve pairing token failed");
+        }
+
+        const token = String(payload.authToken || "").trim();
+        if (!token) {
+          throw new Error("empty auth token returned");
+        }
+
+        tokenInput.value = token;
+        tokenStatusEl.className = "meta";
+        tokenStatusEl.textContent =
+          "Resolved token for userId=" +
+          (payload.userId || "-") +
+          ", pairingCode=" +
+          (payload.pairingCode || pairingCode) +
+          ", expires=" +
+          ts(payload.expiresAtMs || 0);
+        onboardingStatusEl.className = "meta";
+        onboardingStatusEl.textContent = "";
+
+        return payload;
+      }
+
+      async function refreshPairingCode() {
+        const token = String(tokenInput.value || "").trim();
+        if (!token) {
+          throw new Error("auth token is required to refresh pairing code");
+        }
+
+        const response = await fetch("/auth/pairing-code/refresh", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: "Bearer " + token,
+          },
+          body: JSON.stringify({}),
+        });
+
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || response.statusText || "refresh pairing code failed");
+        }
+
+        const pairingCode = String(payload.pairingCode || "").trim();
+        if (!pairingCode) {
+          throw new Error("empty pairing code returned");
+        }
+
+        pairingCodeInput.value = pairingCode;
+        pairingStatusEl.className = "meta";
+        pairingStatusEl.textContent =
+          "Refreshed pairingCode=" +
+          pairingCode +
+          ", expires=" +
+          ts(payload.pairingCodeExpiresAtMs || 0) +
+          ", ttlMs=" +
+          String(payload.pairingCodeTtlMs || 0);
+
+        return payload;
+      }
+
+      function renderUsersTable(items) {
+        if (!Array.isArray(items) || items.length === 0) {
+          usersSummaryEl.textContent = "No users yet.";
+          usersTableEl.innerHTML = '<p class="empty">No users yet.</p>';
+          return;
+        }
+
+        usersSummaryEl.textContent = "Loaded " + items.length + " users.";
+        let html =
+          "<table><thead><tr>" +
+          "<th>User ID</th>" +
+          "<th>User Name</th>" +
+          "<th>Auth Token</th>" +
+          "<th>Updated</th>" +
+          "</tr></thead><tbody>";
+
+        for (const item of items) {
+          html +=
+            "<tr>" +
+            "<td>" + (item.userId || "-") + "</td>" +
+            "<td>" + (item.username || "-") + "</td>" +
+            '<td class="token-cell">' + (item.authToken || "-") + "</td>" +
+            "<td>" + ts(item.updatedAtMs || item.createdAtMs || 0) + "</td>" +
+            "</tr>";
+        }
+
+        html += "</tbody></table>";
+        usersTableEl.innerHTML = html;
+      }
+
+      async function refreshUsers() {
+        usersSummaryEl.textContent = "Refreshing users...";
+        const payload = await fetchJson("/auth/users?limit=100");
+        renderUsersTable(payload.items || []);
+      }
+
+      issueTokenBtn.addEventListener("click", async () => {
+        issueTokenBtn.disabled = true;
+        try {
+          await issueAuthToken();
+          await refreshUsers();
+        } catch (error) {
+          tokenStatusEl.textContent = String(error.message || error);
+          tokenStatusEl.className = "error";
+        } finally {
+          issueTokenBtn.disabled = false;
+        }
+      });
+
+      refreshUsersBtn.addEventListener("click", async () => {
+        refreshUsersBtn.disabled = true;
+        try {
+          await refreshUsers();
+          tokenStatusEl.className = "meta";
+          tokenStatusEl.textContent = "Users refreshed at " + new Date().toLocaleTimeString();
+        } catch (error) {
+          tokenStatusEl.textContent = String(error.message || error);
+          tokenStatusEl.className = "error";
+        } finally {
+          refreshUsersBtn.disabled = false;
+        }
+      });
+
+      resolvePairingBtn.addEventListener("click", async () => {
+        resolvePairingBtn.disabled = true;
+        try {
+          await resolvePairingToken();
+          await refreshUsers();
+        } catch (error) {
+          tokenStatusEl.textContent = String(error.message || error);
+          tokenStatusEl.className = "error";
+        } finally {
+          resolvePairingBtn.disabled = false;
+        }
+      });
+
+      refreshPairingBtn.addEventListener("click", async () => {
+        refreshPairingBtn.disabled = true;
+        try {
+          await refreshPairingCode();
+        } catch (error) {
+          pairingStatusEl.textContent = String(error.message || error);
+          pairingStatusEl.className = "error";
+        } finally {
+          refreshPairingBtn.disabled = false;
+        }
+      });
+
+      refreshUsers().catch((error) => {
+        usersSummaryEl.textContent = String(error.message || error);
+        usersSummaryEl.className = "error";
+      });
+    </script>
+  </body>
+</html>
