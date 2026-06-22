@@ -1,18 +1,67 @@
 import path from "node:path";
 import process from "node:process";
 import fs from "node:fs";
-import dotenv from "dotenv";
 
 let envLoaded = false;
 
 const LIFECYCLE_STATE_FILE = path.resolve(process.env.HOME || ".", ".copilot/hooks/lifecycle-state.json");
+
+function parseDotEnvLine(line) {
+  const trimmed = String(line ?? "").trim();
+  if (!trimmed || trimmed.startsWith("#")) {
+    return null;
+  }
+
+  const firstEquals = trimmed.indexOf("=");
+  if (firstEquals <= 0) {
+    return null;
+  }
+
+  const key = trimmed.slice(0, firstEquals).trim();
+  if (!key) {
+    return null;
+  }
+
+  let value = trimmed.slice(firstEquals + 1).trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"'))
+    || (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+
+  return { key, value };
+}
+
+function loadEnvFile(envPath) {
+  try {
+    if (!fs.existsSync(envPath)) {
+      return;
+    }
+
+    const raw = fs.readFileSync(envPath, "utf8");
+    const lines = raw.split(/\r?\n/);
+    for (const line of lines) {
+      const parsed = parseDotEnvLine(line);
+      if (!parsed) {
+        continue;
+      }
+      if (Object.prototype.hasOwnProperty.call(process.env, parsed.key)) {
+        continue;
+      }
+      process.env[parsed.key] = parsed.value;
+    }
+  } catch {
+    // Ignore .env read/parse errors in hooks to avoid breaking startup.
+  }
+}
 
 export function loadEnvFromCwd() {
   if (envLoaded) {
     return;
   }
   const envPath = path.resolve(process.cwd(), ".env");
-  dotenv.config({ path: envPath, override: false, quiet: true });
+  loadEnvFile(envPath);
   envLoaded = true;
 }
 
