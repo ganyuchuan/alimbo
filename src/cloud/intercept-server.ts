@@ -773,10 +773,18 @@ const server = createServer(async (req, res) => {
       const limit = toInt(url.searchParams.get("limit"), 100);
       logApi(req, pathname, `list users limit=${limit}`);
       const users = interceptStore.listUsers(limit);
-      logApi(req, pathname, `list users count=${users.length}`);
+      const items = users.map((user) => {
+        const deviceTokens = apnsStore.listDeviceTokensByUserId(user.userId);
+        return {
+          ...user,
+          deviceTokens,
+          deviceToken: deviceTokens[0] || "",
+        };
+      });
+      logApi(req, pathname, `list users count=${items.length}`);
       return json(res, 200, {
         ok: true,
-        items: users,
+        items,
       });
     }
 

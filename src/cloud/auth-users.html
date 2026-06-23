@@ -382,6 +382,7 @@
           "<table><thead><tr>" +
           "<th>User ID</th>" +
           "<th>User Name</th>" +
+          "<th>Device Token</th>" +
           "<th>Auth Token</th>" +
           "<th>Updated</th>" +
           "</tr></thead><tbody>";
@@ -391,6 +392,7 @@
             "<tr>" +
             "<td>" + (item.userId || "-") + "</td>" +
             "<td>" + (item.username || "-") + "</td>" +
+            '<td class="token-cell">' + (item.deviceToken || "-") + "</td>" +
             '<td class="token-cell">' + (item.authToken || "-") + "</td>" +
             "<td>" + ts(item.updatedAtMs || item.createdAtMs || 0) + "</td>" +
             "</tr>";
