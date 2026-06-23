@@ -8,8 +8,16 @@ Alimbo 是一个桌面端助手，用来把你的 AI 助手与设备和服务连
 
 本说明用于帮助用户在桌面端安装 Alimbo、完成首次配置并与 Apple Watch 上的 Alimbo Buddy 进行配对，以及按需连接飞书机器人。
 
-## 前提
+## 前提（必读）
 
+### 版本仅限
+
+- Alimbo 桌面版本 0.2.3 | [alimbo-v0.2.3](https://github.com/ganyuchuan/alimbo/releases/tag/v0.2.3)
+- Alimbo Buddy 版本 1.0 Build 3｜Alimbo Buddy 1.0(3)
+
+### 桌面环境
+
+- 操作系统 macOS 或 Windows
 - 已安装 Node.js（推荐版本 20 及以上，我的是 v25.6.1）
 - 已安装 npm（随 Node.js 一起安装）
 - 已安装 PM2（可选，用于管理后台服务）
@@ -24,6 +32,11 @@ copilot --version
 ```bash
 claude --version
 ```
+
+### Apple Watch & iPhone
+
+- watchOS 26.0 或更高版本
+- iOS 26.0 或更高版本
 
 ## 快速开始
 

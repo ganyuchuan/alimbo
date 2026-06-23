@@ -3,6 +3,7 @@
 .DS_Store
 .claude/
 .github/
+.agentwatch/
 .APNs/
 node_modules/
 data/
