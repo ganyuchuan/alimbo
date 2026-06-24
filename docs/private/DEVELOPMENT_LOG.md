@@ -1,5 +1,34 @@
 # Development Log
 
+## 2026-06-24
+
+### 42) Gateway 新增本地 Unix Socket 接入（/tmp/alimbo.sock）
+
+变更目标：
+- 为本地 hook / Python 进程提供一个不依赖 WebSocket 握手的轻量接入点。
+- 让 Gateway 在保持原有 HTTP + WebSocket 能力不变的前提下，同时监听固定 Unix Socket 路径 `/tmp/alimbo.sock`。
+- 在进程关闭时清理陈旧 socket 文件，避免下次启动 bind 失败。
+
+主要改动：
+- `src/gateway/unix-socket-server.ts`
+  - 新增基于 `node:net` 的本地 Unix Socket 服务。
+  - 固定监听 `/tmp/alimbo.sock`。
+  - 启动前自动删除旧 socket 文件。
+  - 按换行分帧读取 JSON 文本消息。
+  - 对收到的 payload 打印简要日志：`event/sessionId/tool`。
+  - 关闭时销毁现有连接并清理 socket 文件。
+- `src/gateway/gateway-server.ts`
+  - Gateway 启动时先拉起 HTTP server，再启动 `unixSocketServer`。
+  - 若 Unix Socket 启动失败，回滚关闭 HTTP server 并抛错。
+  - Gateway 关闭时新增 `unixSocketServer.close()` 收口逻辑。
+
+兼容性说明：
+- 当前版本只监听 `/tmp/alimbo.sock`，不再创建 `agentwatch.sock` 别名。
+- 现阶段 Unix Socket 入口仅完成接入与日志观测，尚未把消息桥接到现有 `/api/hooks/*` 处理链路。
+
+验证记录：
+- `npm run build`：通过
+
 ## 2026-06-21
 
 ### 41) queue 轮询日志限流修复 + APNs 拦截通知调试日志增强
