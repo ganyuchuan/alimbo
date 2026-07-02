@@ -115,7 +115,7 @@ npm start
 npm run feishu
 
 # 启动云端服务（可选）
-npm run cloud-server
+npm run cloud
 
 # 通过 PM2 启动网关、飞书桥和云端服务
 pm2 start npm --name alimbo-gateway -- run start

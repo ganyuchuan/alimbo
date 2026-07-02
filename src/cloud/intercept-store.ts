@@ -34,6 +34,8 @@ function makeDefaultInterceptState() {
     tokens_today: 0,
     msg: "",
     entries: [],
+    agent: null,
+    work_dir: "",
     prompt: null,
     last_token_estimate: null,
     tokens_day: dayKey(),
@@ -77,6 +79,13 @@ function ensureInterceptState(raw) {
     tokens_today: Number.isFinite(raw.tokens_today) ? raw.tokens_today : fallback.tokens_today,
     msg: String(raw.msg ?? fallback.msg),
     entries: Array.isArray(raw.entries) ? raw.entries.slice(-50).map((item) => String(item ?? "")).filter(Boolean) : [],
+    agent: raw.agent && typeof raw.agent === "object"
+      ? {
+          provider: String(raw.agent.provider ?? "").trim().toLowerCase(),
+          version: String(raw.agent.version ?? "").trim(),
+        }
+      : null,
+    work_dir: String(raw.work_dir ?? "").trim(),
     prompt: raw.prompt && typeof raw.prompt === "object"
       ? {
           id: String(raw.prompt.id ?? "").trim(),
@@ -198,6 +207,8 @@ function migrateInterceptStateTableIfNeeded(database) {
       tokens_today INTEGER NOT NULL DEFAULT 0,
       msg TEXT NOT NULL DEFAULT '',
       entries_json TEXT NOT NULL DEFAULT '[]',
+      agent_json TEXT,
+      work_dir TEXT NOT NULL DEFAULT '',
       prompt_json TEXT,
       last_token_estimate_json TEXT,
       tokens_day TEXT NOT NULL,
@@ -214,6 +225,8 @@ function migrateInterceptStateTableIfNeeded(database) {
       tokens_today,
       msg,
       entries_json,
+      agent_json,
+      work_dir,
       prompt_json,
       last_token_estimate_json,
       tokens_day,
@@ -229,6 +242,8 @@ function migrateInterceptStateTableIfNeeded(database) {
       tokens_today,
       msg,
       entries_json,
+      NULL AS agent_json,
+      '' AS work_dir,
       prompt_json,
       last_token_estimate_json,
       tokens_day,
@@ -272,6 +287,8 @@ function openDatabase(dbFile) {
       tokens_today INTEGER NOT NULL DEFAULT 0,
       msg TEXT NOT NULL DEFAULT '',
       entries_json TEXT NOT NULL DEFAULT '[]',
+      agent_json TEXT,
+      work_dir TEXT NOT NULL DEFAULT '',
       prompt_json TEXT,
       last_token_estimate_json TEXT,
       tokens_day TEXT NOT NULL,
@@ -327,6 +344,8 @@ function openDatabase(dbFile) {
   migrateInterceptStateTableIfNeeded(database);
 
   tryExecMigration(database, "ALTER TABLE intercept_state ADD COLUMN user_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_state ADD COLUMN agent_json TEXT; ");
+  tryExecMigration(database, "ALTER TABLE intercept_state ADD COLUMN work_dir TEXT NOT NULL DEFAULT ''; ");
   tryExecMigration(database, "ALTER TABLE intercept_requests ADD COLUMN user_id TEXT NOT NULL DEFAULT ''; ");
   tryExecMigration(database, "ALTER TABLE intercept_tool_calls ADD COLUMN user_id TEXT NOT NULL DEFAULT ''; ");
 
@@ -384,6 +403,8 @@ class InterceptStore {
         tokens_today,
         msg,
         entries_json,
+        agent_json,
+        work_dir,
         prompt_json,
         last_token_estimate_json,
         tokens_day,
@@ -405,6 +426,8 @@ class InterceptStore {
       tokens_today: row.tokens_today,
       msg: row.msg,
       entries: parseJsonText(row.entries_json, []),
+      agent: parseJsonText(row.agent_json, null),
+      work_dir: row.work_dir,
       prompt: parseJsonText(row.prompt_json, null),
       last_token_estimate: parseJsonText(row.last_token_estimate_json, null),
       tokens_day: row.tokens_day,
@@ -425,11 +448,13 @@ class InterceptStore {
         tokens_today,
         msg,
         entries_json,
+        agent_json,
+        work_dir,
         prompt_json,
         last_token_estimate_json,
         tokens_day,
         last_completed_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         total = excluded.total,
         running = excluded.running,
@@ -439,6 +464,8 @@ class InterceptStore {
         tokens_today = excluded.tokens_today,
         msg = excluded.msg,
         entries_json = excluded.entries_json,
+        agent_json = excluded.agent_json,
+        work_dir = excluded.work_dir,
         prompt_json = excluded.prompt_json,
         last_token_estimate_json = excluded.last_token_estimate_json,
         tokens_day = excluded.tokens_day,
@@ -453,6 +480,8 @@ class InterceptStore {
       normalized.tokens_today,
       normalized.msg,
       stringifyJson(normalized.entries, "[]"),
+      stringifyJson(normalized.agent, "null"),
+      normalized.work_dir,
       stringifyJson(normalized.prompt, "null"),
       stringifyJson(normalized.last_token_estimate, "null"),
       normalized.tokens_day,

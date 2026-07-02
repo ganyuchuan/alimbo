@@ -1,5 +1,37 @@
 # Development Log
 
+## 2026-07-03
+
+### 43) Gateway -> Cloud 透传 Agent 运行时元数据（provider/version）并在审批页展示
+
+变更目标：
+- 将本地 gateway 的 `AGENT_PROVIDER` 作为运行时元数据随 intercept 事件上报到 cloud，避免 cloud 与本地配置漂移。
+- cloud 接收后把 agent 与 workDir 持久化到状态快照，支持页面刷新后继续可见。
+- 在审批页展示 `agent provider` 与 `workDir`，便于运维和排障定位。
+
+主要改动：
+- `src/agent-runtime/intercept-event.ts`
+  - 新增事件增强逻辑：上报前自动注入 `event.agent`。
+  - `agent.provider` 优先取 `event.agent`，其次回退 `AGENT_PROVIDER` / `event.meta.provider`。
+  - `agent.version` 从 `ALIMBO_VERSION` 或 `npm_package_version` 回填。
+- `src/cloud/intercept-server.ts`
+  - 扩展 `InterceptEventPayload`，支持 `agent/workDir/session.workDir`。
+  - `POST /api/copilot/intercepts/event` 接收后将 `agent` 与 `work_dir` 写入 state。
+  - `GET /api/copilot/intercepts/state` 对外返回 `agent` 与 `work_dir`。
+  - `GET /api/copilot/intercepts/tool-calls` 补充 `agentProvider` 字段，供审批页列表展示。
+- `src/cloud/intercept-store.ts`
+  - state 模型新增字段：`agent`、`work_dir`。
+  - SQLite `intercept_state` 表新增列：`agent_json`、`work_dir`。
+  - 增加迁移与兼容逻辑：老库自动补列，读写统一持久化新字段。
+- `src/cloud/intercept-approval.html`
+  - State 面板新增 `Agent` 与 `WorkDir` 展示。
+  - Recent Tool Calls 卡片新增 `agent` 与 `workDir` 展示。
+- `README.md`
+  - 启动 cloud 服务示例命令从 `npm run cloud-server` 对齐为 `npm run cloud`。
+
+验证记录：
+- `npm run build`：通过
+
 ## 2026-06-24
 
 ### 42) Gateway 新增本地 Unix Socket 接入（/tmp/alimbo.sock）

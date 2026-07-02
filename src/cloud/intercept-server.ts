@@ -151,6 +151,14 @@ type InterceptDecisionBody = {
 type InterceptEventPayload = {
   msg?: string;
   entry?: string;
+  workDir?: string;
+  session?: {
+    workDir?: string;
+  };
+  agent?: {
+    provider?: string;
+    version?: string;
+  };
   prompt?: {
     id?: string;
     tool?: string;
@@ -500,6 +508,8 @@ function toPublicInterceptState(state) {
     tokens_today: state.tokens_today,
     msg: state.msg,
     entries: state.entries,
+    agent: state.agent,
+    work_dir: state.work_dir,
     prompt: state.prompt,
     last_token_estimate: state.last_token_estimate,
   };
@@ -849,6 +859,9 @@ const server = createServer(async (req, res) => {
         const requested = toInt(url.searchParams.get("limit"), 100);
         const limit = Math.min(requested, 500);
         logApi(req, pathname, `load tool-calls userId=${principalUserId} requested=${requested} effective=${limit}`);
+        const state = interceptStore.loadState(principalUserId);
+        const agentProvider = String(state?.agent?.provider ?? "").trim();
+        const agentVersion = String(state?.agent?.version ?? "").trim();
         const items = interceptStore.listToolCalls(principalUserId, limit).map((item) => {
           const request = interceptStore.getRequestById(principalUserId, item.id);
           return {
@@ -859,6 +872,7 @@ const server = createServer(async (req, res) => {
             result: item.result ?? null,
             ts: item.ts,
             workDir: item.workDir,
+            agentProvider: agentProvider ? `${agentProvider}${agentVersion ? `@${agentVersion}` : ""}` : "",
             interceptStatus: request?.status || "unknown",
             interceptDecision: request?.decision || "unknown",
             interceptReason: request?.reason || "",
@@ -1126,6 +1140,9 @@ const server = createServer(async (req, res) => {
         const eventEntry = String(event.entry ?? "").trim();
         const eventPromptId = String(event.prompt?.id ?? "").trim();
         const eventPromptTool = String(event.prompt?.tool ?? "").trim();
+        const eventAgentProvider = String(event.agent?.provider ?? "").trim().toLowerCase();
+        const eventAgentVersion = String(event.agent?.version ?? "").trim();
+        const eventWorkDir = String(event.workDir ?? event.session?.workDir ?? event.toolCall?.workDir ?? "").trim();
         const eventTokens = Number.parseInt(String(event.tokens ?? "0"), 10);
         const hasToolCall = Boolean(event.toolCall && typeof event.toolCall === "object");
         const hasTokenEstimate = Boolean(event.tokenEstimate && typeof event.tokenEstimate === "object");
@@ -1134,7 +1151,7 @@ const server = createServer(async (req, res) => {
         const directCompleted = typeof event?.completed === "boolean" ? String(event.completed) : "unset";
 
         console.log(
-          `[cloud-server][intercept] event received user=${principalUserId} msg=${eventMsg ? "yes" : "no"} entry=${eventEntry ? "yes" : "no"} promptId=${eventPromptId || "-"} promptTool=${eventPromptTool || "-"} tokens=${Number.isFinite(eventTokens) ? eventTokens : 0} toolCall=${hasToolCall ? "yes" : "no"} tokenEstimate=${hasTokenEstimate ? "yes" : "no"} statePatch=${hasStatePatch ? "yes" : "no"} completed=${event.completed === true ? "yes" : "no"} stateCompleted=${stateCompleted} directCompleted=${directCompleted}`,
+          `[cloud-server][intercept] event received user=${principalUserId} msg=${eventMsg ? "yes" : "no"} entry=${eventEntry ? "yes" : "no"} promptId=${eventPromptId || "-"} promptTool=${eventPromptTool || "-"} agent=${eventAgentProvider || "-"}${eventAgentVersion ? `@${eventAgentVersion}` : ""} workDir=${eventWorkDir || "-"} tokens=${Number.isFinite(eventTokens) ? eventTokens : 0} toolCall=${hasToolCall ? "yes" : "no"} tokenEstimate=${hasTokenEstimate ? "yes" : "no"} statePatch=${hasStatePatch ? "yes" : "no"} completed=${event.completed === true ? "yes" : "no"} stateCompleted=${stateCompleted} directCompleted=${directCompleted}`,
         );
 
         const state = interceptStore.withTransaction(() => {
@@ -1161,6 +1178,17 @@ const server = createServer(async (req, res) => {
 
           if (Array.isArray(event.entries)) {
             replaceEntries(nextState, event.entries);
+          }
+
+          if (eventAgentProvider || eventAgentVersion) {
+            nextState.agent = {
+              provider: eventAgentProvider,
+              version: eventAgentVersion,
+            };
+          }
+
+          if (eventWorkDir) {
+            nextState.work_dir = eventWorkDir;
           }
 
           if (event.state && typeof event.state === "object") {

@@ -87,6 +87,11 @@
         display: inline-block;
         margin-right: 16px;
       }
+      .summary-detail {
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
       .item {
         border: 1px solid var(--border);
         border-radius: 8px;
@@ -285,12 +290,21 @@
       }
 
       function renderState(state) {
+        const agentProvider = String(state?.agent?.provider || "").trim();
+        const agentVersion = String(state?.agent?.version || "").trim();
+        const agentLabel = agentProvider
+          ? agentProvider + (agentVersion ? " @" + agentVersion : "")
+          : "-";
+        const workDir = String(state?.work_dir || "").trim() || "-";
+
         summaryEl.innerHTML =
           '<h1 class="title">State</h1>' +
           '<span class="stat"><strong>Total:</strong> ' + (state.total ?? 0) + "</span>" +
           '<span class="stat"><strong>Waiting:</strong> ' + (state.waiting ?? 0) + "</span>" +
           '<span class="stat"><strong>Running:</strong> ' + (state.running ?? 0) + "</span>" +
-          '<span class="stat"><strong>Completed:</strong> ' + (state.completed ?? 0) + "</span>";
+          '<span class="stat"><strong>Completed:</strong> ' + (state.completed ?? 0) + "</span>" +
+          '<div class="summary-detail"><strong>Agent:</strong> ' + agentLabel + "</div>" +
+          '<div class="summary-detail"><strong>WorkDir:</strong> ' + workDir + "</div>";
       }
 
       function renderList(items) {
@@ -412,6 +426,8 @@
             '<div class="meta">' +
             decisionMeta +
             "</div>" +
+            '<div class="meta">workDir: ' + (item.workDir || "-") + "</div>" +
+            '<div class="meta">agent: ' + (item.agentProvider || "-") + "</div>" +
             (item.interceptReason
               ? '<div class="meta">reason: ' + shorten(item.interceptReason, 200) + "</div>"
               : "") +
