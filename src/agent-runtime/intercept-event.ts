@@ -25,7 +25,7 @@ function resolveEventAgent(event: Record<string, unknown>) {
 
   const metaProvider = String((event as any)?.meta?.provider ?? "").trim().toLowerCase();
   const provider = String(process.env.AGENT_PROVIDER ?? metaProvider ?? "").trim().toLowerCase();
-  const version = String(process.env.ALIMBO_VERSION ?? process.env.npm_package_version ?? "").trim();
+  const version = String(process.env.AGENT_VERSION ?? "").trim();
 
   if (!provider && !version) {
     return null;
