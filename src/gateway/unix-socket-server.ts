@@ -26,10 +26,13 @@ function parseSocketLine(rawLine: string) {
 }
 
 function logSocketEvent(payload: any) {
-  const event = String(payload?.event ?? payload?.hook_event_name ?? "unknown").trim() || "unknown";
-  const sessionId = String(payload?.session_id ?? payload?.sessionId ?? "").trim() || "-";
-  const toolName = String(payload?.tool_name ?? payload?.tool ?? payload?.toolName ?? "").trim() || "-";
-  console.log(`[gateway][unix-socket] event=${event} sessionId=${sessionId} tool=${toolName}`);
+  let serialized = "";
+  try {
+    serialized = JSON.stringify(payload);
+  } catch (error: any) {
+    serialized = `<<serialize_failed: ${String(error?.message ?? error)}>>`;
+  }
+  console.log(`[gateway][unix-socket] payload=${serialized}`);
 }
 
 export function createGatewayUnixSocketServer() {
