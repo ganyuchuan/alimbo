@@ -1,5 +1,45 @@
 # Development Log
 
+## 2026-07-04
+
+### 44) CLI 一体化代理入口 + hook 命令重命名 + Feishu 前台运行
+
+变更目标：
+- 提供一键式 `alimbo claude` / `alimbo copilot` 命令，串起 `.env` 配置、hook 安装、gateway 启动、Agent CLI 启动与退出清理。
+- 将 `init-hooks` 命令重命名为 `hook`，统一命令语义与文件命名。
+- 调整 `alimbo feishu` 启动策略：gateway 仍由 PM2 托管，飞书桥改为当前终端前台运行，并支持从 `.env` 回退读取 `FEISHU_APP_ID/FEISHU_APP_SECRET`。
+
+主要改动：
+- `src/cli/agent.ts`
+  - 新增统一编排命令，支持 `alimbo claude` 与 `alimbo copilot`。
+  - 执行流程为：写入运行所需 `.env` 覆盖项 -> 执行 `hook --force` -> 使用 PM2 启动 gateway 并做健康检查 -> 启动对应 Agent CLI -> 退出后执行 `unhook`。
+- `src/cli.ts`
+  - 新增 `claude` / `copilot` 子命令分发。
+  - 将 `init-hooks` 子命令重命名为 `hook`，同步更新帮助文案。
+- `src/cli/hook.ts`
+  - 由原 `src/cli/init-hooks.ts` 重命名而来。
+  - 帮助文案、日志前缀统一调整为 `alimbo hook` / `[alimbo-hook]`。
+- `src/cli/feishu.ts`
+  - `alimbo feishu` 改为仅用 PM2 托管 gateway；飞书桥以前台子进程方式运行，实时继承当前终端日志。
+  - 启动前优先读取命令参数中的 `--app-id` / `--app-secret`，缺失时回退读取 `.env` 中的 `FEISHU_APP_ID/FEISHU_APP_SECRET`。
+  - 仅当参数与 `.env` 都缺失时，才报错要求显式传参。
+- `hooks/scripts/claude/session-end.mjs`
+  - 新增基于环境变量开关的 PM2 `delete alimbo-gateway` 逻辑，在 Claude 会话结束时尝试自动停止 gateway。
+- `hooks/scripts/copilot/session-end.mjs`
+  - 同步新增 Copilot 会话结束后的 gateway 自动停止逻辑。
+- `src/cloud/README.md`
+  - 命令示例从 `alimbo init-hooks` 更新为 `alimbo hook`。
+- `src/cloud/SKILL.md`
+  - 命令示例从 `alimbo init-hooks` 更新为 `alimbo hook`。
+
+兼容性说明：
+- `alimbo claude` / `alimbo copilot` 当前不透传额外 CLI 参数，直接以默认命令启动 Agent。
+- 会话退出时只执行 `unhook` 清理，不删除或回滚 `.env`。
+- gateway 的自动停止主要由 SessionEnd hook 触发；若 Agent 进程异常终止导致 SessionEnd 未触发，则 gateway 可能保留在 PM2 中。
+
+验证记录：
+- `npm run build`：通过
+
 ## 2026-07-03
 
 ### 43) Gateway -> Cloud 透传 Agent 运行时元数据（provider/version）并在审批页展示

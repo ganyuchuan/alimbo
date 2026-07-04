@@ -5,6 +5,25 @@ import {
   toPositiveInt,
   writeJson,
 } from "../_common.mjs";
+import { spawnSync } from "node:child_process";
+
+function stopGatewayByPm2() {
+  const shouldStop = String(process.env.ALIMBO_AUTO_STOP_GATEWAY_ON_SESSION_END ?? "").trim().toLowerCase();
+  if (!["1", "true", "yes", "on"].includes(shouldStop)) {
+    return;
+  }
+
+  const gatewayName = String(process.env.ALIMBO_PM2_GATEWAY_NAME ?? "alimbo-gateway").trim() || "alimbo-gateway";
+  const pm2Bin = process.platform === "win32" ? "pm2.cmd" : "pm2";
+  try {
+    spawnSync(pm2Bin, ["delete", gatewayName], {
+      stdio: "ignore",
+      timeout: 5000,
+    });
+  } catch {
+    // Ignore PM2 stop failures in session-end hook.
+  }
+}
 
 async function main() {
   loadEnvFromCwd();
@@ -44,6 +63,8 @@ async function main() {
   }).catch(() => {
     // Ignore event upload failures in hooks.
   });
+
+  stopGatewayByPm2();
 
   writeJson({});
 }

@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function printHelp() {
-  console.log(`alimbo CLI\n\nUsage:\n  alimbo [--port N]                        Start gateway on default port or override PORT in .env\n  alimbo watch --pairing-code XXXX [--cloud-url URL]\n  alimbo feishu --app-id XXX --app-secret XXX\n  alimbo init-hooks [--force]              Copy hook configs/scripts to current repo (.claude/.github)\n  alimbo unhook                            Remove hook configs/scripts from current repo (.claude/.github)\n  alimbo logs gateway [--lines N] [--follow]\n  alimbo logs feishu [--lines N] [--follow]\n  alimbo --help\n  alimbo --version`);
+  console.log(`alimbo CLI\n\nUsage:\n  alimbo [--port N]                        Start gateway on default port or override PORT in .env\n  alimbo claude                            Setup hooks/env, start gateway, run claude, then unhook on exit\n  alimbo copilot                           Setup hooks/env, start gateway, run copilot, then unhook on exit\n  alimbo watch --pairing-code XXXX [--cloud-url URL]\n  alimbo feishu --app-id XXX --app-secret XXX\n  alimbo hook [--force]                    Copy hook configs/scripts to current repo (.claude/.github)\n  alimbo unhook                            Remove hook configs/scripts from current repo (.claude/.github)\n  alimbo logs gateway [--lines N] [--follow]\n  alimbo logs feishu [--lines N] [--follow]\n  alimbo --help\n  alimbo --version`);
 }
 
 function runDistEntry(entryFile, args = []) {
@@ -142,8 +142,12 @@ if (!commandOrOption) {
   runDistEntry("cli/watch.js", rest);
 } else if (commandOrOption === "feishu") {
   runDistEntry("cli/feishu.js", rest);
-} else if (commandOrOption === "init-hooks") {
-  runDistEntry("cli/init-hooks.js", rest);
+} else if (commandOrOption === "claude") {
+  runDistEntry("cli/agent.js", ["claude"]);
+} else if (commandOrOption === "copilot") {
+  runDistEntry("cli/agent.js", ["copilot"]);
+} else if (commandOrOption === "hook") {
+  runDistEntry("cli/hook.js", rest);
 } else if (commandOrOption === "unhook") {
   runDistEntry("cli/unhook.js", rest);
 } else if (commandOrOption === "setup") {

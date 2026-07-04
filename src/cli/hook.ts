@@ -13,7 +13,7 @@ type WriteMode = {
 };
 
 function printHelp() {
-  console.log("Usage: alimbo init-hooks [--force]");
+  console.log("Usage: alimbo hook [--force]");
 }
 
 function ensureDir(dirPath: string) {
@@ -30,24 +30,24 @@ function rewriteCopilotHooks(raw: string) {
 
 function writeTextFile(targetPath: string, content: string, mode: WriteMode) {
   if (!mode.force && fs.existsSync(targetPath)) {
-    console.log(`[alimbo-init-hooks] skip existing: ${targetPath}`);
+    console.log(`[alimbo-hook] skip existing: ${targetPath}`);
     return;
   }
 
   ensureDir(path.dirname(targetPath));
   fs.writeFileSync(targetPath, content, "utf8");
-  console.log(`[alimbo-init-hooks] wrote: ${targetPath}`);
+  console.log(`[alimbo-hook] wrote: ${targetPath}`);
 }
 
 function copyFile(sourcePath: string, targetPath: string, mode: WriteMode) {
   if (!mode.force && fs.existsSync(targetPath)) {
-    console.log(`[alimbo-init-hooks] skip existing: ${targetPath}`);
+    console.log(`[alimbo-hook] skip existing: ${targetPath}`);
     return;
   }
 
   ensureDir(path.dirname(targetPath));
   fs.copyFileSync(sourcePath, targetPath);
-  console.log(`[alimbo-init-hooks] copied: ${targetPath}`);
+  console.log(`[alimbo-hook] copied: ${targetPath}`);
 }
 
 function copyDirFiles(sourceDir: string, targetDir: string, mode: WriteMode) {
@@ -103,13 +103,13 @@ function main() {
   copyFile(path.resolve(sourceScriptsRoot, "_common.mjs"), path.resolve(cwd, ".github/hooks/scripts/_common.mjs"), mode);
   copyDirFiles(path.resolve(sourceScriptsRoot, "copilot"), path.resolve(cwd, ".github/hooks/scripts/copilot"), mode);
 
-  console.log("[alimbo-init-hooks] done");
-  console.log(`[alimbo-init-hooks] cwd: ${cwd}`);
+  console.log("[alimbo-hook] done");
+  console.log(`[alimbo-hook] cwd: ${cwd}`);
 }
 
 try {
   main();
 } catch (error) {
-  console.error(`[alimbo-init-hooks] failed: ${String((error as Error)?.message ?? error)}`);
+  console.error(`[alimbo-hook] failed: ${String((error as Error)?.message ?? error)}`);
   process.exit(1);
 }

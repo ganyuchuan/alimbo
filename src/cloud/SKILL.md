@@ -83,13 +83,13 @@ alimbo watch --pairing-code 1234
 
 ```bash
 cd /path/to/your/project
-alimbo init-hooks
+alimbo hook
 ```
 
 如需覆盖已有 hooks：
 
 ```bash
-alimbo init-hooks --force
+alimbo hook --force
 ```
 
 5. 按需启用飞书桥接（可选）
