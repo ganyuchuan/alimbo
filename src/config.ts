@@ -36,7 +36,7 @@ const toList = (value, fallback = []) => {
 
 export const config = {
   port: toInt(process.env.PORT, 18789),
-  gatewayToken: process.env.GATEWAY_TOKEN?.trim() || "dev-token",
+  gatewayToken: process.env.GATEWAY_TOKEN?.trim(),
   llm: {
     provider: process.env.LLM_PROVIDER?.trim().toLowerCase() || "openai",
     protocol: process.env.LLM_PROTOCOL?.trim().toLowerCase() || "responses",
@@ -123,7 +123,7 @@ export const config = {
     logReply: toBool(process.env.FEISHU_LOG_REPLY, false),
     replyMarkdown: toBool(process.env.FEISHU_REPLY_MARKDOWN, true),
     gatewayUrl: process.env.FEISHU_GATEWAY_URL?.trim() || "ws://127.0.0.1:18789/ws",
-    gatewayToken: process.env.FEISHU_GATEWAY_TOKEN?.trim() || process.env.GATEWAY_TOKEN?.trim() || "dev-token",
+    gatewayToken: process.env.FEISHU_GATEWAY_TOKEN?.trim() || process.env.GATEWAY_TOKEN?.trim(),
     clientId: process.env.FEISHU_CLIENT_ID?.trim() || "alimbo-feishu-bridge",
     requestTimeoutMs: toInt(process.env.FEISHU_REQUEST_TIMEOUT_MS, 15000),
     imageTempDir: process.env.FEISHU_IMAGE_TEMP_DIR?.trim() || "data/feishu-images",

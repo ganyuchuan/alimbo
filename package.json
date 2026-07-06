@@ -30,7 +30,8 @@
     "start": "npm run build && node --title=alimbo-gateway dist/index.js",
     "dev": "tsc --watch -p tsconfig.json",
     "feishu": "npm run build && node --title=alimbo-feishu dist/bridge/feishu.js",
-    "cloud": "npm run build && node --title=alimbo-cloud dist/cloud/intercept-server.js"
+    "cloud": "npm run build && node --title=alimbo-cloud dist/cloud/intercept-server.js",
+    "cloud:create-user": "npm run build && node dist/cloud/create-user.js"
   },
   "engines": {
     "node": ">=22"
