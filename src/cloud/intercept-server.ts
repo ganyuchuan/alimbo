@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import fs from "node:fs";
 import os from "node:os";
 import { createApnsClient, loadApnsPrivateKeyFromEnv } from "./apns-client.js";
+import { verifyAppleIdentityToken } from "./apple-auth.js";
 import { apnsStore } from "./apns-store.js";
 import { interceptStore } from "./intercept-store.js";
 import { createPairingCodeRegistry } from "./pairing-code-registry.js";
@@ -76,6 +77,8 @@ const apnsClient = createApnsClient({
   privateKey: loadApnsPrivateKeyFromEnv(),
   useSandbox: apnsUseSandbox,
 });
+const appleClientId = String(process.env.APPLE_SIGNIN_CLIENT_ID ?? "").trim();
+const appleIssuer = String(process.env.APPLE_SIGNIN_ISSUER ?? "https://appleid.apple.com").trim();
 
 function setToArray(setLike) {
   return Array.isArray(setLike) ? setLike : [...setLike];
@@ -201,6 +204,12 @@ type Principal = {
 
 type AuthTokenBody = {
   username?: string;
+};
+
+type AppleLoginBody = {
+  identityToken?: string;
+  nonce?: string;
+  deviceToken?: string;
 };
 
 type PairingCodeResolveBody = {
@@ -669,7 +678,7 @@ const server = createServer(async (req, res) => {
         username: issued.username,
       });
       logApi(req, pathname, `issued userId=${issued.userId} pairingCode=${pairing.pairingCode}`);
-      return json(res, 200, {
+      const payload = {
         ok: true,
         userId: issued.userId,
         authToken: issued.authToken,
@@ -678,7 +687,97 @@ const server = createServer(async (req, res) => {
         pairingCodeExpiresAtMs: pairing.expiresAtMs,
         pairingCodeTtlMs,
         onboardingUrl: buildOnboardingUrl(req),
+      };
+      return json(res, 200, {
+        ...payload,
+        token: payload.authToken,
+        accessToken: payload.authToken,
+        auth_token: payload.authToken,
+        pairing_code: payload.pairingCode,
+        pairingCodeExpiresAt: payload.pairingCodeExpiresAtMs,
+        data: payload,
       });
+    }
+
+    if (req.method === "POST" && pathname === "/auth/apple/login") {
+      if (!appleClientId) {
+        logApi(req, pathname, "apple login disabled: APPLE_SIGNIN_CLIENT_ID missing");
+        return json(res, 503, { error: "apple sign-in is not configured" });
+      }
+
+      const body = await parseBody<AppleLoginBody>(req);
+      const identityToken = String(body?.identityToken ?? "").trim();
+      const nonce = String(body?.nonce ?? "").trim();
+      const deviceToken = String(body?.deviceToken ?? "").replace(/\s+/g, "").trim();
+
+      if (!identityToken) {
+        logApi(req, pathname, "invalid request: identityToken is required");
+        return json(res, 400, { error: "identityToken is required" });
+      }
+
+      let verified;
+      try {
+        verified = await verifyAppleIdentityToken({
+          identityToken,
+          clientId: appleClientId,
+          nonce,
+          issuer: appleIssuer,
+        });
+      } catch (error) {
+        const message = String(error?.message ?? error);
+        logApi(req, pathname, `apple token verify failed: ${message}`);
+        return json(res, 401, { error: "invalid apple identity token", reason: message });
+      }
+
+      const now = Date.now();
+      const issued = interceptStore.withTransaction(() => {
+        return interceptStore.createOrRefreshAppleUserTokenRecord({
+          appleSub: verified.sub,
+          email: verified.email,
+          emailVerified: verified.emailVerified,
+          isPrivateEmail: verified.isPrivateEmail,
+          now,
+        });
+      });
+
+      if (deviceToken) {
+        try {
+          apnsStore.bindDeviceToken(issued.userId, deviceToken);
+          logApi(req, pathname, `apple login device bound userId=${issued.userId}`);
+        } catch (error) {
+          console.warn(
+            `[cloud-server][auth] apple login device bind failed userId=${issued.userId} reason=${String(error?.message ?? error)}`,
+          );
+        }
+      }
+
+      const pairing = pairingCodeRegistry.issue({
+        authToken: issued.authToken,
+        userId: issued.userId,
+        username: issued.username,
+      });
+
+      const payload = {
+        ok: true,
+        userId: issued.userId,
+        username: issued.username,
+        authType: "apple",
+        authToken: issued.authToken,
+        apple: {
+          sub: verified.sub,
+          email: verified.email,
+          emailVerified: verified.emailVerified,
+          isPrivateEmail: verified.isPrivateEmail,
+        },
+        pairingCode: pairing.pairingCode,
+        pairingCodeExpiresAtMs: pairing.expiresAtMs,
+        pairingCodeTtlMs,
+        onboardingUrl: buildOnboardingUrl(req),
+      };
+
+      logApi(req, pathname, `apple login success payload=${JSON.stringify(payload)}`);
+
+      return json(res, 200, payload);
     }
 
     if (req.method === "POST" && pathname === "/auth/pairing-token") {

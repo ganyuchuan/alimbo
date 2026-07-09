@@ -184,6 +184,14 @@ function generateUserId() {
   return `user_${crypto.randomUUID()}`;
 }
 
+function normalizeAppleSub(value) {
+  return String(value ?? "").trim();
+}
+
+function normalizeEmail(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
 function migrateInterceptStateTableIfNeeded(database) {
   const columns = database.prepare("PRAGMA table_info(intercept_state)").all();
   const hasUserIdPk = columns.some((column) => column?.name === "user_id" && Number(column?.pk) === 1);
@@ -269,6 +277,11 @@ function openDatabase(dbFile) {
       user_id TEXT PRIMARY KEY,
       user_name TEXT NOT NULL,
       auth_type TEXT NOT NULL DEFAULT '',
+      apple_sub TEXT NOT NULL DEFAULT '',
+      apple_email TEXT NOT NULL DEFAULT '',
+      apple_email_verified INTEGER NOT NULL DEFAULT 0,
+      apple_is_private_email INTEGER NOT NULL DEFAULT 0,
+      apple_last_login_at_ms INTEGER NOT NULL DEFAULT 0,
       auth_token TEXT NOT NULL UNIQUE,
       created_at_ms INTEGER NOT NULL DEFAULT 0,
       updated_at_ms INTEGER NOT NULL DEFAULT 0
@@ -348,6 +361,12 @@ function openDatabase(dbFile) {
   tryExecMigration(database, "ALTER TABLE intercept_state ADD COLUMN work_dir TEXT NOT NULL DEFAULT ''; ");
   tryExecMigration(database, "ALTER TABLE intercept_requests ADD COLUMN user_id TEXT NOT NULL DEFAULT ''; ");
   tryExecMigration(database, "ALTER TABLE intercept_tool_calls ADD COLUMN user_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE users ADD COLUMN auth_type TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE users ADD COLUMN apple_sub TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE users ADD COLUMN apple_email TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE users ADD COLUMN apple_email_verified INTEGER NOT NULL DEFAULT 0; ");
+  tryExecMigration(database, "ALTER TABLE users ADD COLUMN apple_is_private_email INTEGER NOT NULL DEFAULT 0; ");
+  tryExecMigration(database, "ALTER TABLE users ADD COLUMN apple_last_login_at_ms INTEGER NOT NULL DEFAULT 0; ");
 
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_intercept_requests_user_status_created_at
@@ -356,6 +375,9 @@ function openDatabase(dbFile) {
       ON intercept_requests(user_id, created_at_ms DESC);
     CREATE INDEX IF NOT EXISTS idx_intercept_tool_calls_user_ts
       ON intercept_tool_calls(user_id, ts DESC, id DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_apple_sub
+      ON users(apple_sub)
+      WHERE apple_sub <> '';
   `);
 
   return database;
@@ -742,9 +764,9 @@ class InterceptStore {
       const authToken = generateIssuedAuthToken();
       try {
         this.db.prepare(`
-          INSERT INTO users (user_id, user_name, auth_token, created_at_ms, updated_at_ms)
-          VALUES (?, ?, ?, ?, ?)
-        `).run(userId, normalizedUsername, authToken, now, now);
+          INSERT INTO users (user_id, user_name, auth_type, auth_token, created_at_ms, updated_at_ms)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(userId, normalizedUsername, "user", authToken, now, now);
 
         return {
           userId,
@@ -762,9 +784,83 @@ class InterceptStore {
     throw new Error("failed to issue auth token");
   }
 
+  createOrRefreshAppleUserTokenRecord({
+    appleSub,
+    email = "",
+    emailVerified = false,
+    isPrivateEmail = false,
+    now = Date.now(),
+  }) {
+    const normalizedAppleSub = normalizeAppleSub(appleSub);
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedAppleSub) {
+      throw new Error("appleSub is required");
+    }
+
+    const existing = this.db.prepare(`
+      SELECT user_id
+      FROM users
+      WHERE apple_sub = ?
+      LIMIT 1
+    `).get(normalizedAppleSub);
+
+    const userId = String(existing?.user_id ?? "").trim() || generateUserId();
+    const username = normalizedEmail || `apple_${normalizedAppleSub.slice(0, 8)}`;
+    const authToken = generateIssuedAuthToken();
+
+    this.db.prepare(`
+      INSERT INTO users (
+        user_id,
+        user_name,
+        auth_type,
+        apple_sub,
+        apple_email,
+        apple_email_verified,
+        apple_is_private_email,
+        apple_last_login_at_ms,
+        auth_token,
+        created_at_ms,
+        updated_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        user_name = excluded.user_name,
+        auth_type = excluded.auth_type,
+        apple_sub = excluded.apple_sub,
+        apple_email = CASE WHEN excluded.apple_email <> '' THEN excluded.apple_email ELSE users.apple_email END,
+        apple_email_verified = excluded.apple_email_verified,
+        apple_is_private_email = excluded.apple_is_private_email,
+        apple_last_login_at_ms = excluded.apple_last_login_at_ms,
+        auth_token = excluded.auth_token,
+        updated_at_ms = excluded.updated_at_ms
+    `).run(
+      userId,
+      username,
+      "apple",
+      normalizedAppleSub,
+      normalizedEmail,
+      emailVerified ? 1 : 0,
+      isPrivateEmail ? 1 : 0,
+      now,
+      authToken,
+      now,
+      now,
+    );
+
+    return {
+      userId,
+      authToken,
+      username,
+      authType: "apple",
+      appleSub: normalizedAppleSub,
+      email: normalizedEmail,
+      emailVerified: Boolean(emailVerified),
+      isPrivateEmail: Boolean(isPrivateEmail),
+    };
+  }
+
   getUserByAuthToken(authToken) {
     const row = this.db.prepare(`
-      SELECT user_id, user_name, auth_token
+      SELECT user_id, user_name, auth_token, auth_type, apple_sub, apple_email, apple_email_verified, apple_is_private_email
       FROM users
       WHERE auth_token = ?
       LIMIT 1
@@ -778,6 +874,11 @@ class InterceptStore {
       userId: String(row.user_id ?? "").trim(),
       username: String(row.user_name ?? "").trim(),
       authToken: String(row.auth_token ?? "").trim(),
+      authType: String(row.auth_type ?? "").trim(),
+      appleSub: String(row.apple_sub ?? "").trim(),
+      email: String(row.apple_email ?? "").trim(),
+      emailVerified: Number(row.apple_email_verified ?? 0) > 0,
+      isPrivateEmail: Number(row.apple_is_private_email ?? 0) > 0,
       source: "user",
     };
   }
@@ -785,7 +886,7 @@ class InterceptStore {
   listUsers(limit = 100) {
     const normalizedLimit = Math.max(1, Math.min(toInt(limit, 100), 500));
     const rows = this.db.prepare(`
-      SELECT user_id, user_name, auth_token, created_at_ms, updated_at_ms
+      SELECT user_id, user_name, auth_type, apple_sub, apple_email, apple_email_verified, apple_is_private_email, apple_last_login_at_ms, auth_token, created_at_ms, updated_at_ms
       FROM users
       ORDER BY updated_at_ms DESC, created_at_ms DESC
       LIMIT ?
@@ -794,6 +895,12 @@ class InterceptStore {
     return rows.map((row) => ({
       userId: String(row.user_id ?? "").trim(),
       username: String(row.user_name ?? "").trim(),
+      authType: String(row.auth_type ?? "").trim(),
+      appleSub: String(row.apple_sub ?? "").trim(),
+      email: String(row.apple_email ?? "").trim(),
+      emailVerified: Number(row.apple_email_verified ?? 0) > 0,
+      isPrivateEmail: Number(row.apple_is_private_email ?? 0) > 0,
+      appleLastLoginAtMs: Number.isFinite(row.apple_last_login_at_ms) ? row.apple_last_login_at_ms : 0,
       authToken: String(row.auth_token ?? "").trim(),
       createdAtMs: Number.isFinite(row.created_at_ms) ? row.created_at_ms : 0,
       updatedAtMs: Number.isFinite(row.updated_at_ms) ? row.updated_at_ms : 0,
