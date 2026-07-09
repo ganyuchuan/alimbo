@@ -192,6 +192,11 @@ function normalizeEmail(value) {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function buildAppleUsername(appleSub) {
+  const digest = crypto.createHash("sha1").update(String(appleSub ?? ""), "utf8").digest("hex");
+  return `apple-${digest.slice(0, 8)}`;
+}
+
 function migrateInterceptStateTableIfNeeded(database) {
   const columns = database.prepare("PRAGMA table_info(intercept_state)").all();
   const hasUserIdPk = columns.some((column) => column?.name === "user_id" && Number(column?.pk) === 1);
@@ -798,14 +803,14 @@ class InterceptStore {
     }
 
     const existing = this.db.prepare(`
-      SELECT user_id
+      SELECT user_id, user_name
       FROM users
       WHERE apple_sub = ?
       LIMIT 1
     `).get(normalizedAppleSub);
 
     const userId = String(existing?.user_id ?? "").trim() || generateUserId();
-    const username = normalizedEmail || `apple_${normalizedAppleSub.slice(0, 8)}`;
+    const username = String(existing?.user_name ?? "").trim() || buildAppleUsername(normalizedAppleSub);
     const authToken = generateIssuedAuthToken();
 
     this.db.prepare(`

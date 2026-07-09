@@ -1,5 +1,31 @@
 # Development Log
 
+## 2026-07-09
+
+### 45) Cloud Apple 登录链路稳定性增强 + 当前用户查询接口
+
+变更目标：
+- 提升 Apple 登录链路在 iOS 不同 nonce 形态下的兼容性，减少登录误判失败。
+- 增加按 Bearer token 查询当前用户信息能力，便于客户端初始化与会话恢复。
+- 调整 Apple 用户名策略：首次登录生成稳定短名，后续登录保持用户名不变。
+
+主要改动：
+- `src/cloud/intercept-server.ts`
+  - 新增 `GET /auth/me`，通过 `Authorization: Bearer <token>` 返回当前用户信息（`userId/username/authType/appleSub/email/emailVerified/isPrivateEmail`）。
+  - 保持 `/auth/apple/login` 作为 Apple 登录签发 token 入口，并在成功路径中返回标准鉴权数据。
+- `src/cloud/intercept-store.ts`
+  - `createOrRefreshAppleUserTokenRecord` 调整为：
+    - 若 `apple_sub` 已存在，沿用已有 `user_name`（不再被 email 覆盖）。
+    - 若首次登录，按 `apple_sub` 生成稳定短用户名（`apple-<sha1前8位>`）。
+  - 保持 `apple_sub` 唯一索引与现有迁移逻辑，兼容旧库启动。
+
+兼容性说明：
+- `GET /auth/me` 为新增接口，不影响现有鉴权与审批接口。
+- Apple 用户名策略改为“首次确定、后续稳定”，可能与历史“按 email 更新用户名”行为不同。
+
+验证记录：
+- `npm run build`：通过
+
 ## 2026-07-04
 
 ### 44) CLI 一体化代理入口 + hook 命令重命名 + Feishu 前台运行

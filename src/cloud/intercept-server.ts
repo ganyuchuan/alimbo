@@ -846,6 +846,36 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    if (req.method === "GET" && pathname === "/auth/me") {
+      const authorization = String(req.headers.authorization ?? "").trim();
+      const tokenFromAuth = authorization.toLowerCase().startsWith("bearer ")
+        ? authorization.slice("bearer ".length).trim()
+        : "";
+
+      if (!tokenFromAuth) {
+        logApi(req, pathname, "unauthorized: missing token");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      const principal = interceptStore.getUserByAuthToken(tokenFromAuth);
+      if (!principal?.userId) {
+        logApi(req, pathname, "unauthorized: invalid token");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      logApi(req, pathname, `resolved current user userId=${principal.userId}`);
+      return json(res, 200, {
+        ok: true,
+        userId: principal.userId,
+        username: principal.username,
+        authType: principal.authType || "user",
+        appleSub: principal.appleSub || "",
+        email: principal.email || "",
+        emailVerified: principal.emailVerified === true,
+        isPrivateEmail: principal.isPrivateEmail === true,
+      });
+    }
+
     if (req.method === "POST" && pathname === "/api/apns/register") {
       const body = await parseBody<ApnsRegisterBody>(req);
       const authToken = String(body?.authToken ?? "").trim();
