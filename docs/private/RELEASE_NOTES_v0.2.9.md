@@ -28,7 +28,7 @@ v0.2.9 聚焦 cloud 鉴权链路稳定性：增强 Apple 登录兼容、补齐�
 ## 发布产物
 
 - Tag: `v0.2.9`
-- npm: `alimbo@0.2.9`
+- npm: 待发布（当前账号对 `alimbo` 包无 publish 权限，返回 404）
 - Source Archive:
   - `alimbo-v0.2.9-source.tar.gz`
   - `alimbo-v0.2.9-source.zip`
