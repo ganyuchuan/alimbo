@@ -19,7 +19,7 @@
 
 ## 版本与兼容性约束（先确认）
 
-- Alimbo Desktop: 0.2.8（release tag: v0.2.8）
+- Alimbo Desktop: 0.2.9（release tag: v0.2.9）
 - Alimbo Watch: 1.0 Build 4
 - 桌面系统: macOS 或 Windows
 - Node.js: 要求 >=22
