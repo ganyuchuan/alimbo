@@ -67,7 +67,7 @@ alimbo --port 18789
 3. 完成手表配对
 
 ```bash
-alimbo watch --pairing-code 1234
+alimbo pair 1234
 ```
 
 > 首次打开 Alimbo Watch，输入完用户名后会显示 4 位配对码，比如这里的 1234。非首次想再次获取配对码，请在 Alimbo Watch 的设置里点击「new pairing code」。

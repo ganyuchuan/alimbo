@@ -1,5 +1,38 @@
 # Development Log
 
+## 2026-07-15
+
+### 46) Pair 命令收敛 + watch CLI 实现重命名为 pair
+
+变更目标：
+- 将 Apple Watch 配对命令从多段式 `alimbo pair code <4digits>` 收敛为更短的 `alimbo pair <4digits>`。
+- 将云端地址参数从 `--cloud-url` 统一调整为 `--base-url`，减少语义歧义。
+- 将 CLI 实现文件从 `src/cli/watch.ts` 重命名为 `src/cli/pair.ts`，让命令名、文件名和构建产物保持一致。
+
+主要改动：
+- `src/cli.ts`
+  - `pair` 子命令改为直接接收 4 位配对码位置参数，不再要求 `code` 子命令。
+  - 帮助文案与错误提示统一更新为 `alimbo pair <4digits> [--base-url URL]`。
+  - 运行入口从 `cli/watch.js` 切换为 `cli/pair.js`。
+- `src/cli/pair.ts`
+  - 由原 `src/cli/watch.ts` 重命名而来。
+  - 配对帮助信息更新为 `alimbo pair <4digits> [--base-url <url>]`。
+  - 云端地址参数读取从 `--cloud-url` 改为 `--base-url`。
+- `src/cloud/README.md`
+  - 配对命令示例更新为 `alimbo pair 1234` 与 `alimbo pair 1234 --base-url ...`。
+- `src/cloud/SKILL.md`
+  - onboarding 与安装指引中的配对命令、参数名同步更新。
+- `docs/private/INSTALL.md`
+  - 私有安装说明中的配对步骤同步更新为新命令格式。
+
+兼容性说明：
+- 旧入口 `alimbo watch` 已移除，不再接受历史命令格式。
+- 旧参数名 `--cloud-url` 已移除，需改用 `--base-url`。
+
+验证记录：
+- `npm run build`：通过
+- `node dist/cli.js pair 1234 --help`：通过
+
 ## 2026-07-09
 
 ### 45) Cloud Apple 登录链路稳定性增强 + 当前用户查询接口
@@ -246,8 +279,8 @@
     - 收敛 `.env` 读写、PM2 启停、健康检查、参数读取等公共能力。
   - 新增：`src/cli/gateway.ts`
     - 支持 `alimbo [--port <number>]`，写回当前目录 `.env` 后启动 gateway。
-  - 新增：`src/cli/watch.ts`
-    - 支持 `alimbo watch --pairing-code <4digits> [--cloud-url <url>]`。
+  - 新增：`src/cli/pair.ts`
+    - 支持 `alimbo pair <4digits> [--base-url <url>]`。
     - 完成 pairing token 交换、拦截配置写入、网关健康检查、decision/event 验证上报。
   - 新增：`src/cli/feishu.ts`
     - 支持 `alimbo feishu --app-id <id> --app-secret <secret>`。

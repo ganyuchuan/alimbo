@@ -31,7 +31,7 @@ type PairingTokenPayload = {
 };
 
 function printHelp() {
-  console.log("Usage: alimbo watch --pairing-code <4digits> [--cloud-url <url>]");
+  console.log("Usage: alimbo pair <4digits> [--base-url <url>]");
 }
 
 async function resolveTokenByPairingCode({ cloudBaseUrl, pairingCode }: { cloudBaseUrl: string; pairingCode: string }) {
@@ -163,12 +163,12 @@ async function main() {
     return;
   }
 
-  const pairingCode = readOption(args, "--pairing-code");
+  const pairingCode = String(args.find((token) => /^\d{4}$/.test(String(token ?? "").trim())) ?? "").trim();
   if (!/^\d{4}$/.test(pairingCode)) {
-    throw new Error("--pairing-code must be 4 digits");
+    throw new Error("pairing code must be 4 digits, usage: alimbo pair <4digits> [--base-url <url>]");
   }
 
-  const cloudBaseUrl = readOption(args, "--cloud-url") || "https://go.aigc4me.cloud";
+  const cloudBaseUrl = readOption(args, "--base-url") || "https://go.aigc4me.cloud";
 
   console.log(`[alimbo-watch] Resolve token via ${cloudBaseUrl}/auth/pairing-token ...`);
   const pairingPayload = await resolveTokenByPairingCode({ cloudBaseUrl, pairingCode });

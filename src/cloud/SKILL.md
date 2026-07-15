@@ -72,18 +72,18 @@ alimbo --port 18789
 3. Apple Watch 配对
 
 ```bash
-alimbo watch --pairing-code 1234
+alimbo pair 1234
 ```
 
 说明：
 - 4 位配对码来自 Alimbo Watch 首次输入用户名后的界面。
 - 非首次可在手表设置点击 new pairing code 获取新码。
-- 默认云端地址是 `https://go.aigc4me.cloud`，如需私有云可加 `--cloud-url`。
+- 默认云端地址是 `https://go.aigc4me.cloud`，如需私有云可加 `--base-url`。
 
 示例：
 
 ```bash
-alimbo watch --pairing-code 1234 --cloud-url https://your-cloud.example.com
+alimbo pair 1234 --base-url https://your-cloud.example.com
 ```
 
 4. 在目标项目初始化 hooks
@@ -133,7 +133,7 @@ alimbo copilot
 
 - `alimbo setup` 已废弃，不再作为引导入口。
 - 应使用：
-	- `alimbo watch --pairing-code <XXXX>` 完成配对与 token 下发
+	- `alimbo pair <XXXX>` 完成配对与 token 下发
 	- `alimbo feishu --app-id ... --app-secret ...` 按需启用飞书桥
 	- `alimbo claude` / `alimbo copilot` 一体化启动（推荐）
 	- `alimbo hook` / `alimbo hook --force` 手动初始化 hooks（按需）
@@ -207,7 +207,7 @@ alimbo logs feishu --lines 200
 3. 常见优先排查项
 - watch 在 health 成功后仍 token 异常: 先检查旧网关进程残留与当前配置一致性
 - 进程混淆: 使用 pm2 list，仅操作 alimbo 相关进程
-- 误用废弃命令: 若执行了 `alimbo setup`，改用 `alimbo watch --pairing-code <XXXX>`
+- 误用废弃命令: 若执行了 `alimbo setup`，改用 `alimbo pair <XXXX>`
 
 ## AI 输出风格约束
 
@@ -224,7 +224,7 @@ alimbo logs feishu --lines 200
 先执行下面 3 步：
 1) npm install -g alimbo && alimbo --version
 2) alimbo
-3) alimbo watch --pairing-code 你的4位配对码
+3) alimbo pair 你的4位配对码
 
 成功标志：手表收到“Setup intercept decision connectivity check”，终端出现“[alimbo-watch] Success”。
 ```

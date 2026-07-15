@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function printHelp() {
-  console.log(`alimbo CLI\n\nUsage:\n  alimbo [--port N]                        Start gateway on default port or override PORT in .env\n  alimbo claude                            Setup hooks/env, start gateway, run claude, then unhook on exit\n  alimbo copilot                           Setup hooks/env, start gateway, run copilot, then unhook on exit\n  alimbo watch --pairing-code XXXX [--cloud-url URL]\n  alimbo feishu --app-id XXX --app-secret XXX\n  alimbo hook [--force]                    Copy hook configs/scripts to current repo (.claude/.github)\n  alimbo unhook                            Remove hook configs/scripts from current repo (.claude/.github)\n  alimbo logs gateway [--lines N] [--follow]\n  alimbo logs feishu [--lines N] [--follow]\n  alimbo --help\n  alimbo --version`);
+  console.log(`alimbo CLI\n\nUsage:\n  alimbo [--port N]                        Start gateway on default port or override PORT in .env\n  alimbo claude                            Setup hooks/env, start gateway, run claude, then unhook on exit\n  alimbo copilot                           Setup hooks/env, start gateway, run copilot, then unhook on exit\n  alimbo pair XXXX [--base-url URL]\n  alimbo feishu --app-id XXX --app-secret XXX\n  alimbo hook [--force]                    Copy hook configs/scripts to current repo (.claude/.github)\n  alimbo unhook                            Remove hook configs/scripts from current repo (.claude/.github)\n  alimbo logs gateway [--lines N] [--follow]\n  alimbo logs feishu [--lines N] [--follow]\n  alimbo --help\n  alimbo --version`);
 }
 
 function runDistEntry(entryFile, args = []) {
@@ -138,8 +138,13 @@ if (!commandOrOption) {
   runDistEntry("cli/gateway.js", []);
 } else if (commandOrOption === "logs") {
   runLogsCommand(rest);
-} else if (commandOrOption === "watch") {
-  runDistEntry("cli/watch.js", rest);
+} else if (commandOrOption === "pair") {
+  const pairingCode = String(rest.find((token) => /^\d{4}$/.test(String(token ?? "").trim())) ?? "").trim();
+  if (!/^\d{4}$/.test(pairingCode)) {
+    console.error("[alimbo] usage: alimbo pair <4digits> [--base-url URL]");
+    process.exit(1);
+  }
+  runDistEntry("cli/pair.js", rest);
 } else if (commandOrOption === "feishu") {
   runDistEntry("cli/feishu.js", rest);
 } else if (commandOrOption === "claude") {
@@ -150,9 +155,6 @@ if (!commandOrOption) {
   runDistEntry("cli/hook.js", rest);
 } else if (commandOrOption === "unhook") {
   runDistEntry("cli/unhook.js", rest);
-} else if (commandOrOption === "setup") {
-  console.error("[alimbo] `setup` is deprecated. use `alimbo watch --pairing-code <XXXX>` and `alimbo feishu --app-id ... --app-secret ...`");
-  process.exit(1);
 } else if (commandOrOption.startsWith("-")) {
   runDistEntry("cli/gateway.js", [commandOrOption, ...rest]);
 } else {

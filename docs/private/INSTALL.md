@@ -17,11 +17,11 @@ alimbo --version
 进入你要运行网关的目录（很重要，alimbo 会使用当前目录作为工作目录）：
 
 cd /你的项目目录
-alimbo watch --pairing-code 1234
+alimbo pair 1234
 
 可选云端地址：
 
-alimbo watch --pairing-code 1234 --cloud-url https://go.aigc4me.cloud
+alimbo pair 1234 --base-url https://go.aigc4me.cloud
 
 这一步会自动做三件事：
 - 在当前目录写入/更新 .env
