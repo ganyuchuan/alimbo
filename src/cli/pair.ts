@@ -4,7 +4,6 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { requestInterceptDecisionByApi } from "../agent-runtime/intercept-decision.js";
-import { reportInterceptEventByApi } from "../agent-runtime/intercept-event.js";
 import {
   PM2_GATEWAY_NAME,
   connectPm2Client,
@@ -36,7 +35,7 @@ function printHelp() {
 
 async function resolveTokenByPairingCode({ cloudBaseUrl, pairingCode }: { cloudBaseUrl: string; pairingCode: string }) {
   const endpoint = `${cloudBaseUrl}/auth/pairing-token`;
-  console.log(`[alimbo-watch] POST ${endpoint}`);
+  console.log(`[alimbo-pair] POST ${endpoint}`);
 
   const payload = await fetchJson(endpoint, {
     method: "POST",
@@ -65,7 +64,7 @@ async function verifyInterceptDecisionApi({
   workDir: string;
 }) {
   const endpoint = `${cloudBaseUrl}/api/copilot/intercepts/pretool`;
-  console.log(`[alimbo-watch] POST ${endpoint}`);
+  console.log(`[alimbo-pair] POST ${endpoint}`);
 
   const result = await requestInterceptDecisionByApi({
     interceptServerUrl: cloudBaseUrl,
@@ -73,85 +72,34 @@ async function verifyInterceptDecisionApi({
     interceptTimeoutMs: 20000,
     interceptPollIntervalMs: 3000,
     interceptMaxWaitMs: 60000,
-    logPrefix: "[alimbo-watch][intercept]",
+    logPrefix: "[alimbo-pair][intercept]",
     request: {
-      requestIdCandidates: [`watch_${Date.now()}`],
-      toolName: "watch.healthcheck",
-      hint: "watch decision api connectivity check",
-      msg: "Watch intercept decision connectivity check",
-      sessionId: "watch",
+      requestIdCandidates: [`pair_${Date.now()}`],
+      toolName: "pair",
+      hint: "pairing succeeded, welcome to alimbo",
+      msg: "It is not a hook",
+      sessionId: "pair",
       workDir,
       input: {
-        toolName: "watch.healthcheck",
-        source: "alimbo-watch",
+        toolName: "pair",
+        toolArgs: {
+          "command": "alimbo claude",
+          "description": "Start Claude Code CLI in the terminal",
+        },
+        metadata: {},
       },
     },
   });
 
   const decision = String(result?.decision ?? "").trim().toLowerCase() || "deny";
   const reason = String(result?.reason ?? "").trim();
-  console.log(`[alimbo-watch] Intercept decision API reachable (decision=${decision}${reason ? `, reason=${reason}` : ""})`);
+  console.log(`[alimbo-pair] Intercept decision API reachable (decision=${decision}${reason ? `, reason=${reason}` : ""})`);
 
   return {
-    requestId: String(result?.requestId ?? `watch_${Date.now()}`),
+    requestId: String(result?.requestId ?? `pair_${Date.now()}`),
     decision,
     reason,
   };
-}
-
-async function reportWatchInterceptVerificationEvent({
-  cloudBaseUrl,
-  authToken,
-  workDir,
-  verification,
-}: {
-  cloudBaseUrl: string;
-  authToken: string;
-  workDir: string;
-  verification: {
-    requestId: string;
-    decision: string;
-    reason: string;
-  };
-}) {
-  const endpoint = `${cloudBaseUrl}/api/copilot/intercepts/event`;
-  console.log(`[alimbo-watch] POST ${endpoint}`);
-
-  const estimatedAtMs = Date.now();
-  const promptTokens = 28;
-  const outputTokens = 12;
-  const totalTokens = promptTokens + outputTokens;
-
-  await reportInterceptEventByApi({
-    interceptServerUrl: cloudBaseUrl,
-    interceptAuthToken: authToken,
-    interceptTimeoutMs: 5000,
-    event: {
-      msg: "Watch intercept verification completed",
-      entry: `Watch intercept verification: decision=${verification.decision}`,
-      prompt: {
-        id: verification.requestId,
-        tool: "watch.healthcheck",
-        hint: verification.reason || "watch decision api connectivity check",
-      },
-      tokenEstimate: {
-        sessionId: "watch",
-        promptTokens,
-        outputTokens,
-        totalTokens,
-        promptPreview: "[mock] watch.healthcheck prompt for intercept verification",
-        outputPreview: `[mock] watch verification completed with decision=${verification.decision}`,
-        estimatedAtMs,
-      },
-      session: {
-        id: "watch",
-        phase: "watch-intercept-verify",
-        ts: estimatedAtMs,
-        workDir,
-      },
-      completed: true,
-    },
-  });
 }
 
 async function main() {
@@ -170,7 +118,7 @@ async function main() {
 
   const cloudBaseUrl = readOption(args, "--base-url") || "https://go.aigc4me.cloud";
 
-  console.log(`[alimbo-watch] Resolve token via ${cloudBaseUrl}/auth/pairing-token ...`);
+  console.log(`[alimbo-pair] Resolve token via ${cloudBaseUrl}/auth/pairing-token ...`);
   const pairingPayload = await resolveTokenByPairingCode({ cloudBaseUrl, pairingCode });
   const token = String(pairingPayload.authToken ?? "").trim();
 
@@ -189,7 +137,7 @@ async function main() {
       COPILOT_INTERCEPT_TOOLS: "bash,run_in_terminal,edit_file,create_file,delete_file",
     },
   });
-  console.log(`[alimbo-watch] Wrote ${envPath}`);
+  console.log(`[alimbo-pair] Wrote ${envPath}`);
 
   const envValues = parseEnvFile(envPath);
   const gatewayPort = toInt(envValues.PORT, 18789);
@@ -218,14 +166,7 @@ async function main() {
       workDir: cwd,
     });
 
-    await reportWatchInterceptVerificationEvent({
-      cloudBaseUrl,
-      authToken: token,
-      workDir: cwd,
-      verification,
-    });
-
-    console.log("[alimbo-watch] Success");
+    console.log("[alimbo-pair] Success");
     console.log(JSON.stringify({
       ok: true,
       userId: pairingPayload?.userId,
@@ -245,6 +186,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`[alimbo-watch] Failed: ${String(error?.message ?? error)}`);
+  console.error(`[alimbo-pair] Failed: ${String(error?.message ?? error)}`);
   process.exit(1);
 });

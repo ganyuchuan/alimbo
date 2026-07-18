@@ -127,8 +127,8 @@ class ApnsStore {
     const normalizedEventKey = String(eventKey ?? "").trim();
     const normalizedUserId = String(userId ?? "").trim();
     const normalizedRequestId = String(requestId ?? "").trim();
-    const normalizedTool = String(tool ?? "").trim().toLowerCase() || "unknown";
-    const normalizedDecision = String(decision ?? "").trim().toLowerCase() || "unknown";
+    const normalizedTool = String(tool ?? "").trim().toLowerCase();
+    const normalizedDecision = String(decision ?? "").trim().toLowerCase();
 
     if (!normalizedEventKey || !normalizedUserId || !normalizedRequestId) {
       return false;
