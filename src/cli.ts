@@ -136,6 +136,8 @@ if (commandOrOption === "--version" || commandOrOption === "-v" || commandOrOpti
 
 if (!commandOrOption) {
   runDistEntry("cli/gateway.js", []);
+} else if (commandOrOption.startsWith("-")) {
+  runDistEntry("cli/gateway.js", [commandOrOption, ...rest]);
 } else if (commandOrOption === "logs") {
   runLogsCommand(rest);
 } else if (commandOrOption === "pair") {
@@ -155,8 +157,6 @@ if (!commandOrOption) {
   runDistEntry("cli/hook.js", rest);
 } else if (commandOrOption === "unhook") {
   runDistEntry("cli/unhook.js", rest);
-} else if (commandOrOption.startsWith("-")) {
-  runDistEntry("cli/gateway.js", [commandOrOption, ...rest]);
 } else {
   console.error(`[alimbo] unknown command: ${commandOrOption}`);
   printHelp();
