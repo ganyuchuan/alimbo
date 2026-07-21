@@ -9,6 +9,7 @@ dotenv.config();
 function printHelp() {
   console.log("Usage: node dist/cloud/create-user.js --username <name>");
   console.log("       node dist/cloud/create-user.js -u <name>");
+  console.log("       node dist/cloud/create-user.js --admin --username <name>");
 }
 
 function readOption(args: string[], names: string[]) {
@@ -44,18 +45,29 @@ function main() {
     throw new Error("username is required, pass --username <name>");
   }
 
+  const isAdmin = args.includes("--admin");
+
   const issued = interceptStore.withTransaction(() => {
-    return interceptStore.createUserTokenRecord({ username });
+    return isAdmin
+      ? interceptStore.createAdminUserRecord({ username })
+      : interceptStore.createUserTokenRecord({ username });
   });
 
   const dbFile = interceptStore.getDbFile();
-  console.log("[cloud-create-user] Success");
-  console.log(JSON.stringify({
+  const payload = {
     userId: issued.userId,
     username: issued.username,
+    authType: issued.authType || (isAdmin ? "admin" : "user"),
     authToken: issued.authToken,
     dbFile,
-  }, null, 2));
+  };
+
+  if (isAdmin) {
+    payload.password = issued.password;
+  }
+
+  console.log("[cloud-create-user] Success");
+  console.log(JSON.stringify(payload, null, 2));
 }
 
 try {

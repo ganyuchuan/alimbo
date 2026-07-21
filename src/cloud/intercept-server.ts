@@ -79,6 +79,8 @@ const apnsClient = createApnsClient({
 });
 const appleClientId = String(process.env.APPLE_SIGNIN_CLIENT_ID ?? "").trim();
 const appleIssuer = String(process.env.APPLE_SIGNIN_ISSUER ?? "https://appleid.apple.com").trim();
+const adminSessionTtlMs = toInt(process.env.CLOUD_ADMIN_SESSION_TTL_MS, 7 * 24 * 60 * 60 * 1000);
+const adminSessionCookieName = "alimbo_admin_session";
 
 function setToArray(setLike) {
   return Array.isArray(setLike) ? setLike : [...setLike];
@@ -202,8 +204,17 @@ type Principal = {
   source: "user";
 };
 
+type LoginPrincipal = Principal & {
+  authType?: string;
+};
+
 type AuthTokenBody = {
   username?: string;
+};
+
+type AdminLoginBody = {
+  username?: string;
+  password?: string;
 };
 
 type AppleLoginBody = {
@@ -261,6 +272,138 @@ function html(res, status, body) {
   res.end(body);
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&": return "&amp;";
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case '"': return "&quot;";
+      case "'": return "&#39;";
+      default: return char;
+    }
+  });
+}
+
+function parseCookies(cookieHeader) {
+  const cookies = new Map();
+  for (const part of String(cookieHeader ?? "").split(";")) {
+    const entry = part.trim();
+    if (!entry) {
+      continue;
+    }
+    const index = entry.indexOf("=");
+    const key = index >= 0 ? entry.slice(0, index).trim() : entry;
+    const value = index >= 0 ? entry.slice(index + 1).trim() : "";
+    if (key) {
+      cookies.set(key, decodeURIComponent(value));
+    }
+  }
+  return cookies;
+}
+
+function getAdminSessionToken(req) {
+  return parseCookies(req.headers.cookie ?? "").get(adminSessionCookieName) || "";
+}
+
+function setAdminSessionCookie(res, sessionToken, expiresAtMs) {
+  const parts = [
+    `${adminSessionCookieName}=${encodeURIComponent(sessionToken)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+  ];
+  if (String(process.env.CLOUD_ADMIN_SESSION_SECURE ?? "").trim().toLowerCase() === "true") {
+    parts.push("Secure");
+  }
+  if (Number.isFinite(expiresAtMs) && expiresAtMs > 0) {
+    parts.push(`Max-Age=${Math.max(1, Math.floor((expiresAtMs - Date.now()) / 1000))}`);
+  }
+  res.setHeader("Set-Cookie", parts.join("; "));
+}
+
+function clearAdminSessionCookie(res) {
+  res.setHeader("Set-Cookie", `${adminSessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+function buildLoginPage({ returnTo = "/", error = "" } = {}) {
+  const safeReturnTo = escapeHtml(returnTo);
+  const safeError = error ? `<p class="error">${escapeHtml(error)}</p>` : "";
+  return `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>管理员登录</title>
+    <style>
+      :root { color-scheme: light; --bg: #f5efe6; --card: #fff8ef; --ink: #1f1f1f; --muted: #6a6157; --accent: #1f6feb; --border: #e5d8c7; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: radial-gradient(circle at top, #fff 0, var(--bg) 38%, #eadfcd 100%); color: var(--ink); }
+      .card { width: min(440px, calc(100vw - 32px)); background: rgba(255,248,239,.96); border: 1px solid var(--border); border-radius: 22px; padding: 28px; box-shadow: 0 24px 80px rgba(37, 27, 12, .15); }
+      h1 { margin: 0 0 8px; font-size: 28px; }
+      p { margin: 0 0 16px; color: var(--muted); line-height: 1.6; }
+      label { display: block; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+      input { width: 100%; box-sizing: border-box; border: 1px solid var(--border); background: #fff; border-radius: 12px; padding: 12px 14px; font-size: 15px; margin-bottom: 14px; }
+      button { border: 0; border-radius: 999px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 800; padding: 12px 18px; cursor: pointer; }
+      .error { color: #b42318; background: #fff1f0; border: 1px solid #fecaca; border-radius: 12px; padding: 10px 12px; }
+      .meta { margin-top: 14px; font-size: 13px; color: var(--muted); word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <form class="card" method="post" action="/auth/login">
+      <h1>管理员登录</h1>
+      <p>请输入管理员用户名和密码后继续访问。</p>
+      ${safeError}
+      <input type="hidden" name="returnTo" value="${safeReturnTo}" />
+      <label for="username">用户名</label>
+      <input id="username" name="username" autocomplete="username" required />
+      <label for="password">密码</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required />
+      <button type="submit">登录</button>
+      <div class="meta">登录后会建立管理员会话，仅用于受保护页面访问。</div>
+    </form>
+  </body>
+</html>`;
+}
+
+function buildLoggedOutPage(returnTo = "/") {
+  return buildLoginPage({ returnTo, error: "会话已过期，请重新登录。" });
+}
+
+function normalizeReturnTo(value) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized || normalized.startsWith("//") || !normalized.startsWith("/")) {
+    return "/";
+  }
+
+  return normalized;
+}
+
+function redirect(res, location, status = 302) {
+  res.writeHead(status, { Location: location });
+  res.end();
+}
+
+function readFormBody(req): Promise<URLSearchParams> {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk.toString("utf8");
+      if (raw.length > 1024 * 1024) {
+        reject(new Error("payload too large"));
+      }
+    });
+    req.on("end", () => {
+      const payload = new URLSearchParams(raw);
+      resolve(payload);
+    });
+    req.on("error", reject);
+  });
+}
+
+function isAdminPrincipal(principal) {
+  return String(principal?.authType ?? "").trim() === "admin";
+}
+
 function toBaseUrl(req) {
   const host = String(req?.headers?.host ?? "127.0.0.1:18790").trim() || "127.0.0.1:18790";
   return `http://${host}`;
@@ -308,6 +451,55 @@ function renderAuthUsersPage() {
   }
 
   return authUsersPageCache;
+}
+
+function renderLoginRequiredPage(returnTo, error = "") {
+  return buildLoginPage({ returnTo, error });
+}
+
+function requireAdminSession(req, res) {
+  const sessionToken = getAdminSessionToken(req);
+  if (!sessionToken) {
+    return null;
+  }
+
+  const session = interceptStore.getAuthSessionByToken(sessionToken);
+  if (!session?.userId || (session.expiresAtMs > 0 && session.expiresAtMs <= Date.now())) {
+    clearAdminSessionCookie(res);
+    return null;
+  }
+
+  const principal = interceptStore.getUserById(session.userId);
+  if (!principal?.userId || String(principal.authType ?? "").trim() !== "admin") {
+    clearAdminSessionCookie(res);
+    return null;
+  }
+
+  return principal;
+}
+
+function requireAdminPage(req, res, returnTo) {
+  const admin = requireAdminSession(req, res);
+  if (admin) {
+    return admin;
+  }
+
+  const target = encodeURIComponent(returnTo || "/");
+  html(res, 200, renderLoginRequiredPage(target));
+  return null;
+}
+
+function createAdminSessionForPrincipal(res, principal) {
+  const session = interceptStore.createAuthSessionRecord({
+    userId: principal.userId,
+    expiresAtMs: Date.now() + adminSessionTtlMs,
+  });
+  setAdminSessionCookie(res, session.sessionToken, session.expiresAtMs);
+  return session;
+}
+
+function redirectToLogin(res, returnTo) {
+  redirect(res, `/auth/login?returnTo=${encodeURIComponent(normalizeReturnTo(returnTo || "/"))}`);
 }
 
 function renderIndexPage() {
@@ -645,13 +837,64 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && pathname === "/auth/login") {
+      const returnTo = normalizeReturnTo(url.searchParams.get("returnTo") ?? "/");
+      logApi(req, pathname, `serve login page returnTo=${returnTo}`);
+      return html(res, 200, buildLoginPage({ returnTo }));
+    }
+
+    if (req.method === "POST" && pathname === "/auth/login") {
+      const body = await readFormBody(req);
+      const username = String(body.get("username") ?? "").trim();
+      const password = String(body.get("password") ?? "").trim();
+      const returnTo = normalizeReturnTo(body.get("returnTo") ?? "/");
+      logApi(req, pathname, `admin login attempt username=${username || "-"}`);
+
+      if (!username || !password) {
+        return html(res, 200, buildLoginPage({ returnTo, error: "请输入用户名和密码。" }));
+      }
+
+      const principal = interceptStore.verifyAdminPassword(username, password);
+      if (!principal?.userId || !isAdminPrincipal(principal)) {
+        logApi(req, pathname, `admin login failed username=${username || "-"}`);
+        return html(res, 200, buildLoginPage({ returnTo, error: "用户名或密码错误。" }));
+      }
+
+      const session = createAdminSessionForPrincipal(res, principal);
+      logApi(req, pathname, `admin login ok userId=${principal.userId} session=${session.sessionToken.slice(0, 8)}...`);
+      redirect(res, returnTo || "/");
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/auth/logout") {
+      clearAdminSessionCookie(res);
+      const body = await readFormBody(req);
+      const returnTo = normalizeReturnTo(body.get("returnTo") ?? "/auth/login");
+      redirect(res, returnTo || "/auth/login");
+      return;
+    }
+
     if (req.method === "GET" && pathname === "/intercepts/approve") {
-      logApi(req, pathname, "serve approval page");
+      const admin = requireAdminSession(req, res);
+      if (!admin) {
+        logApi(req, pathname, "redirect to login");
+        redirectToLogin(res, req.url || "/intercepts/approve");
+        return;
+      }
+
+      logApi(req, pathname, `serve approval page admin=${admin.userId}`);
       return html(res, 200, renderInterceptApprovalPage());
     }
 
     if (req.method === "GET" && pathname === "/auth/users-ui") {
-      logApi(req, pathname, "serve auth users page");
+      const admin = requireAdminSession(req, res);
+      if (!admin) {
+        logApi(req, pathname, "redirect to login");
+        redirectToLogin(res, req.url || "/auth/users-ui");
+        return;
+      }
+
+      logApi(req, pathname, `serve auth users page admin=${admin.userId}`);
       return html(res, 200, renderAuthUsersPage());
     }
 
@@ -663,9 +906,15 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && pathname === "/auth/token") {
+      const admin = requireAdminSession(req, res);
+      if (!admin) {
+        logApi(req, pathname, "unauthorized: admin session required");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
       const body = await parseBody<AuthTokenBody>(req);
       const username = String(body?.username ?? "").trim();
-      logApi(req, pathname, `issue token requested username=${username || "-"}`);
+      logApi(req, pathname, `issue token requested username=${username || "-"} admin=${admin.userId}`);
       if (!username) {
         logApi(req, pathname, "invalid request: username is required");
         return json(res, 400, { error: "username is required" });
@@ -876,6 +1125,31 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    if (req.method === "GET" && pathname === "/auth/users") {
+      const admin = requireAdminSession(req, res);
+      if (!admin) {
+        logApi(req, pathname, "unauthorized: admin session required");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      const limit = toInt(url.searchParams.get("limit"), 100);
+      logApi(req, pathname, `list users limit=${limit} admin=${admin.userId}`);
+      const users = interceptStore.listUsers(limit);
+      const items = users.map((user) => {
+        const deviceTokens = apnsStore.listDeviceTokensByUserId(user.userId);
+        return {
+          ...user,
+          deviceTokens,
+          deviceToken: deviceTokens[0] || "",
+        };
+      });
+      logApi(req, pathname, `list users count=${items.length}`);
+      return json(res, 200, {
+        ok: true,
+        items,
+      });
+    }
+
     if (req.method === "POST" && pathname === "/api/apns/register") {
       const body = await parseBody<ApnsRegisterBody>(req);
       const authToken = String(body?.authToken ?? "").trim();
@@ -905,25 +1179,6 @@ const server = createServer(async (req, res) => {
         userId: bound.userId,
         deviceToken: bound.deviceToken,
         updatedAtMs: bound.updatedAtMs,
-      });
-    }
-
-    if (req.method === "GET" && pathname === "/auth/users") {
-      const limit = toInt(url.searchParams.get("limit"), 100);
-      logApi(req, pathname, `list users limit=${limit}`);
-      const users = interceptStore.listUsers(limit);
-      const items = users.map((user) => {
-        const deviceTokens = apnsStore.listDeviceTokensByUserId(user.userId);
-        return {
-          ...user,
-          deviceTokens,
-          deviceToken: deviceTokens[0] || "",
-        };
-      });
-      logApi(req, pathname, `list users count=${items.length}`);
-      return json(res, 200, {
-        ok: true,
-        items,
       });
     }
 

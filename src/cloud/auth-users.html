@@ -172,7 +172,13 @@
           <h1>Auth Token Manager</h1>
           <p>Issue tokens, refresh pairing codes, and inspect known users from a dedicated page.</p>
         </div>
-        <div class="nav"><a href="/intercepts/approve">Open approval page</a></div>
+        <div class="nav">
+          <a href="/intercepts/approve">Open approval page</a>
+          <form method="post" action="/auth/logout" style="display:inline; margin-left: 8px;">
+            <input type="hidden" name="returnTo" value="/auth/login" />
+            <button type="submit">Logout</button>
+          </form>
+        </div>
       </div>
 
       <div class="grid">
@@ -382,6 +388,7 @@
           "<table><thead><tr>" +
           "<th>User ID</th>" +
           "<th>User Name</th>" +
+          "<th>Auth Type</th>" +
           "<th>Device Token</th>" +
           "<th>Auth Token</th>" +
           "<th>Updated</th>" +
@@ -392,6 +399,7 @@
             "<tr>" +
             "<td>" + (item.userId || "-") + "</td>" +
             "<td>" + (item.username || "-") + "</td>" +
+            "<td>" + ((item.authType || "user") + (item.isAdmin ? " / admin" : "")) + "</td>" +
             '<td class="token-cell">' + (item.deviceToken || "-") + "</td>" +
             '<td class="token-cell">' + (item.authToken || "-") + "</td>" +
             "<td>" + ts(item.updatedAtMs || item.createdAtMs || 0) + "</td>" +
