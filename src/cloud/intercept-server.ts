@@ -264,7 +264,28 @@ function logApi(req, pathname, message) {
   if (ignorePaths.has(pathname)) {
     return;
   }
-  console.log(`[cloud-server][api] ${String(req?.method ?? "-")} ${String(pathname ?? "-")} ${String(message ?? "")}`.trim());
+
+  const forwardedForRaw = String(req?.headers?.["x-forwarded-for"] ?? "").trim();
+  const forwardedFor = forwardedForRaw ? forwardedForRaw.split(",").map((item) => item.trim()).filter(Boolean) : [];
+  const forwardedClientIp = forwardedFor[0] || "";
+  const realIp = String(req?.headers?.["x-real-ip"] ?? "").trim();
+  const remoteAddress = String(req?.socket?.remoteAddress ?? "").trim();
+  const clientIp = forwardedClientIp || realIp || remoteAddress || "-";
+  const origin = String(req?.headers?.origin ?? "").trim() || "-";
+  const referer = String(req?.headers?.referer ?? "").trim() || "-";
+  const userAgent = String(req?.headers?.["user-agent"] ?? "").trim() || "-";
+
+  const meta = [
+    `ip=${clientIp}`,
+    `xff=${forwardedForRaw || "-"}`,
+    `origin=${origin}`,
+    `referer=${referer}`,
+    `ua=${JSON.stringify(userAgent)}`,
+  ].join(" ");
+
+  console.log(
+    `[cloud-server][api] ${String(req?.method ?? "-")} ${String(pathname ?? "-")} ${String(message ?? "")} ${meta}`.trim(),
+  );
 }
 
 function html(res, status, body) {
