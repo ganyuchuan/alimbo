@@ -28,6 +28,10 @@ function rewriteCopilotHooks(raw: string) {
   return raw.replaceAll("node hooks/scripts/copilot/", "node .github/hooks/scripts/copilot/");
 }
 
+function rewriteKimiHooks(raw: string) {
+  return raw.replaceAll("node hooks/scripts/kimi/", "node .kimi-code/hooks/scripts/kimi/");
+}
+
 function writeTextFile(targetPath: string, content: string, mode: WriteMode) {
   if (!mode.force && fs.existsSync(targetPath)) {
     console.log(`[alimbo-hook] skip existing: ${targetPath}`);
@@ -82,26 +86,33 @@ function main() {
 
   const sourceClaudeSettings = path.resolve(hooksRoot, "configs/settings.json");
   const sourceCopilotHooks = path.resolve(hooksRoot, "configs/alimbo-intercept.json");
+  const sourceKimiHooks = path.resolve(hooksRoot, "configs/kimi-config.toml");
   const sourceScriptsRoot = path.resolve(hooksRoot, "scripts");
 
-  if (!fs.existsSync(sourceClaudeSettings) || !fs.existsSync(sourceCopilotHooks) || !fs.existsSync(sourceScriptsRoot)) {
+  if (!fs.existsSync(sourceClaudeSettings) || !fs.existsSync(sourceCopilotHooks) || !fs.existsSync(sourceKimiHooks) || !fs.existsSync(sourceScriptsRoot)) {
     throw new Error(`hooks template not found under ${hooksRoot}. run npm run build first or reinstall package.`);
   }
 
   const targetClaudeSettings = path.resolve(cwd, ".claude/settings.json");
   const targetCopilotHooks = path.resolve(cwd, ".github/hooks/alimbo-intercept.json");
+  const targetKimiHooks = path.resolve(cwd, ".kimi-code/config.toml");
 
   const claudeSettingsRaw = fs.readFileSync(sourceClaudeSettings, "utf8");
   const copilotHooksRaw = fs.readFileSync(sourceCopilotHooks, "utf8");
+  const kimiHooksRaw = fs.readFileSync(sourceKimiHooks, "utf8");
 
   writeTextFile(targetClaudeSettings, rewriteClaudeSettings(claudeSettingsRaw), mode);
   writeTextFile(targetCopilotHooks, rewriteCopilotHooks(copilotHooksRaw), mode);
+  writeTextFile(targetKimiHooks, rewriteKimiHooks(kimiHooksRaw), mode);
 
   copyFile(path.resolve(sourceScriptsRoot, "_common.mjs"), path.resolve(cwd, ".claude/scripts/_common.mjs"), mode);
   copyDirFiles(path.resolve(sourceScriptsRoot, "claude"), path.resolve(cwd, ".claude/scripts/claude"), mode);
 
   copyFile(path.resolve(sourceScriptsRoot, "_common.mjs"), path.resolve(cwd, ".github/hooks/scripts/_common.mjs"), mode);
   copyDirFiles(path.resolve(sourceScriptsRoot, "copilot"), path.resolve(cwd, ".github/hooks/scripts/copilot"), mode);
+
+  copyFile(path.resolve(sourceScriptsRoot, "_common.mjs"), path.resolve(cwd, ".kimi-code/hooks/scripts/_common.mjs"), mode);
+  copyDirFiles(path.resolve(sourceScriptsRoot, "kimi"), path.resolve(cwd, ".kimi-code/hooks/scripts/kimi"), mode);
 
   console.log("[alimbo-hook] done");
   console.log(`[alimbo-hook] cwd: ${cwd}`);

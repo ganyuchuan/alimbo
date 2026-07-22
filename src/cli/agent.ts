@@ -19,12 +19,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function printHelp() {
-  console.log("Usage: alimbo <claude|copilot>");
+  console.log("Usage: alimbo <claude|copilot|kimi>");
 }
 
 function normalizeProvider(raw: string) {
   const value = String(raw ?? "").trim().toLowerCase();
-  if (value === "claude" || value === "copilot") {
+  if (value === "claude" || value === "copilot" || value === "kimi") {
     return value;
   }
   return "";
@@ -85,7 +85,7 @@ async function main() {
 
   const provider = normalizeProvider(String(args[0] ?? ""));
   if (!provider) {
-    throw new Error("provider must be claude or copilot");
+    throw new Error("provider must be claude, copilot, or kimi");
   }
 
   const cwd = process.cwd();
@@ -129,7 +129,7 @@ async function main() {
 
     console.log(`[alimbo-${provider}] gateway started on port ${gatewayPort} pid=${gatewayPid ?? "unknown"}`);
 
-    const bin = provider === "claude" ? "claude" : "copilot";
+    const bin = provider === "claude" ? "claude" : provider === "kimi" ? "kimi" : "copilot";
     console.log(`[alimbo-${provider}] launching ${bin}`);
     exitCode = await runAgentCli(bin);
   } finally {

@@ -49,6 +49,8 @@ function main() {
     path.resolve(cwd, ".claude/scripts"),
     path.resolve(cwd, ".github/hooks/alimbo-intercept.json"),
     path.resolve(cwd, ".github/hooks/scripts"),
+    path.resolve(cwd, ".kimi-code/config.toml"),
+    path.resolve(cwd, ".kimi-code/hooks"),
   ];
 
   for (const target of targets) {
@@ -58,6 +60,7 @@ function main() {
   removeIfEmpty(path.resolve(cwd, ".claude"));
   removeIfEmpty(path.resolve(cwd, ".github/hooks"));
   removeIfEmpty(path.resolve(cwd, ".github"));
+  removeIfEmpty(path.resolve(cwd, ".kimi-code"));
 
   console.log("[alimbo-unhook] done");
   console.log(`[alimbo-unhook] cwd: ${cwd}`);

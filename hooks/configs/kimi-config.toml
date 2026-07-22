@@ -1,0 +1,23 @@
+[[hooks]]
+event = "PreToolUse"
+matcher = ".*"
+command = "node hooks/scripts/kimi/pretool.mjs"
+timeout = 60
+
+[[hooks]]
+event = "PostToolUse"
+matcher = ".*"
+command = "node hooks/scripts/kimi/posttool.mjs"
+timeout = 60
+
+[[hooks]]
+event = "SessionStart"
+matcher = ".*"
+command = "node hooks/scripts/kimi/session-start.mjs"
+timeout = 60
+
+[[hooks]]
+event = "SessionEnd"
+matcher = ".*"
+command = "node hooks/scripts/kimi/session-end.mjs"
+timeout = 60

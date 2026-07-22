@@ -2,11 +2,13 @@ import { createServer } from "node:http";
 import { createSessionLifecycleStateTracker } from "../agent-runtime/activity-event-builder.js";
 import { handleClaudeHookPhase } from "./http-hooks-claude.js";
 import { handleCopilotHookPhase } from "./http-hooks-copilot.js";
+import { handleKimiHookPhase } from "./http-hooks-kimi.js";
 import { readJsonBody, resolveHookRuntime, writeJson } from "./http-hooks-common.js";
 
 export function createGatewayHttpServer(config: any) {
   const copilotLifecycleTracker = createSessionLifecycleStateTracker();
   const claudeLifecycleTracker = createSessionLifecycleStateTracker();
+  const kimiLifecycleTracker = createSessionLifecycleStateTracker();
 
   return createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") {
@@ -30,8 +32,8 @@ export function createGatewayHttpServer(config: any) {
         const invocation = body?.invocation ?? {};
         const runtime = resolveHookRuntime(body?.runtime);
 
-        if (!provider || !["copilot", "claude"].includes(provider)) {
-          writeJson(res, 400, { ok: false, error: "provider must be copilot or claude" });
+        if (!provider || !["copilot", "claude", "kimi"].includes(provider)) {
+          writeJson(res, 400, { ok: false, error: "provider must be copilot, claude, or kimi" });
           return;
         }
 
@@ -59,20 +61,27 @@ export function createGatewayHttpServer(config: any) {
 
         let payload: any = {};
         
-        if (provider === "copilot") {
+        if (provider === "claude") {
+          payload = await handleClaudeHookPhase({
+            phase,
+            input,
+            runtime,
+            lifecycleTracker: claudeLifecycleTracker,
+          });
+        } else if (provider === "kimi") {
+          payload = await handleKimiHookPhase({
+            phase,
+            input,
+            runtime,
+            lifecycleTracker: kimiLifecycleTracker,
+          });
+        } else {
           payload = await handleCopilotHookPhase({
             phase,
             input,
             invocation,
             runtime,
             lifecycleTracker: copilotLifecycleTracker,
-          });
-        } else {
-          payload = await handleClaudeHookPhase({
-            phase,
-            input,
-            runtime,
-            lifecycleTracker: claudeLifecycleTracker,
           });
         }
 

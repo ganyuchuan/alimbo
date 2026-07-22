@@ -1,5 +1,50 @@
 # Development Log
 
+## 2026-07-22
+
+### 47) Kimi Code 最小 Hook 接入（本地项目配置版）
+
+变更目标：
+- 在不改动 cloud 审批协议的前提下，让 `alimbo` 支持 `Kimi Code CLI` 的 hooks 接入。
+- 采用“项目局部配置”最小方案：在仓库目录生成 `.kimi-code/config.toml` 与对应脚本，不做全局配置合并。
+- 保持与现有 Copilot/Claude 统一架构：本地 hook 脚本 -> gateway `/api/hooks/*` -> 统一拦截与事件上报链路。
+
+主要改动：
+- `src/cli.ts`
+  - 新增 `alimbo kimi` 子命令入口。
+  - 帮助文案更新，`hook/unhook` 说明补充 `.kimi-code`。
+- `src/cli/agent.ts`
+  - provider 支持从 `claude|copilot` 扩展为 `claude|copilot|kimi`。
+  - Agent CLI 拉起命令支持 `kimi`。
+- `src/cli/hook.ts`
+  - 新增 Kimi 配置模板复制：`hooks/configs/kimi-config.toml -> .kimi-code/config.toml`。
+  - 新增 Kimi 脚本复制：`hooks/scripts/kimi/* -> .kimi-code/hooks/scripts/kimi/*`。
+- `src/cli/unhook.ts`
+  - 新增 `.kimi-code/config.toml` 与 `.kimi-code/hooks` 清理逻辑。
+- `hooks/configs/kimi-config.toml`
+  - 新增 Kimi hooks 规则：`PreToolUse`、`PostToolUse`、`SessionStart`、`SessionEnd`。
+- `hooks/scripts/kimi/*.mjs`
+  - 新增 4 个 Kimi hook 脚本：
+    - `pretool.mjs`：调用 gateway `/api/hooks/pretool` 并按 Kimi 语义返回允许/阻断。
+    - `posttool.mjs`：调用 gateway `/api/hooks/posttool` 上报观察事件。
+    - `session-start.mjs`：调用 gateway `/api/hooks/session-start` 上报会话开始。
+    - `session-end.mjs`：调用 gateway `/api/hooks/session-end` 上报会话结束，并复用现有 PM2 自动停网关逻辑。
+- `src/gateway/http-hooks-kimi.ts`（新增）
+  - 新增 Kimi provider 适配器：
+    - snake_case payload 归一化
+    - 复用 `runPreToolInterceptGate` 处理 PreToolUse 决策
+    - 复用 lifecycle/posttool builder 上报事件
+- `src/gateway/http-server.ts`
+  - gateway hooks API provider 分发新增 `kimi`。
+  - 新增 Kimi 生命周期 tracker 实例。
+
+兼容性说明：
+- 当前为最小方案，默认 `kimi` 命令可用且 Kimi CLI 会读取项目内 `.kimi-code/config.toml`。
+- 现阶段仍复用 `COPILOT_INTERCEPT_*` 环境变量作为拦截配置来源，未新增 `KIMI_INTERCEPT_*` 前缀。
+
+验证记录：
+- `npm run build`：通过
+
 ## 2026-07-15
 
 ### 46) Pair 命令收敛 + watch CLI 实现重命名为 pair

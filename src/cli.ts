@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function printHelp() {
-  console.log(`alimbo CLI\n\nUsage:\n  alimbo [--port N]                        Start gateway on default port or override PORT in .env\n  alimbo claude                            Setup hooks/env, start gateway, run claude, then unhook on exit\n  alimbo copilot                           Setup hooks/env, start gateway, run copilot, then unhook on exit\n  alimbo pair XXXX [--base-url URL]\n  alimbo feishu --app-id XXX --app-secret XXX\n  alimbo hook [--force]                    Copy hook configs/scripts to current repo (.claude/.github)\n  alimbo unhook                            Remove hook configs/scripts from current repo (.claude/.github)\n  alimbo logs gateway [--lines N] [--follow]\n  alimbo logs feishu [--lines N] [--follow]\n  alimbo --help\n  alimbo --version`);
+  console.log(`alimbo CLI\n\nUsage:\n  alimbo [--port N]                        Start gateway on default port or override PORT in .env\n  alimbo claude                            Setup hooks/env, start gateway, run claude, then unhook on exit\n  alimbo copilot                           Setup hooks/env, start gateway, run copilot, then unhook on exit\n  alimbo kimi                              Setup hooks/env, start gateway, run kimi, then unhook on exit\n  alimbo pair XXXX [--base-url URL]\n  alimbo feishu --app-id XXX --app-secret XXX\n  alimbo hook [--force]                    Copy hook configs/scripts to current repo (.claude/.github/.kimi-code)\n  alimbo unhook                            Remove hook configs/scripts from current repo (.claude/.github/.kimi-code)\n  alimbo logs gateway [--lines N] [--follow]\n  alimbo logs feishu [--lines N] [--follow]\n  alimbo --help\n  alimbo --version`);
 }
 
 function runDistEntry(entryFile, args = []) {
@@ -153,6 +153,8 @@ if (!commandOrOption) {
   runDistEntry("cli/agent.js", ["claude"]);
 } else if (commandOrOption === "copilot") {
   runDistEntry("cli/agent.js", ["copilot"]);
+} else if (commandOrOption === "kimi") {
+  runDistEntry("cli/agent.js", ["kimi"]);
 } else if (commandOrOption === "hook") {
   runDistEntry("cli/hook.js", rest);
 } else if (commandOrOption === "unhook") {
