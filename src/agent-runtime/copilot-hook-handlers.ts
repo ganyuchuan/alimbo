@@ -130,8 +130,8 @@ async function reportSessionLifecycleEvent({ runtime, phase, input, invocation }
   ]);
   const sessionId = String(invocation?.sessionId ?? input?.sessionId ?? "").trim();
   const state = phase === "start"
-    ? runtime.lifecycleStateTracker.markStart()
-    : runtime.lifecycleStateTracker.markEnd();
+    ? runtime.lifecycleStateTracker.markStart(sessionId)
+    : runtime.lifecycleStateTracker.markEnd(sessionId);
   const entries = collectSessionEntries(input, invocation);
   const event = buildSessionLifecycleInterceptEvent({
     phase,

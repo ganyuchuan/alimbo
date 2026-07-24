@@ -15,9 +15,20 @@ export function createLifecycleRequestId(candidates = [], prefix = "lifecycle") 
 }
 
 export function createSessionLifecycleStateTracker(initialState = {}) {
+  const activeSessions = new Set<string>();
+  const seedActiveSessions = Array.isArray((initialState as any)?.activeSessions)
+    ? (initialState as any).activeSessions
+    : [];
+  for (const sessionId of seedActiveSessions) {
+    const normalized = String(sessionId ?? "").trim();
+    if (normalized) {
+      activeSessions.add(normalized);
+    }
+  }
+
   const state = {
     total: Number(initialState?.total ?? 0),
-    running: Number(initialState?.running ?? 0),
+    running: Math.max(Number(initialState?.running ?? 0), activeSessions.size),
     waiting: Number(initialState?.waiting ?? 0),
     completed: Boolean(initialState?.completed ?? false),
   };
@@ -36,16 +47,49 @@ export function createSessionLifecycleStateTracker(initialState = {}) {
     return snapshot();
   };
 
+  const markStartWithSession = (sessionId = "") => {
+    const normalizedSessionId = String(sessionId ?? "").trim();
+    if (!normalizedSessionId) {
+      return markStart();
+    }
+
+    if (activeSessions.has(normalizedSessionId)) {
+      state.completed = false;
+      return snapshot();
+    }
+
+    activeSessions.add(normalizedSessionId);
+    state.total += 1;
+    state.running += 1;
+    state.completed = false;
+    return snapshot();
+  };
+
   const markEnd = () => {
     state.running = Math.max(0, state.running - 1);
     state.completed = true;
     return snapshot();
   };
 
+  const markEndWithSession = (sessionId = "") => {
+    const normalizedSessionId = String(sessionId ?? "").trim();
+    if (!normalizedSessionId) {
+      return markEnd();
+    }
+
+    if (activeSessions.has(normalizedSessionId)) {
+      activeSessions.delete(normalizedSessionId);
+      state.running = Math.max(0, state.running - 1);
+    }
+
+    state.completed = true;
+    return snapshot();
+  };
+
   return {
     snapshot,
-    markStart,
-    markEnd,
+    markStart: markStartWithSession,
+    markEnd: markEndWithSession,
   };
 }
 

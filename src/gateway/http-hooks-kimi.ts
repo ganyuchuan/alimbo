@@ -155,7 +155,9 @@ export async function handleKimiHookPhase({
   }
 
   const lifecyclePhase = phase === "session-start" ? "start" : "end";
-  const state = lifecyclePhase === "start" ? lifecycleTracker.markStart() : lifecycleTracker.markEnd();
+  const state = lifecyclePhase === "start"
+    ? lifecycleTracker.markStart(normalized.sessionId)
+    : lifecycleTracker.markEnd(normalized.sessionId);
   const entries = collectLifecycleSessionEntries({
     sources: [input?.messages, input?.session?.messages],
     fallbackFields: [input?.prompt, input?.user_input],
