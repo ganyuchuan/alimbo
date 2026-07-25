@@ -15,6 +15,7 @@ export type ApnsAlertRequest = {
   deviceToken: string;
   title: string;
   body: string;
+  topic?: string;
   subtitle?: string;
   sound?: string;
   badge?: number;
@@ -151,6 +152,17 @@ export function createApnsClient(options: ApnsClientOptions) {
       };
     }
 
+    const topicToUse = String(request?.topic ?? topic).trim();
+    if (!topicToUse) {
+      return {
+        ok: false,
+        status: 0,
+        apnsId: "",
+        reason: "missing apns topic",
+        responseBody: "",
+      };
+    }
+
     const deviceToken = String(request?.deviceToken ?? "").replace(/\s+/g, "").trim();
     if (!isLikelyDeviceToken(deviceToken)) {
       return {
@@ -188,7 +200,7 @@ export function createApnsClient(options: ApnsClientOptions) {
         ":method": "POST",
         ":path": `/3/device/${deviceToken}`,
         authorization: `bearer ${providerToken}`,
-        "apns-topic": topic,
+        "apns-topic": topicToUse,
         "apns-push-type": "alert",
         "content-type": "application/json",
       });

@@ -15,6 +15,7 @@ function openDatabase(dbFile: string) {
     CREATE TABLE IF NOT EXISTS apns_device_bindings (
       user_id TEXT NOT NULL,
       device_token TEXT NOT NULL,
+      device_platform TEXT NOT NULL DEFAULT 'unknown',
       created_at_ms INTEGER NOT NULL DEFAULT 0,
       updated_at_ms INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (user_id, device_token)
@@ -39,6 +40,12 @@ function openDatabase(dbFile: string) {
       ON apns_push_events(user_id, created_at_ms DESC);
   `);
 
+  try {
+    database.exec(`ALTER TABLE apns_device_bindings ADD COLUMN device_platform TEXT NOT NULL DEFAULT 'unknown';`);
+  } catch {
+    // Column already exists.
+  }
+
   return database;
 }
 
@@ -50,6 +57,17 @@ function isLikelyDeviceToken(value: string) {
   return /^[0-9a-fA-F]{64,200}$/.test(String(value ?? "").trim());
 }
 
+function normalizeDevicePlatform(platform: string) {
+  const normalized = String(platform ?? "").trim().toLowerCase();
+  if (["ios", "iphone", "app", "phone"].includes(normalized)) {
+    return "ios";
+  }
+  if (["watch", "watchos", "applewatch"].includes(normalized)) {
+    return "watch";
+  }
+  return "unknown";
+}
+
 class ApnsStore {
   dbFile: string;
   db: DatabaseSync;
@@ -59,9 +77,10 @@ class ApnsStore {
     this.db = openDatabase(this.dbFile);
   }
 
-  bindDeviceToken(userId: string, deviceToken: string, now = Date.now()) {
+  bindDeviceToken(userId: string, deviceToken: string, platform = "unknown", now = Date.now()) {
     const normalizedUserId = String(userId ?? "").trim();
     const normalizedToken = normalizeDeviceToken(deviceToken);
+    const normalizedPlatform = normalizeDevicePlatform(platform);
 
     if (!normalizedUserId) {
       throw new Error("userId is required");
@@ -78,35 +97,70 @@ class ApnsStore {
     `).run(normalizedToken);
 
     this.db.prepare(`
-      INSERT INTO apns_device_bindings (user_id, device_token, created_at_ms, updated_at_ms)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO apns_device_bindings (user_id, device_token, device_platform, created_at_ms, updated_at_ms)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(user_id, device_token) DO UPDATE SET
+        device_platform = excluded.device_platform,
         updated_at_ms = excluded.updated_at_ms
-    `).run(normalizedUserId, normalizedToken, now, now);
+    `).run(normalizedUserId, normalizedToken, normalizedPlatform, now, now);
 
     return {
       userId: normalizedUserId,
       deviceToken: normalizedToken,
+      platform: normalizedPlatform,
       updatedAtMs: now,
     };
   }
 
-  listDeviceTokensByUserId(userId: string) {
+  listDeviceTokensByUserId(userId: string, platform = "") {
+    const normalizedUserId = String(userId ?? "").trim();
+    const normalizedPlatform = normalizeDevicePlatform(platform);
+    if (!normalizedUserId) {
+      return [];
+    }
+
+    const rows = normalizedPlatform === "unknown" && String(platform ?? "").trim()
+      ? []
+      : normalizedPlatform === "unknown"
+        ? this.db.prepare(`
+      SELECT device_token
+      FROM apns_device_bindings
+      WHERE user_id = ?
+      ORDER BY updated_at_ms DESC, device_token DESC
+    `).all(normalizedUserId)
+        : this.db.prepare(`
+      SELECT device_token
+      FROM apns_device_bindings
+      WHERE user_id = ?
+        AND device_platform = ?
+      ORDER BY updated_at_ms DESC, device_token DESC
+    `).all(normalizedUserId, normalizedPlatform);
+
+    return rows
+      .map((row: any) => normalizeDeviceToken(row?.device_token))
+      .filter((token: string) => isLikelyDeviceToken(token));
+  }
+
+  listDeviceBindingsByUserId(userId: string) {
     const normalizedUserId = String(userId ?? "").trim();
     if (!normalizedUserId) {
       return [];
     }
 
     const rows = this.db.prepare(`
-      SELECT device_token
+      SELECT device_token, device_platform, updated_at_ms
       FROM apns_device_bindings
       WHERE user_id = ?
       ORDER BY updated_at_ms DESC, device_token DESC
     `).all(normalizedUserId);
 
     return rows
-      .map((row: any) => normalizeDeviceToken(row?.device_token))
-      .filter((token: string) => isLikelyDeviceToken(token));
+      .map((row: any) => ({
+        deviceToken: normalizeDeviceToken(row?.device_token),
+        platform: normalizeDevicePlatform(row?.device_platform),
+        updatedAtMs: Number(row?.updated_at_ms ?? 0),
+      }))
+      .filter((item: any) => isLikelyDeviceToken(item.deviceToken));
   }
 
   markPushEventIfNew({

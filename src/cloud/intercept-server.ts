@@ -69,6 +69,8 @@ const pairingCodeTtlMs = 30 * 60 * 1000;
 const pairingCodeRegistry = createPairingCodeRegistry({ ttlMs: pairingCodeTtlMs });
 const apnsEnabled = toBool(process.env.APNS_ENABLED, false);
 const apnsUseSandbox = toBool(process.env.APNS_USE_SANDBOX, true);
+const apnsIosTopic = String(process.env.APNS_IOS_TOPIC ?? "cn.ganyuchuan.AgentCompanion").trim();
+const apnsWatchTopic = String(process.env.APNS_WATCH_TOPIC ?? process.env.APNS_TOPIC ?? "").trim();
 const apnsClient = createApnsClient({
   enabled: apnsEnabled,
   teamId: String(process.env.APNS_TEAM_ID ?? "").trim(),
@@ -248,7 +250,19 @@ type ApnsAlertBody = {
 type ApnsRegisterBody = {
   authToken?: string;
   deviceToken?: string;
+  platform?: string;
 };
+
+function normalizeApnsPlatform(value: unknown) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (["ios", "iphone", "app", "phone"].includes(normalized)) {
+    return "ios";
+  }
+  if (["watch", "watchos", "applewatch"].includes(normalized)) {
+    return "watch";
+  }
+  return "unknown";
+}
 
 function json(res, status, body) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -810,8 +824,28 @@ async function sendApnsInterceptNotification({
     `[cloud-server][apns] intercept notify send begin userId=${normalizedUserId} deviceTokens=${deviceTokens.length}`,
   );
 
-  const results = await Promise.all(deviceTokens.map((deviceToken) => apnsClient.sendAlert({
-    deviceToken,
+  const bindings = apnsStore.listDeviceBindingsByUserId(normalizedUserId);
+  const deliveryTargets = bindings.length > 0
+    ? bindings.flatMap((binding) => {
+        const topic = binding.platform === "watch"
+          ? apnsWatchTopic
+          : binding.platform === "ios"
+            ? apnsIosTopic
+            : apnsIosTopic;
+        if (!topic) {
+          return [];
+        }
+        return [{ deviceToken: binding.deviceToken, topic, platform: binding.platform }];
+      })
+    : deviceTokens.map((deviceToken) => ({ deviceToken, topic: apnsIosTopic, platform: "unknown" }));
+
+  console.log(
+    `[cloud-server][apns] intercept notify routes userId=${normalizedUserId} iosTopic=${apnsIosTopic || "-"} watchTopic=${apnsWatchTopic || "-"} targets=${deliveryTargets.map((item) => `${item.platform}:${item.topic}`).join(",") || "-"}`,
+  );
+
+  const results = await Promise.all(deliveryTargets.map((target) => apnsClient.sendAlert({
+    deviceToken: target.deviceToken,
+    topic: target.topic,
     title,
     body: `${message}\nrequestId=${normalizedRequestId} tool=${normalizedTool} decision=${normalizedDecision}`,
     sound: "default",
@@ -821,6 +855,7 @@ async function sendApnsInterceptNotification({
       tool: normalizedTool,
       decision: normalizedDecision,
       eventKey: normalizedEventKey,
+      platform: target.platform,
     },
   })));
 
@@ -979,6 +1014,7 @@ const server = createServer(async (req, res) => {
       const identityToken = String(body?.identityToken ?? "").trim();
       const nonce = String(body?.nonce ?? "").trim();
       const deviceToken = String(body?.deviceToken ?? "").replace(/\s+/g, "").trim();
+      const devicePlatform = normalizeApnsPlatform(body?.platform);
 
       if (!identityToken) {
         logApi(req, pathname, "invalid request: identityToken is required");
@@ -1012,8 +1048,8 @@ const server = createServer(async (req, res) => {
 
       if (deviceToken) {
         try {
-          apnsStore.bindDeviceToken(issued.userId, deviceToken);
-          logApi(req, pathname, `apple login device bound userId=${issued.userId}`);
+          apnsStore.bindDeviceToken(issued.userId, deviceToken, devicePlatform);
+          logApi(req, pathname, `apple login device bound userId=${issued.userId} platform=${devicePlatform}`);
         } catch (error) {
           console.warn(
             `[cloud-server][auth] apple login device bind failed userId=${issued.userId} reason=${String(error?.message ?? error)}`,
@@ -1157,9 +1193,11 @@ const server = createServer(async (req, res) => {
       logApi(req, pathname, `list users limit=${limit} admin=${admin.userId}`);
       const users = interceptStore.listUsers(limit);
       const items = users.map((user) => {
-        const deviceTokens = apnsStore.listDeviceTokensByUserId(user.userId);
+        const deviceBindings = apnsStore.listDeviceBindingsByUserId(user.userId);
+        const deviceTokens = deviceBindings.map((item) => item.deviceToken);
         return {
           ...user,
+          deviceBindings,
           deviceTokens,
           deviceToken: deviceTokens[0] || "",
         };
@@ -1175,6 +1213,7 @@ const server = createServer(async (req, res) => {
       const body = await parseBody<ApnsRegisterBody>(req);
       const authToken = String(body?.authToken ?? "").trim();
       const deviceToken = String(body?.deviceToken ?? "").replace(/\s+/g, "").trim();
+      const devicePlatform = normalizeApnsPlatform(body?.platform);
 
       if (!authToken) {
         logApi(req, pathname, "unauthorized: authToken is required");
@@ -1192,13 +1231,14 @@ const server = createServer(async (req, res) => {
         return json(res, 401, { error: "unauthorized" });
       }
 
-      const bound = apnsStore.bindDeviceToken(principal.userId, deviceToken);
-      logApi(req, pathname, `registered apns device userId=${bound.userId}`);
+      const bound = apnsStore.bindDeviceToken(principal.userId, deviceToken, devicePlatform);
+      logApi(req, pathname, `registered apns device userId=${bound.userId} platform=${bound.platform}`);
 
       return json(res, 200, {
         ok: true,
         userId: bound.userId,
         deviceToken: bound.deviceToken,
+        platform: bound.platform,
         updatedAtMs: bound.updatedAtMs,
       });
     }

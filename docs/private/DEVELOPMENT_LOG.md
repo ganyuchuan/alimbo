@@ -1,5 +1,45 @@
 # Development Log
 
+## 2026-07-25
+
+### 48) APNS 按设备平台分流推送（iPhone / Watch 双 topic）
+
+变更目标：
+- 解决审批推送中 iPhone 与 Watch token 混发到同一 topic 导致的大量 `DeviceTokenNotForTopic`。
+- 落地“按设备类型分流”方案：注册 token 时记录平台，发送推送时按平台选取对应 bundle topic。
+- 保持现有 APNS 鉴权方式不变（provider token），仅调整存储与路由策略。
+
+主要改动：
+- `src/cloud/apns-store.ts`
+  - `apns_device_bindings` 新增 `device_platform` 字段（默认 `unknown`）。
+  - 增加旧库兼容迁移：启动时自动补列（`ALTER TABLE ... ADD COLUMN`）。
+  - `bindDeviceToken` 支持写入平台（`ios/watch/unknown`）。
+  - `listDeviceTokensByUserId` 支持按平台筛选。
+  - 新增 `listDeviceBindingsByUserId`，返回 `deviceToken + platform + updatedAtMs`。
+- `src/cloud/apns-client.ts`
+  - `sendAlert` 支持可选 `topic` 覆盖默认 `APNS_TOPIC`。
+  - 单次发送时优先使用请求内 topic，便于同一 APNS client 按设备分流。
+- `src/cloud/intercept-server.ts`
+  - 新增平台归一化：`ios/watch/unknown`。
+  - `POST /api/apns/register` 支持 `platform` 入参并持久化。
+  - `POST /auth/apple/login` 支持读取 `platform` 并绑定设备平台。
+  - 审批推送分发逻辑改为：
+    - `ios` -> `APNS_IOS_TOPIC`
+    - `watch` -> `APNS_WATCH_TOPIC`
+    - `unknown` -> 回退 `APNS_IOS_TOPIC`
+  - 新增路由日志，输出本次推送 topic 路由结果，便于排障。
+- `.env.example`
+  - 新增 APNS 平台分流配置：
+    - `APNS_IOS_TOPIC`
+    - `APNS_WATCH_TOPIC`
+
+兼容性说明：
+- 旧客户端若未上报 `platform`，会被归类为 `unknown`，并回退走 `APNS_IOS_TOPIC`。
+- 历史已绑定 token 不会丢失；仅新增平台字段用于后续分流。
+
+验证记录：
+- `npm run build`：通过
+
 ## 2026-07-22
 
 ### 47) Kimi Code 最小 Hook 接入（本地项目配置版）
