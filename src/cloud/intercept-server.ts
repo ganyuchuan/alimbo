@@ -83,6 +83,7 @@ const appleClientId = String(process.env.APPLE_SIGNIN_CLIENT_ID ?? "").trim();
 const appleIssuer = String(process.env.APPLE_SIGNIN_ISSUER ?? "https://appleid.apple.com").trim();
 const adminSessionTtlMs = toInt(process.env.CLOUD_ADMIN_SESSION_TTL_MS, 7 * 24 * 60 * 60 * 1000);
 const adminSessionCookieName = "alimbo_admin_session";
+const authTokenAllowPasswordGrant = toBool(process.env.CLOUD_AUTH_TOKEN_ALLOW_PASSWORD_GRANT, false);
 
 function setToArray(setLike) {
   return Array.isArray(setLike) ? setLike : [...setLike];
@@ -212,6 +213,7 @@ type LoginPrincipal = Principal & {
 
 type AuthTokenBody = {
   username?: string;
+  password?: string;
 };
 
 type AdminLoginBody = {
@@ -962,15 +964,35 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && pathname === "/auth/token") {
-      const admin = requireAdminSession(req, res);
-      if (!admin) {
-        logApi(req, pathname, "unauthorized: admin session required");
-        return json(res, 401, { error: "unauthorized" });
-      }
-
       const body = await parseBody<AuthTokenBody>(req);
       const username = String(body?.username ?? "").trim();
-      logApi(req, pathname, `issue token requested username=${username || "-"} admin=${admin.userId}`);
+      const password = String(body?.password ?? "").trim();
+
+      let admin = requireAdminSession(req, res);
+      let grantType = "cookie";
+
+      if (!admin) {
+        if (!authTokenAllowPasswordGrant) {
+          logApi(req, pathname, "unauthorized: admin session required");
+          return json(res, 401, { error: "unauthorized" });
+        }
+
+        if (!username || !password) {
+          logApi(req, pathname, "unauthorized: username/password required for password grant");
+          return json(res, 401, { error: "unauthorized" });
+        }
+
+        const principal = interceptStore.verifyAdminPassword(username, password);
+        if (!principal?.userId || !isAdminPrincipal(principal)) {
+          logApi(req, pathname, `password grant failed username=${username || "-"}`);
+          return json(res, 401, { error: "unauthorized" });
+        }
+
+        admin = principal;
+        grantType = "password";
+      }
+
+      logApi(req, pathname, `issue token requested username=${username || "-"} admin=${admin.userId} grant=${grantType}`);
       if (!username) {
         logApi(req, pathname, "invalid request: username is required");
         return json(res, 400, { error: "username is required" });

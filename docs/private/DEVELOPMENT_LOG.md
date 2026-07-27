@@ -1,5 +1,31 @@
 # Development Log
 
+## 2026-07-27
+
+### 49) /auth/token 新增可选密码授权（无 Cookie 场景）
+
+变更目标：
+- 让 `/auth/token` 在保留原有 admin session cookie 鉴权的同时，支持可选的 username/password 授权发 token。
+- 通过环境变量开关控制是否允许密码授权，默认关闭，避免未预期放开认证面。
+
+主要改动：
+- `src/cloud/intercept-server.ts`
+  - 新增配置读取：`CLOUD_AUTH_TOKEN_ALLOW_PASSWORD_GRANT`（默认 `false`）。
+  - `AuthTokenBody` 增加 `password` 字段。
+  - `POST /auth/token` 调整认证流程：
+    - 优先沿用原有 admin session cookie。
+    - 当 cookie 不存在且开关开启时，允许使用 `username/password` 进行授权。
+    - 若用户名或密码缺失、或密码校验失败，返回 `401 unauthorized`。
+  - 日志新增 `grant` 标记（`cookie` / `password`），便于审计和排障。
+- `.env.example`
+  - 新增 `CLOUD_AUTH_TOKEN_ALLOW_PASSWORD_GRANT=true` 示例配置项。
+
+兼容性说明：
+- 默认行为不变：未开启 `CLOUD_AUTH_TOKEN_ALLOW_PASSWORD_GRANT` 时，`/auth/token` 仍必须依赖 admin session cookie。
+
+验证记录：
+- `npm run build`：通过
+
 ## 2026-07-25
 
 ### 48) APNS 按设备平台分流推送（iPhone / Watch 双 topic）
