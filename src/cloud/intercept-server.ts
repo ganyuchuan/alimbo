@@ -69,13 +69,13 @@ const pairingCodeTtlMs = 30 * 60 * 1000;
 const pairingCodeRegistry = createPairingCodeRegistry({ ttlMs: pairingCodeTtlMs });
 const apnsEnabled = toBool(process.env.APNS_ENABLED, false);
 const apnsUseSandbox = toBool(process.env.APNS_USE_SANDBOX, true);
-const apnsIosTopic = String(process.env.APNS_IOS_TOPIC ?? "cn.ganyuchuan.AgentCompanion").trim();
-const apnsWatchTopic = String(process.env.APNS_WATCH_TOPIC ?? process.env.APNS_TOPIC ?? "").trim();
+const apnsIosTopic = String(process.env.APNS_IOS_TOPIC).trim();
+const apnsWatchTopic = String(process.env.APNS_WATCH_TOPIC).trim();
 const apnsClient = createApnsClient({
   enabled: apnsEnabled,
   teamId: String(process.env.APNS_TEAM_ID ?? "").trim(),
   keyId: String(process.env.APNS_KEY_ID ?? "").trim(),
-  topic: String(process.env.APNS_TOPIC ?? "").trim(),
+  topic: String(process.env.APNS_IOS_TOPIC ?? "").trim(),
   privateKey: loadApnsPrivateKeyFromEnv(),
   useSandbox: apnsUseSandbox,
 });
