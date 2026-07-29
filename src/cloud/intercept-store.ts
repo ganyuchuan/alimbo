@@ -120,6 +120,8 @@ function normalizeRequestRecord(raw) {
 
   return {
     id: String(raw.id ?? "").trim(),
+    traceId: String(raw.traceId ?? "").trim(),
+    providerCallId: String(raw.providerCallId ?? "").trim(),
     tool: String(raw.tool ?? "").trim(),
     hint: String(raw.hint ?? "").trim(),
     msg: String(raw.msg ?? "").trim(),
@@ -144,11 +146,39 @@ function normalizeToolCallRecord(raw) {
 
   return {
     id: String(raw.id ?? "").trim(),
+    traceId: String(raw.traceId ?? "").trim(),
+    providerCallId: String(raw.providerCallId ?? "").trim(),
     userId: String(raw.userId ?? "").trim(),
     sessionId: String(raw.sessionId ?? "").trim(),
     tool: String(raw.tool ?? "").trim(),
     args: raw.args && typeof raw.args === "object" ? raw.args : null,
     result: raw.result && typeof raw.result === "object" ? raw.result : raw.result ?? null,
+    ts: Number.isFinite(raw.ts) ? raw.ts : Date.now(),
+    workDir: String(raw.workDir ?? "").trim(),
+  };
+}
+
+function normalizeToolEventRecord(raw) {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  return {
+    eventId: String(raw.eventId ?? raw.id ?? "").trim(),
+    userId: String(raw.userId ?? "").trim(),
+    traceId: String(raw.traceId ?? "").trim(),
+    providerCallId: String(raw.providerCallId ?? "").trim(),
+    requestId: String(raw.requestId ?? "").trim(),
+    sessionId: String(raw.sessionId ?? "").trim(),
+    tool: String(raw.tool ?? "").trim(),
+    stage: String(raw.stage ?? "").trim().toLowerCase(),
+    status: String(raw.status ?? "").trim().toLowerCase(),
+    decision: normalizeDecision(raw.decision, "wait"),
+    reason: String(raw.reason ?? "").trim(),
+    decidedBy: String(raw.decidedBy ?? "").trim(),
+    args: raw.args && typeof raw.args === "object" ? raw.args : null,
+    result: raw.result && typeof raw.result === "object" ? raw.result : raw.result ?? null,
+    meta: raw.meta && typeof raw.meta === "object" ? raw.meta : null,
     ts: Number.isFinite(raw.ts) ? raw.ts : Date.now(),
     workDir: String(raw.workDir ?? "").trim(),
   };
@@ -344,6 +374,8 @@ function openDatabase(dbFile) {
     CREATE TABLE IF NOT EXISTS intercept_requests (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL DEFAULT '',
+      trace_id TEXT NOT NULL DEFAULT '',
+      provider_call_id TEXT NOT NULL DEFAULT '',
       tool TEXT NOT NULL,
       hint TEXT NOT NULL DEFAULT '',
       msg TEXT NOT NULL DEFAULT '',
@@ -372,10 +404,32 @@ function openDatabase(dbFile) {
     CREATE TABLE IF NOT EXISTS intercept_tool_calls (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL DEFAULT '',
+      trace_id TEXT NOT NULL DEFAULT '',
+      provider_call_id TEXT NOT NULL DEFAULT '',
       session_id TEXT NOT NULL DEFAULT '',
       tool TEXT NOT NULL DEFAULT '',
       args_json TEXT,
       result_json TEXT,
+      ts INTEGER NOT NULL DEFAULT 0,
+      work_dir TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS intercept_tool_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL DEFAULT '',
+      trace_id TEXT NOT NULL DEFAULT '',
+      provider_call_id TEXT NOT NULL DEFAULT '',
+      request_id TEXT NOT NULL DEFAULT '',
+      session_id TEXT NOT NULL DEFAULT '',
+      tool TEXT NOT NULL DEFAULT '',
+      stage TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT '',
+      decision TEXT NOT NULL DEFAULT '',
+      reason TEXT NOT NULL DEFAULT '',
+      decided_by TEXT NOT NULL DEFAULT '',
+      args_json TEXT,
+      result_json TEXT,
+      meta_json TEXT,
       ts INTEGER NOT NULL DEFAULT 0,
       work_dir TEXT NOT NULL DEFAULT ''
     );
@@ -385,6 +439,12 @@ function openDatabase(dbFile) {
 
     CREATE INDEX IF NOT EXISTS idx_intercept_tool_calls_user_ts
       ON intercept_tool_calls(user_id, ts DESC, id DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_intercept_tool_events_user_ts
+      ON intercept_tool_events(user_id, ts DESC, id DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_intercept_tool_events_user_trace
+      ON intercept_tool_events(user_id, trace_id, ts DESC);
 
     CREATE TABLE IF NOT EXISTS auth_sessions (
       session_token TEXT PRIMARY KEY,
@@ -407,7 +467,27 @@ function openDatabase(dbFile) {
   tryExecMigration(database, "ALTER TABLE intercept_state ADD COLUMN agent_json TEXT; ");
   tryExecMigration(database, "ALTER TABLE intercept_state ADD COLUMN work_dir TEXT NOT NULL DEFAULT ''; ");
   tryExecMigration(database, "ALTER TABLE intercept_requests ADD COLUMN user_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_requests ADD COLUMN trace_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_requests ADD COLUMN provider_call_id TEXT NOT NULL DEFAULT ''; ");
   tryExecMigration(database, "ALTER TABLE intercept_tool_calls ADD COLUMN user_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_calls ADD COLUMN trace_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_calls ADD COLUMN provider_call_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN user_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN trace_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN provider_call_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN request_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN session_id TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN tool TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN stage TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN status TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN decision TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN reason TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN decided_by TEXT NOT NULL DEFAULT ''; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN args_json TEXT; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN result_json TEXT; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN meta_json TEXT; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN ts INTEGER NOT NULL DEFAULT 0; ");
+  tryExecMigration(database, "ALTER TABLE intercept_tool_events ADD COLUMN work_dir TEXT NOT NULL DEFAULT ''; ");
   tryExecMigration(database, "ALTER TABLE users ADD COLUMN auth_type TEXT NOT NULL DEFAULT ''; ");
   tryExecMigration(database, "ALTER TABLE users ADD COLUMN auth_password_salt TEXT NOT NULL DEFAULT ''; ");
   tryExecMigration(database, "ALTER TABLE users ADD COLUMN auth_password_hash TEXT NOT NULL DEFAULT ''; ");
@@ -426,8 +506,16 @@ function openDatabase(dbFile) {
       ON intercept_requests(user_id, status, created_at_ms DESC);
     CREATE INDEX IF NOT EXISTS idx_intercept_requests_user_created_at
       ON intercept_requests(user_id, created_at_ms DESC);
+    CREATE INDEX IF NOT EXISTS idx_intercept_requests_user_trace_id
+      ON intercept_requests(user_id, trace_id);
     CREATE INDEX IF NOT EXISTS idx_intercept_tool_calls_user_ts
       ON intercept_tool_calls(user_id, ts DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_intercept_tool_calls_user_trace_id
+      ON intercept_tool_calls(user_id, trace_id);
+    CREATE INDEX IF NOT EXISTS idx_intercept_tool_events_user_ts
+      ON intercept_tool_events(user_id, ts DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_intercept_tool_events_user_trace
+      ON intercept_tool_events(user_id, trace_id, ts DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_apple_sub
       ON users(apple_sub)
       WHERE apple_sub <> '';
@@ -568,6 +656,8 @@ class InterceptStore {
     const row = this.db.prepare(`
       SELECT
         id,
+        trace_id,
+        provider_call_id,
         tool,
         hint,
         msg,
@@ -592,6 +682,64 @@ class InterceptStore {
 
     return normalizeRequestRecord({
       id: row.id,
+      traceId: row.trace_id,
+      providerCallId: row.provider_call_id,
+      tool: row.tool,
+      hint: row.hint,
+      msg: row.msg,
+      input: parseJsonText(row.input_json, null),
+      sessionId: row.session_id,
+      workDir: row.work_dir,
+      status: row.status,
+      decision: row.decision,
+      reason: row.reason,
+      createdAtMs: row.created_at_ms,
+      updatedAtMs: row.updated_at_ms,
+      expiresAtMs: row.expires_at_ms,
+      decidedBy: row.decided_by,
+      decidedAtMs: row.decided_at_ms,
+    });
+  }
+
+  getRequestByTraceId(userId, traceId) {
+    const normalizedTraceId = String(traceId ?? "").trim();
+    if (!normalizedTraceId) {
+      return null;
+    }
+
+    const row = this.db.prepare(`
+      SELECT
+        id,
+        trace_id,
+        provider_call_id,
+        tool,
+        hint,
+        msg,
+        input_json,
+        session_id,
+        work_dir,
+        status,
+        decision,
+        reason,
+        created_at_ms,
+        updated_at_ms,
+        expires_at_ms,
+        decided_by,
+        decided_at_ms
+      FROM intercept_requests
+      WHERE user_id = ? AND trace_id = ?
+      ORDER BY updated_at_ms DESC, created_at_ms DESC
+      LIMIT 1
+    `).get(userId, normalizedTraceId);
+
+    if (!row) {
+      return null;
+    }
+
+    return normalizeRequestRecord({
+      id: row.id,
+      traceId: row.trace_id,
+      providerCallId: row.provider_call_id,
       tool: row.tool,
       hint: row.hint,
       msg: row.msg,
@@ -615,6 +763,8 @@ class InterceptStore {
       ? this.db.prepare(`
           SELECT
             id,
+            trace_id,
+            provider_call_id,
             tool,
             hint,
             msg,
@@ -637,6 +787,8 @@ class InterceptStore {
       : this.db.prepare(`
           SELECT
             id,
+            trace_id,
+            provider_call_id,
             tool,
             hint,
             msg,
@@ -659,6 +811,8 @@ class InterceptStore {
 
     return rows.map((row) => normalizeRequestRecord({
       id: row.id,
+      traceId: row.trace_id,
+      providerCallId: row.provider_call_id,
       tool: row.tool,
       hint: row.hint,
       msg: row.msg,
@@ -686,6 +840,8 @@ class InterceptStore {
       INSERT INTO intercept_requests (
         id,
         user_id,
+        trace_id,
+        provider_call_id,
         tool,
         hint,
         msg,
@@ -700,10 +856,12 @@ class InterceptStore {
         expires_at_ms,
         decided_by,
         decided_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         tool = excluded.tool,
         user_id = excluded.user_id,
+        trace_id = excluded.trace_id,
+        provider_call_id = excluded.provider_call_id,
         hint = excluded.hint,
         msg = excluded.msg,
         input_json = excluded.input_json,
@@ -720,6 +878,8 @@ class InterceptStore {
     `).run(
       normalized.id,
       userId,
+      normalized.traceId,
+      normalized.providerCallId,
       normalized.tool,
       normalized.hint,
       normalized.msg,
@@ -737,10 +897,210 @@ class InterceptStore {
     );
   }
 
+  insertToolEvent(userId, event) {
+    const normalized = normalizeToolEventRecord(event);
+    if (!normalized?.eventId) {
+      return;
+    }
+
+    this.db.prepare(`
+      INSERT INTO intercept_tool_events (
+        id,
+        user_id,
+        trace_id,
+        provider_call_id,
+        request_id,
+        session_id,
+        tool,
+        stage,
+        status,
+        decision,
+        reason,
+        decided_by,
+        args_json,
+        result_json,
+        meta_json,
+        ts,
+        work_dir
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        user_id = excluded.user_id,
+        trace_id = excluded.trace_id,
+        provider_call_id = excluded.provider_call_id,
+        request_id = excluded.request_id,
+        session_id = excluded.session_id,
+        tool = excluded.tool,
+        stage = excluded.stage,
+        status = excluded.status,
+        decision = excluded.decision,
+        reason = excluded.reason,
+        decided_by = excluded.decided_by,
+        args_json = excluded.args_json,
+        result_json = excluded.result_json,
+        meta_json = excluded.meta_json,
+        ts = excluded.ts,
+        work_dir = excluded.work_dir
+    `).run(
+      normalized.eventId,
+      userId,
+      normalized.traceId,
+      normalized.providerCallId,
+      normalized.requestId,
+      normalized.sessionId,
+      normalized.tool,
+      normalized.stage,
+      normalized.status,
+      normalized.decision,
+      normalized.reason,
+      normalized.decidedBy,
+      stringifyJson(normalized.args, "null"),
+      stringifyJson(normalized.result, "null"),
+      stringifyJson(normalized.meta, "null"),
+      normalized.ts,
+      normalized.workDir,
+    );
+
+    this.db.prepare(`
+      DELETE FROM intercept_tool_events
+      WHERE user_id = ? AND id NOT IN (
+        SELECT id
+        FROM intercept_tool_events
+        WHERE user_id = ?
+        ORDER BY ts DESC, id DESC
+        LIMIT ?
+      )
+    `).run(userId, userId, this.maxToolCalls * 10);
+  }
+
+  listToolEvents(userId, limit = this.maxToolCalls * 10) {
+    const normalizedLimit = Math.max(1, Math.min(toInt(limit, this.maxToolCalls * 10), 5000));
+    const rows = this.db.prepare(`
+      SELECT
+        id,
+        user_id,
+        trace_id,
+        provider_call_id,
+        request_id,
+        session_id,
+        tool,
+        stage,
+        status,
+        decision,
+        reason,
+        decided_by,
+        args_json,
+        result_json,
+        meta_json,
+        ts,
+        work_dir
+      FROM intercept_tool_events
+      WHERE user_id = ?
+      ORDER BY ts DESC, id DESC
+      LIMIT ?
+    `).all(userId, normalizedLimit);
+
+    return rows
+      .map((row) => normalizeToolEventRecord({
+        eventId: row.id,
+        userId: row.user_id,
+        traceId: row.trace_id,
+        providerCallId: row.provider_call_id,
+        requestId: row.request_id,
+        sessionId: row.session_id,
+        tool: row.tool,
+        stage: row.stage,
+        status: row.status,
+        decision: row.decision,
+        reason: row.reason,
+        decidedBy: row.decided_by,
+        args: parseJsonText(row.args_json, null),
+        result: parseJsonText(row.result_json, null),
+        meta: parseJsonText(row.meta_json, null),
+        ts: row.ts,
+        workDir: row.work_dir,
+      }))
+      .filter(Boolean);
+  }
+
+  countToolEvents(userId) {
+    return countTotalFromDb(this.db, "intercept_tool_events", userId);
+  }
+
   listToolCalls(userId, limit = this.maxToolCalls) {
     const normalizedLimit = Math.max(1, Math.min(toInt(limit, this.maxToolCalls), 500));
+
+    const events = this.listToolEvents(userId, this.maxToolCalls * 10);
+    if (events.length > 0) {
+      const grouped = new Map<string, any>();
+
+      for (const event of [...events].reverse()) {
+        const traceId = String(event.traceId ?? "").trim();
+        const requestId = String(event.requestId ?? "").trim();
+        const eventId = String(event.eventId ?? "").trim();
+        const key = traceId
+          ? `trace:${traceId}`
+          : requestId
+            ? `request:${requestId}`
+            : eventId
+              ? `event:${eventId}`
+              : `fallback:${String(event.ts)}`;
+
+        let record = grouped.get(key);
+        if (!record) {
+          record = {
+            id: requestId || eventId || traceId || `tool_${crypto.randomUUID()}`,
+            traceId,
+            providerCallId: String(event.providerCallId ?? "").trim(),
+            sessionId: String(event.sessionId ?? "").trim(),
+            tool: String(event.tool ?? "").trim(),
+            args: null,
+            result: null,
+            ts: Number.isFinite(event.ts) ? event.ts : Date.now(),
+            workDir: String(event.workDir ?? "").trim(),
+            interceptStatus: "",
+            interceptDecision: "",
+            interceptReason: "",
+            interceptDecidedBy: "",
+            interceptDecidedAtMs: 0,
+          };
+          grouped.set(key, record);
+        }
+
+        record.traceId = record.traceId || traceId;
+        record.providerCallId = record.providerCallId || String(event.providerCallId ?? "").trim();
+        record.sessionId = record.sessionId || String(event.sessionId ?? "").trim();
+        record.tool = record.tool || String(event.tool ?? "").trim();
+        record.workDir = record.workDir || String(event.workDir ?? "").trim();
+        record.ts = Math.min(Number(record.ts || Number.MAX_SAFE_INTEGER), Number(event.ts || Date.now()));
+
+        if (event.stage === "pretool") {
+          record.args = record.args ?? (event.args ?? null);
+          record.interceptStatus = record.interceptStatus || event.status || "waiting";
+          record.interceptDecision = record.interceptDecision || event.decision || "wait";
+        } else if (event.stage === "decision") {
+          record.interceptStatus = event.status || record.interceptStatus || "";
+          record.interceptDecision = event.decision || record.interceptDecision || "";
+          record.interceptReason = event.reason || record.interceptReason || "";
+          record.interceptDecidedBy = event.decidedBy || record.interceptDecidedBy || "";
+          record.interceptDecidedAtMs = Number.isFinite(event.ts) ? event.ts : record.interceptDecidedAtMs || 0;
+        } else if (event.stage === "posttool") {
+          record.id = event.requestId || event.eventId || record.id;
+          record.args = event.args ?? record.args;
+          record.result = event.result ?? record.result;
+          record.ts = Number.isFinite(event.ts) ? event.ts : record.ts;
+          record.workDir = String(event.workDir ?? "").trim() || record.workDir;
+        }
+      }
+
+      return [...grouped.values()]
+        .sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0))
+        .slice(0, normalizedLimit)
+        .map((item) => normalizeToolCallRecord(item))
+        .filter(Boolean);
+    }
+
     const rows = this.db.prepare(`
-      SELECT id, user_id, session_id, tool, args_json, result_json, ts, work_dir
+      SELECT id, user_id, trace_id, provider_call_id, session_id, tool, args_json, result_json, ts, work_dir
       FROM intercept_tool_calls
       WHERE user_id = ?
       ORDER BY ts DESC, id DESC
@@ -751,6 +1111,8 @@ class InterceptStore {
       .map((row) => normalizeToolCallRecord({
         id: row.id,
         userId: row.user_id,
+        traceId: row.trace_id,
+        providerCallId: row.provider_call_id,
         sessionId: row.session_id,
         tool: row.tool,
         args: parseJsonText(row.args_json, null),
@@ -772,10 +1134,12 @@ class InterceptStore {
     }
 
     this.db.prepare(`
-      INSERT INTO intercept_tool_calls (id, user_id, session_id, tool, args_json, result_json, ts, work_dir)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO intercept_tool_calls (id, user_id, trace_id, provider_call_id, session_id, tool, args_json, result_json, ts, work_dir)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         user_id = excluded.user_id,
+        trace_id = excluded.trace_id,
+        provider_call_id = excluded.provider_call_id,
         session_id = excluded.session_id,
         tool = excluded.tool,
         args_json = excluded.args_json,
@@ -785,6 +1149,8 @@ class InterceptStore {
     `).run(
       normalized.id,
       userId,
+      normalized.traceId,
+      normalized.providerCallId,
       normalized.sessionId,
       normalized.tool,
       stringifyJson(normalized.args, "null"),

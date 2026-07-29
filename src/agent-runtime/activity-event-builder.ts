@@ -180,6 +180,8 @@ function shortId(value) {
 export function buildPostToolInterceptEvent({
   toolName,
   requestId,
+  traceId = "",
+  providerCallId = "",
   sessionId = "",
   args = null,
   result = null,
@@ -190,12 +192,16 @@ export function buildPostToolInterceptEvent({
 }) {
   const normalizedToolName = String(toolName ?? "").trim().toLowerCase() || "unknown";
   const normalizedRequestId = String(requestId ?? "").trim();
+  const normalizedTraceId = String(traceId ?? "").trim() || (normalizedRequestId ? `tr_${normalizedRequestId}` : "");
+  const normalizedProviderCallId = String(providerCallId ?? "").trim();
 
   const event = {
     msg: `Tool ${normalizedToolName} completed`,
     entry: entryText || `Tool result: ${normalizedToolName}${normalizedRequestId ? ` (${normalizedRequestId})` : ""}`,
     toolCall: {
       id: normalizedRequestId,
+      traceId: normalizedTraceId,
+      providerCallId: normalizedProviderCallId,
       sessionId: String(sessionId ?? "").trim(),
       tool: normalizedToolName,
       args,

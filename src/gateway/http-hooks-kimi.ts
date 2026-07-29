@@ -57,6 +57,50 @@ function buildKimiRequestIdCandidates(input: any, normalizedInput: any) {
   ];
 }
 
+function buildKimiTraceIdCandidates(input: any, normalizedInput: any) {
+  return [
+    input?.trace_id,
+    input?.traceId,
+    input?.tool_trace_id,
+    input?.toolTraceId,
+    input?.request_id,
+    input?.requestId,
+    input?.tool_use_id,
+    input?.toolUseId,
+    input?.id,
+    normalizedInput?.requestId,
+  ];
+}
+
+function buildKimiProviderCallIdCandidates(input: any, normalizedInput: any) {
+  return [
+    input?.tool_use_id,
+    input?.toolUseId,
+    input?.request_id,
+    input?.requestId,
+    input?.id,
+    normalizedInput?.requestId,
+  ];
+}
+
+function pickFirstNonEmpty(candidates: unknown[]) {
+  for (const candidate of Array.isArray(candidates) ? candidates : []) {
+    const normalized = String(candidate ?? "").trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return "";
+}
+
+function createTraceIdFromCandidates(candidates: unknown[]) {
+  const picked = pickFirstNonEmpty(candidates);
+  if (picked) {
+    return picked.startsWith("tr_") ? picked : `tr_${picked}`;
+  }
+  return createLifecycleRequestId([], "tr");
+}
+
 export async function handleKimiHookPhase({
   phase,
   input,
@@ -87,6 +131,8 @@ export async function handleKimiHookPhase({
       logPrefix: runtime.logPrefix,
       request: {
         requestIdCandidates: buildKimiRequestIdCandidates(input, normalized),
+        traceIdCandidates: buildKimiTraceIdCandidates(input, normalized),
+        providerCallIdCandidates: buildKimiProviderCallIdCandidates(input, normalized),
         toolName: normalized.toolName,
         hint: buildPreToolInterceptHint(normalized.toolName, normalized.toolArgs, "[gateway-hook][kimi][hint]"),
         msg: `Intercepted tool ${normalized.toolName}`,
@@ -134,9 +180,13 @@ export async function handleKimiHookPhase({
     }
 
     const requestId = createLifecycleRequestId(buildKimiRequestIdCandidates(input, normalized), "post");
+    const traceId = createTraceIdFromCandidates(buildKimiTraceIdCandidates(input, normalized));
+    const providerCallId = pickFirstNonEmpty(buildKimiProviderCallIdCandidates(input, normalized));
     const event = buildPostToolInterceptEvent({
       toolName: normalized.toolName,
       requestId,
+      traceId,
+      providerCallId,
       sessionId: normalized.sessionId,
       args: safeCloneToolArgs(normalized.toolArgs),
       result: safeCloneToolArgs(normalized.toolResult),

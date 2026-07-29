@@ -136,6 +136,8 @@ function getLanIPv4Addresses() {
 
 type InterceptPretoolRequest = {
   id?: string;
+  traceId?: string;
+  providerCallId?: string;
   tool?: string;
   hint?: string;
   msg?: string;
@@ -225,6 +227,7 @@ type AppleLoginBody = {
   identityToken?: string;
   nonce?: string;
   deviceToken?: string;
+  platform?: string;
 };
 
 type PairingCodeResolveBody = {
@@ -670,6 +673,8 @@ function maybeExpireRequest(state, request) {
 function toQueueItem(item) {
   return {
     id: item.id,
+    traceId: item.traceId || "",
+    providerCallId: item.providerCallId || "",
     status: item.status,
     decision: item.decision,
     tool: item.tool,
@@ -822,6 +827,13 @@ async function sendApnsInterceptNotification({
     return;
   }
 
+  const removedInvalidBindings = apnsStore.cleanupInvalidDeviceBindingsByUserId(normalizedUserId);
+  if (removedInvalidBindings > 0) {
+    console.warn(
+      `[cloud-server][apns] intercept notify cleanup userId=${normalizedUserId} removedInvalidBindings=${removedInvalidBindings}`,
+    );
+  }
+
   console.log(
     `[cloud-server][apns] intercept notify send begin userId=${normalizedUserId} deviceTokens=${deviceTokens.length}`,
   );
@@ -833,46 +845,130 @@ async function sendApnsInterceptNotification({
           ? apnsWatchTopic
           : binding.platform === "ios"
             ? apnsIosTopic
-            : apnsIosTopic;
+            : apnsIosTopic || apnsWatchTopic;
         if (!topic) {
           return [];
         }
         return [{ deviceToken: binding.deviceToken, topic, platform: binding.platform }];
       })
-    : deviceTokens.map((deviceToken) => ({ deviceToken, topic: apnsIosTopic, platform: "unknown" }));
+    : deviceTokens.flatMap((deviceToken) => {
+        const topic = apnsIosTopic || apnsWatchTopic;
+        if (!topic) {
+          return [];
+        }
+        return [{ deviceToken, topic, platform: "unknown" }];
+      });
+
+  if (deliveryTargets.length === 0) {
+    console.warn(
+      `[cloud-server][apns] intercept notify skip reason=no_delivery_targets userId=${normalizedUserId} iosTopic=${apnsIosTopic || "-"} watchTopic=${apnsWatchTopic || "-"}`,
+    );
+    return;
+  }
 
   console.log(
     `[cloud-server][apns] intercept notify routes userId=${normalizedUserId} iosTopic=${apnsIosTopic || "-"} watchTopic=${apnsWatchTopic || "-"} targets=${deliveryTargets.map((item) => `${item.platform}:${item.topic}`).join(",") || "-"}`,
   );
 
-  const results = await Promise.all(deliveryTargets.map((target) => apnsClient.sendAlert({
-    deviceToken: target.deviceToken,
-    topic: target.topic,
-    title,
-    body: `${message}\nrequestId=${normalizedRequestId} tool=${normalizedTool} decision=${normalizedDecision}`,
-    sound: "default",
-    data: {
-      source: "intercept-server",
-      requestId: normalizedRequestId,
-      tool: normalizedTool,
-      decision: normalizedDecision,
-      eventKey: normalizedEventKey,
-      platform: target.platform,
-    },
-  })));
+  const sendToTarget = (target: { deviceToken: string; topic: string; platform: string }) => {
+    return apnsClient.sendAlert({
+      deviceToken: target.deviceToken,
+      topic: target.topic,
+      title,
+      body: `${message}\nrequestId=${normalizedRequestId} tool=${normalizedTool} decision=${normalizedDecision}`,
+      sound: "default",
+      data: {
+        source: "intercept-server",
+        requestId: normalizedRequestId,
+        tool: normalizedTool,
+        decision: normalizedDecision,
+        eventKey: normalizedEventKey,
+        platform: target.platform,
+      },
+    });
+  };
 
-  const successCount = results.filter((item) => item?.ok).length;
-  const failureCount = results.length - successCount;
+  const outcomes: Array<{
+    target: { deviceToken: string; topic: string; platform: string };
+    result: { ok: boolean; status: number; reason: string };
+    switchedTopic: boolean;
+  }> = [];
+
+  for (const target of deliveryTargets) {
+    const firstResult = await sendToTarget(target);
+    let finalTarget = target;
+    let finalResult = firstResult;
+    let switchedTopic = false;
+
+    // When legacy bindings are marked as unknown, retry once with watch topic on topic mismatch.
+    if (
+      !firstResult.ok &&
+      String(firstResult.reason || "") === "DeviceTokenNotForTopic" &&
+      target.platform === "unknown" &&
+      apnsWatchTopic &&
+      target.topic !== apnsWatchTopic
+    ) {
+      const retryTarget = {
+        ...target,
+        topic: apnsWatchTopic,
+        platform: "watch",
+      };
+      const retryResult = await sendToTarget(retryTarget);
+      finalTarget = retryTarget;
+      finalResult = retryResult;
+      switchedTopic = true;
+
+      if (retryResult.ok) {
+        const updated = apnsStore.setDevicePlatform(normalizedUserId, target.deviceToken, "watch");
+        console.log(
+          `[cloud-server][apns] intercept notify recovered requestId=${normalizedRequestId} token=*${target.deviceToken.slice(-8)} platform=${updated ? "watch" : "unknown"} strategy=retry_watch_topic`,
+        );
+      }
+    }
+
+    outcomes.push({
+      target: finalTarget,
+      result: {
+        ok: Boolean(finalResult?.ok),
+        status: Number(finalResult?.status ?? 0),
+        reason: String(finalResult?.reason ?? ""),
+      },
+      switchedTopic,
+    });
+  }
+
+  const successCount = outcomes.filter((item) => item.result.ok).length;
+  const failureCount = outcomes.length - successCount;
   console.log(
     `[cloud-server][apns] intercept notify send done userId=${normalizedUserId} requestId=${normalizedRequestId} success=${successCount} failure=${failureCount}`,
   );
 
-  for (const result of results) {
-    if (!result?.ok) {
-      console.warn(
-        `[cloud-server][apns] intercept notify send failed requestId=${normalizedRequestId} apnsStatus=${String(result?.status ?? "-")} reason=${String(result?.reason ?? "-")}`,
-      );
+  let removedBindings = 0;
+  const failureSummary = new Map<string, number>();
+  for (const outcome of outcomes) {
+    if (outcome.result.ok) {
+      continue;
     }
+
+    const reason = String(outcome.result.reason || "-") || "-";
+    const status = Number.isFinite(outcome.result.status) ? outcome.result.status : 0;
+    const summaryKey = `${status}:${reason}`;
+    failureSummary.set(summaryKey, (failureSummary.get(summaryKey) || 0) + 1);
+
+    const shouldUnbind = status === 410 || reason === "Unregistered" || reason === "BadDeviceToken";
+    if (shouldUnbind && apnsStore.unbindDeviceToken(normalizedUserId, outcome.target.deviceToken)) {
+      removedBindings += 1;
+    }
+  }
+
+  if (failureSummary.size > 0) {
+    const summaryText = [...failureSummary.entries()]
+      .map(([key, count]) => `${key}x${count}`)
+      .join(",");
+    const switchedCount = outcomes.filter((item) => item.switchedTopic).length;
+    console.warn(
+      `[cloud-server][apns] intercept notify failures requestId=${normalizedRequestId} summary=${summaryText || "-"} removedBindings=${removedBindings} switchedTopic=${switchedCount}`,
+    );
   }
 }
 
@@ -1330,9 +1426,20 @@ const server = createServer(async (req, res) => {
         const agentProvider = String(state?.agent?.provider ?? "").trim();
         const agentVersion = String(state?.agent?.version ?? "").trim();
         const items = interceptStore.listToolCalls(principalUserId, limit).map((item) => {
-          const request = interceptStore.getRequestById(principalUserId, item.id);
+          const request = item.traceId
+            ? interceptStore.getRequestByTraceId(principalUserId, item.traceId)
+            : interceptStore.getRequestById(principalUserId, item.id);
+
+          const eventStatus = String((item as any)?.interceptStatus ?? "").trim();
+          const eventDecision = String((item as any)?.interceptDecision ?? "").trim();
+          const eventReason = String((item as any)?.interceptReason ?? "").trim();
+          const eventDecidedBy = String((item as any)?.interceptDecidedBy ?? "").trim();
+          const eventDecidedAtMs = Number.parseInt(String((item as any)?.interceptDecidedAtMs ?? "0"), 10) || 0;
+
           return {
             id: item.id,
+            traceId: item.traceId || "",
+            providerCallId: item.providerCallId || "",
             sessionId: item.sessionId,
             tool: item.tool,
             args: item.args ?? null,
@@ -1340,17 +1447,17 @@ const server = createServer(async (req, res) => {
             ts: item.ts,
             workDir: item.workDir,
             agentProvider: agentProvider ? `${agentProvider}${agentVersion ? `@${agentVersion}` : ""}` : "",
-            interceptStatus: request?.status || "",
-            interceptDecision: request?.decision || "",
-            interceptReason: request?.reason || "",
-            interceptDecidedBy: request?.decidedBy || "",
-            interceptDecidedAtMs: request?.decidedAtMs || 0,
+            interceptStatus: eventStatus || request?.status || "",
+            interceptDecision: eventDecision || request?.decision || "",
+            interceptReason: eventReason || request?.reason || "",
+            interceptDecidedBy: eventDecidedBy || request?.decidedBy || "",
+            interceptDecidedAtMs: eventDecidedAtMs || request?.decidedAtMs || 0,
           };
         });
 
         return json(res, 200, {
           items,
-          total: interceptStore.countToolCalls(principalUserId),
+          total: interceptStore.countToolEvents(principalUserId) || interceptStore.countToolCalls(principalUserId),
           limit,
         });
       }
@@ -1365,6 +1472,8 @@ const server = createServer(async (req, res) => {
 
         const now = Date.now();
         const id = String(request.id ?? "").trim() || `perm_${crypto.randomUUID()}`;
+        const traceId = String(request.traceId ?? "").trim() || `tr_${id}`;
+        const providerCallId = String(request.providerCallId ?? "").trim();
         const tool = String(request.tool ?? "").trim().toLowerCase();
         if (!tool) {
           logApi(req, pathname, "invalid request: request.tool is required");
@@ -1386,6 +1495,8 @@ const server = createServer(async (req, res) => {
           if (!item) {
             item = {
               id,
+              traceId,
+              providerCallId,
               tool,
               hint: String(request.hint ?? "").trim(),
               msg: String(request.msg ?? "").trim() || "Intercepted tool call",
@@ -1428,7 +1539,7 @@ const server = createServer(async (req, res) => {
 
           item.updatedAtMs = now;
           state.prompt = {
-            id,
+            id: traceId,
             tool,
             hint: item.hint,
           };
@@ -1447,6 +1558,27 @@ const server = createServer(async (req, res) => {
 
           updateStateCounters(state);
           interceptStore.saveRequest(principalUserId, item);
+          interceptStore.insertToolEvent(principalUserId, {
+            eventId: `evt_pre_${item.id}_${now}`,
+            traceId: item.traceId,
+            providerCallId: item.providerCallId,
+            requestId: item.id,
+            sessionId: item.sessionId,
+            tool: item.tool,
+            stage: "pretool",
+            status: item.status,
+            decision: item.decision,
+            reason: item.reason,
+            decidedBy: item.decidedBy,
+            args: item.input,
+            result: null,
+            meta: {
+              hint: item.hint,
+              msg: item.msg,
+            },
+            ts: item.updatedAtMs || now,
+            workDir: item.workDir,
+          });
           interceptStore.saveState(principalUserId, state);
 
           return {
@@ -1470,6 +1602,8 @@ const server = createServer(async (req, res) => {
         return json(res, 200, {
           ok: true,
           id,
+          traceId,
+          providerCallId,
           decision: result.item.decision,
           status: result.item.status,
           reason: result.item.reason,
@@ -1571,6 +1705,27 @@ const server = createServer(async (req, res) => {
 
           updateStateCounters(state);
           interceptStore.saveRequest(principalUserId, item);
+          interceptStore.insertToolEvent(principalUserId, {
+            eventId: `evt_decision_${item.id}_${now}`,
+            traceId: item.traceId,
+            providerCallId: item.providerCallId,
+            requestId: item.id,
+            sessionId: item.sessionId,
+            tool: item.tool,
+            stage: "decision",
+            status: item.status,
+            decision: item.decision,
+            reason: item.reason,
+            decidedBy: item.decidedBy,
+            args: null,
+            result: null,
+            meta: {
+              hint: item.hint,
+              msg: item.msg,
+            },
+            ts: item.decidedAtMs || now,
+            workDir: item.workDir,
+          });
           interceptStore.saveState(principalUserId, state);
 
           return { item, state };
@@ -1684,7 +1839,40 @@ const server = createServer(async (req, res) => {
           }
 
           if (event.toolCall && typeof event.toolCall === "object") {
-            interceptStore.insertToolCall(principalUserId, event.toolCall);
+            const rawToolCall = event.toolCall as Record<string, unknown>;
+            const normalizedToolCallId = String(rawToolCall.id ?? "").trim();
+            const normalizedTraceId = String(rawToolCall.traceId ?? "").trim() || (normalizedToolCallId ? `tr_${normalizedToolCallId}` : "");
+            const normalizedProviderCallId = String(rawToolCall.providerCallId ?? "").trim();
+            const normalizedRequestId = String(rawToolCall.requestId ?? event.prompt?.id ?? normalizedToolCallId).trim();
+            const normalizedSessionId = String(rawToolCall.sessionId ?? "").trim();
+            const normalizedToolName = String(rawToolCall.tool ?? event.prompt?.tool ?? "").trim().toLowerCase();
+            const normalizedTs = Number.parseInt(String(rawToolCall.ts ?? Date.now()), 10) || Date.now();
+            const normalizedWorkDir = String(rawToolCall.workDir ?? "").trim();
+            interceptStore.insertToolCall(principalUserId, {
+              ...rawToolCall,
+              traceId: normalizedTraceId,
+              providerCallId: normalizedProviderCallId,
+            });
+            interceptStore.insertToolEvent(principalUserId, {
+              eventId: `evt_post_${normalizedToolCallId || crypto.randomUUID()}_${normalizedTs}`,
+              traceId: normalizedTraceId,
+              providerCallId: normalizedProviderCallId,
+              requestId: normalizedRequestId,
+              sessionId: normalizedSessionId,
+              tool: normalizedToolName,
+              stage: "posttool",
+              status: "completed",
+              decision: "allow",
+              reason: "tool execution reported",
+              decidedBy: "hook",
+              args: rawToolCall.args && typeof rawToolCall.args === "object" ? rawToolCall.args : null,
+              result: rawToolCall.result ?? null,
+              meta: {
+                source: "event.toolCall",
+              },
+              ts: normalizedTs,
+              workDir: normalizedWorkDir,
+            });
           }
 
           const tokens = Number.parseInt(String(event.tokens ?? "0"), 10);

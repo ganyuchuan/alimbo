@@ -30,6 +30,8 @@ export async function runPreToolInterceptGate({
       decision: "allow",
       reason: "missing tool name",
       requestId: "",
+      traceId: "",
+      providerCallId: "",
     };
   }
 
@@ -39,6 +41,8 @@ export async function runPreToolInterceptGate({
       decision: "allow",
       reason: "allowed by policy",
       requestId: "",
+      traceId: "",
+      providerCallId: "",
     };
   }
 
@@ -63,6 +67,8 @@ export async function runPreToolInterceptGate({
         decision: "allow",
         reason: String(interceptResult?.reason ?? "approved"),
         requestId: String(interceptResult?.requestId ?? "").trim(),
+        traceId: String(interceptResult?.traceId ?? "").trim(),
+        providerCallId: String(interceptResult?.providerCallId ?? "").trim(),
       };
     }
 
@@ -72,6 +78,8 @@ export async function runPreToolInterceptGate({
         decision: "ask",
         reason: String(interceptResult?.reason ?? "approval required"),
         requestId: String(interceptResult?.requestId ?? "").trim(),
+        traceId: String(interceptResult?.traceId ?? "").trim(),
+        providerCallId: String(interceptResult?.providerCallId ?? "").trim(),
       };
     }
 
@@ -80,6 +88,8 @@ export async function runPreToolInterceptGate({
       decision: "deny",
       reason: String(interceptResult?.reason ?? "intercept denied"),
       requestId: String(interceptResult?.requestId ?? "").trim(),
+      traceId: String(interceptResult?.traceId ?? "").trim(),
+      providerCallId: String(interceptResult?.providerCallId ?? "").trim(),
     };
   } catch (error) {
     const reason = `intercept request failed: ${String(error?.message ?? error)}`;
@@ -89,6 +99,8 @@ export async function runPreToolInterceptGate({
         decision: "allow",
         reason: `${reason}; fail-open enabled`,
         requestId: "",
+        traceId: "",
+        providerCallId: "",
       };
     }
 
@@ -97,6 +109,8 @@ export async function runPreToolInterceptGate({
       decision: "deny",
       reason,
       requestId: "",
+      traceId: "",
+      providerCallId: "",
     };
   }
 }

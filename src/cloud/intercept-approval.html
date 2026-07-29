@@ -245,6 +245,8 @@
       const refreshBtn = $("refresh");
       const autoBtn = $("auto");
       let timer = null;
+      let latestQueueItems = [];
+      let latestToolCalls = [];
 
       function headers() {
         const token = String(tokenInput.value || "").trim();
@@ -313,6 +315,11 @@
           return;
         }
 
+        if (items.length === 0) {
+          listEl.innerHTML = '<p class="empty">No waiting requests.</p>';
+          return;
+        }
+
         listEl.innerHTML = "";
         for (const item of items) {
           const card = document.createElement("div");
@@ -325,6 +332,11 @@
             ")</span></div>" +
             "<div>" +
             (item.hint || "-") +
+            "</div>" +
+            '<div class="meta">trace: ' +
+            (item.traceId || "-") +
+            " | providerCall: " +
+            (item.providerCallId || "-") +
             "</div>" +
             '<div class="meta">created: ' +
             ts(item.createdAtMs) +
@@ -393,6 +405,11 @@
           return;
         }
 
+        if (items.length === 0) {
+          toolCallsEl.innerHTML = '<p class="empty">No tool calls yet.</p>';
+          return;
+        }
+
         toolCallsEl.innerHTML = "";
         for (const item of items) {
           const card = document.createElement("div");
@@ -422,6 +439,11 @@
             (item.sessionId || "-") +
             " | time: " +
             ts(item.ts) +
+            "</div>" +
+            '<div class="meta">trace: ' +
+            (item.traceId || "-") +
+            " | providerCall: " +
+            (item.providerCallId || "-") +
             "</div>" +
             '<div class="meta">' +
             decisionMeta +
@@ -453,8 +475,10 @@
             fetchJson("/api/copilot/intercepts/tool-calls?limit=20"),
           ]);
           renderState(stateRes.state || {});
-          renderList(queueRes.items || []);
-          renderToolCalls(toolCallsRes.items || []);
+          latestQueueItems = Array.isArray(queueRes.items) ? queueRes.items : [];
+          latestToolCalls = Array.isArray(toolCallsRes.items) ? toolCallsRes.items : [];
+          renderList(latestQueueItems);
+          renderToolCalls(latestToolCalls);
           statusEl.textContent = "Updated at " + new Date().toLocaleTimeString();
         } catch (error) {
           statusEl.textContent = String(error.message || error);

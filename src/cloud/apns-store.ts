@@ -163,6 +163,71 @@ class ApnsStore {
       .filter((item: any) => isLikelyDeviceToken(item.deviceToken));
   }
 
+  setDevicePlatform(userId: string, deviceToken: string, platform = "unknown", now = Date.now()) {
+    const normalizedUserId = String(userId ?? "").trim();
+    const normalizedToken = normalizeDeviceToken(deviceToken);
+    const normalizedPlatform = normalizeDevicePlatform(platform);
+
+    if (!normalizedUserId || !isLikelyDeviceToken(normalizedToken)) {
+      return false;
+    }
+
+    const result = this.db.prepare(`
+      UPDATE apns_device_bindings
+      SET device_platform = ?, updated_at_ms = ?
+      WHERE user_id = ? AND device_token = ?
+    `).run(normalizedPlatform, now, normalizedUserId, normalizedToken);
+
+    return Number(result?.changes ?? 0) > 0;
+  }
+
+  unbindDeviceToken(userId: string, deviceToken: string) {
+    const normalizedUserId = String(userId ?? "").trim();
+    const normalizedToken = normalizeDeviceToken(deviceToken);
+    if (!normalizedUserId || !normalizedToken) {
+      return false;
+    }
+
+    const result = this.db.prepare(`
+      DELETE FROM apns_device_bindings
+      WHERE user_id = ?
+        AND device_token = ?
+    `).run(normalizedUserId, normalizedToken);
+
+    return Number(result?.changes ?? 0) > 0;
+  }
+
+  cleanupInvalidDeviceBindingsByUserId(userId: string) {
+    const normalizedUserId = String(userId ?? "").trim();
+    if (!normalizedUserId) {
+      return 0;
+    }
+
+    const rows = this.db.prepare(`
+      SELECT device_token
+      FROM apns_device_bindings
+      WHERE user_id = ?
+    `).all(normalizedUserId);
+
+    let removedCount = 0;
+    for (const row of rows as Array<{ device_token?: string }>) {
+      const token = normalizeDeviceToken(row?.device_token ?? "");
+      if (isLikelyDeviceToken(token)) {
+        continue;
+      }
+
+      const result = this.db.prepare(`
+        DELETE FROM apns_device_bindings
+        WHERE user_id = ?
+          AND device_token = ?
+      `).run(normalizedUserId, token);
+
+      removedCount += Number(result?.changes ?? 0);
+    }
+
+    return removedCount;
+  }
+
   markPushEventIfNew({
     eventKey,
     userId,

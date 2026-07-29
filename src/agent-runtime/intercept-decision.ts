@@ -31,6 +31,36 @@ export function createInterceptRequestIdFromCandidates(candidates: unknown[]) {
   return `perm_${crypto.randomUUID()}`;
 }
 
+export function createToolTraceIdFromCandidates(candidates: unknown[]) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  for (const candidate of list) {
+    const normalized = String(candidate ?? "").trim();
+    if (normalized.startsWith("tr_")) {
+      return normalized;
+    }
+  }
+
+  for (const candidate of list) {
+    const normalized = String(candidate ?? "").trim();
+    if (normalized) {
+      return `tr_${normalized}`;
+    }
+  }
+
+  return `tr_${crypto.randomUUID()}`;
+}
+
+export function createProviderCallIdFromCandidates(candidates: unknown[]) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  for (const candidate of list) {
+    const normalized = String(candidate ?? "").trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return "";
+}
+
 async function pollInterceptDecision({
   interceptServerUrl,
   interceptAuthToken,
@@ -131,6 +161,8 @@ export async function requestInterceptDecisionByApi({
   interceptMaxWaitMs?: number;
   request: {
     requestIdCandidates?: unknown[];
+    traceIdCandidates?: unknown[];
+    providerCallIdCandidates?: unknown[];
     toolName: string;
     hint?: string;
     msg?: string;
@@ -158,6 +190,14 @@ export async function requestInterceptDecisionByApi({
   const requestId = createInterceptRequestIdFromCandidates(
     Array.isArray(request?.requestIdCandidates) ? request.requestIdCandidates : [],
   );
+  const traceId = createToolTraceIdFromCandidates(
+    Array.isArray(request?.traceIdCandidates) ? request.traceIdCandidates : request?.requestIdCandidates ?? [],
+  );
+  const providerCallId = createProviderCallIdFromCandidates(
+    Array.isArray(request?.providerCallIdCandidates)
+      ? request.providerCallIdCandidates
+      : request?.requestIdCandidates ?? [],
+  );
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -179,6 +219,8 @@ export async function requestInterceptDecisionByApi({
     body: JSON.stringify({
       request: {
         id: requestId,
+        traceId,
+        providerCallId,
         tool: toolName,
         hint: String(request?.hint ?? "").trim(),
         msg: String(request?.msg ?? `Intercepted tool ${toolName}`).trim() || `Intercepted tool ${toolName}`,
@@ -198,6 +240,8 @@ export async function requestInterceptDecisionByApi({
   if (decision !== "wait") {
     return {
       requestId,
+      traceId,
+      providerCallId,
       decision,
       reason: payload?.reason || payload?.msg || "intercept decision",
     };
@@ -219,6 +263,8 @@ export async function requestInterceptDecisionByApi({
 
   return {
     requestId,
+    traceId,
+    providerCallId,
     ...pollResult,
   };
 }
