@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Device Token Manager</title>
+    <style>
+      :root {
+        --bg: #f3f6fb;
+        --card: #ffffff;
+        --border: #dbe3ec;
+        --text: #1f2a37;
+        --muted: #607080;
+        --accent: #0d8ddb;
+        --accent-2: #0967ab;
+        --danger: #c4382b;
+      }
+      body {
+        margin: 0;
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        background: linear-gradient(135deg, #eef5ff 0%, #f8fafc 48%, #eef6ef 100%);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 1200px;
+        margin: 24px auto;
+        padding: 0 16px 24px;
+      }
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .hero h1 {
+        margin: 0;
+        font-size: 22px;
+      }
+      .hero p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 16px;
+        box-shadow: 0 12px 30px rgba(16, 24, 40, 0.06);
+        margin-bottom: 14px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      button {
+        padding: 9px 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #fff;
+        cursor: pointer;
+        font: inherit;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      button.primary:hover {
+        background: var(--accent-2);
+        border-color: var(--accent-2);
+      }
+      button.danger {
+        background: var(--danger);
+        border-color: var(--danger);
+        color: #fff;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .error {
+        color: var(--danger);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      th,
+      td {
+        border: 1px solid var(--border);
+        padding: 7px 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: #f7f9fb;
+      }
+      .token-cell {
+        max-width: 360px;
+        word-break: break-all;
+      }
+      .actions {
+        display: flex;
+        gap: 6px;
+      }
+      .empty {
+        color: var(--muted);
+      }
+      .tag {
+        display: inline-block;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 2px 8px;
+        margin-right: 6px;
+        font-size: 11px;
+      }
+      .tag.invalid {
+        color: #b12a1e;
+        border-color: #edb0aa;
+        background: #fff1f0;
+      }
+      .nav a {
+        display: inline-block;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        text-decoration: none;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.8);
+      }
+      @media (max-width: 900px) {
+        .hero {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="hero">
+        <div>
+          <h1>Device Token Manager</h1>
+          <p>管理员可查看所有注册 token，删除指定 token，或先标记无效再勾选批量删除。</p>
+        </div>
+        <div class="nav row">
+          <a href="/auth/users-ui">Open user management</a>
+          <a href="/intercepts/approve">Open approval page</a>
+          <form method="post" action="/auth/logout" style="display:inline; margin-left: 8px;">
+            <input type="hidden" name="returnTo" value="/auth/login" />
+            <button type="submit">Logout</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="row" style="justify-content: space-between;">
+          <div class="row">
+            <button id="refresh" class="primary">Refresh</button>
+            <button id="markInvalid">Mark Invalid Candidates</button>
+            <button id="deleteChecked" class="danger">Delete Checked</button>
+          </div>
+          <div class="meta" id="summary">Loading...</div>
+        </div>
+        <p class="meta" id="status"></p>
+      </div>
+
+      <div class="panel">
+        <div id="tableWrap"></div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const refreshBtn = $("refresh");
+      const markInvalidBtn = $("markInvalid");
+      const deleteCheckedBtn = $("deleteChecked");
+      const summaryEl = $("summary");
+      const statusEl = $("status");
+      const tableWrapEl = $("tableWrap");
+
+      let itemsCache = [];
+      let invalidMarked = false;
+
+      function ts(ms) {
+        if (!ms) return "-";
+        return new Date(ms).toLocaleString();
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (char) => {
+          switch (char) {
+            case "&": return "&amp;";
+            case "<": return "&lt;";
+            case ">": return "&gt;";
+            case '"': return "&quot;";
+            case "'": return "&#39;";
+            default: return char;
+          }
+        });
+      }
+
+      async function fetchJson(path, options = {}) {
+        const response = await fetch(path, {
+          ...options,
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            ...(options.headers || {}),
+          },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || response.statusText || "request failed");
+        }
+        return payload;
+      }
+
+      function checkedBindings() {
+        const checks = tableWrapEl.querySelectorAll('input[data-role="pick"]:checked');
+        return [...checks].map((el) => ({
+          userId: String(el.getAttribute("data-user-id") || "").trim(),
+          deviceToken: String(el.getAttribute("data-device-token") || "").trim(),
+        })).filter((item) => item.userId && item.deviceToken);
+      }
+
+      function renderTable(items) {
+        if (!Array.isArray(items) || items.length === 0) {
+          tableWrapEl.innerHTML = '<p class="empty">No device tokens found.</p>';
+          return;
+        }
+
+        const rows = items.map((item, index) => {
+          const invalidReasons = Array.isArray(item.reasons) ? item.reasons : [];
+          const invalidTag = invalidReasons.length
+            ? '<span class="tag invalid">invalid</span>' + invalidReasons.map((reason) => '<span class="tag">' + escapeHtml(reason) + '</span>').join("")
+            : "";
+          return (
+            '<tr>' +
+            '<td><input data-role="pick" type="checkbox" data-user-id="' + escapeHtml(item.userId) + '" data-device-token="' + escapeHtml(item.deviceToken) + '" ' + (item.markedInvalid ? "checked" : "") + ' /></td>' +
+            '<td>' + (index + 1) + '</td>' +
+            '<td>' + escapeHtml(item.userId || "-") + '</td>' +
+            '<td>' + escapeHtml(item.username || "-") + '</td>' +
+            '<td>' + escapeHtml(item.authType || "-") + '</td>' +
+            '<td>' + escapeHtml(item.platform || "-") + '</td>' +
+            '<td class="token-cell">' + escapeHtml(item.deviceToken || "-") + '</td>' +
+            '<td>' + escapeHtml(item.tokenPreview || "-") + '</td>' +
+            '<td>' + ts(item.createdAtMs) + '</td>' +
+            '<td>' + ts(item.updatedAtMs) + '</td>' +
+            '<td>' + invalidTag + '</td>' +
+            '<td><div class="actions"><button data-role="delete-one" data-user-id="' + escapeHtml(item.userId) + '" data-device-token="' + escapeHtml(item.deviceToken) + '" class="danger">Delete</button></div></td>' +
+            '</tr>'
+          );
+        }).join("");
+
+        tableWrapEl.innerHTML =
+          '<table>' +
+          '<thead><tr><th>Select</th><th>#</th><th>UserId</th><th>Username</th><th>AuthType</th><th>Platform</th><th>DeviceToken</th><th>Preview</th><th>Created</th><th>Updated</th><th>Invalid Flags</th><th>Action</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody></table>';
+
+        tableWrapEl.querySelectorAll('button[data-role="delete-one"]').forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const userId = String(btn.getAttribute("data-user-id") || "").trim();
+            const deviceToken = String(btn.getAttribute("data-device-token") || "").trim();
+            if (!userId || !deviceToken) {
+              return;
+            }
+            btn.disabled = true;
+            try {
+              await fetchJson("/auth/device-tokens/delete", {
+                method: "POST",
+                body: JSON.stringify({
+                  bindings: [{ userId, deviceToken }],
+                }),
+              });
+              await refreshList();
+            } catch (error) {
+              statusEl.className = "error";
+              statusEl.textContent = String(error.message || error);
+              btn.disabled = false;
+            }
+          });
+        });
+      }
+
+      function updateSummary(items) {
+        const list = Array.isArray(items) ? items : [];
+        const total = list.length;
+        const unknownCount = list.filter((item) => String(item.platform || "") === "unknown").length;
+        const invalidCount = list.filter((item) => Array.isArray(item.reasons) && item.reasons.length > 0).length;
+        summaryEl.textContent = "Total=" + total + " | Unknown=" + unknownCount + " | InvalidMarked=" + invalidCount;
+      }
+
+      async function refreshList() {
+        statusEl.className = "meta";
+        statusEl.textContent = "Refreshing...";
+        const payload = await fetchJson("/auth/device-tokens?limit=5000");
+        itemsCache = Array.isArray(payload.items) ? payload.items : [];
+        invalidMarked = false;
+        renderTable(itemsCache);
+        updateSummary(itemsCache);
+        statusEl.className = "meta";
+        statusEl.textContent = "Updated at " + new Date().toLocaleTimeString();
+      }
+
+      async function markInvalidCandidates() {
+        statusEl.className = "meta";
+        statusEl.textContent = "Marking invalid candidates...";
+        const payload = await fetchJson("/auth/device-tokens/mark-invalid", {
+          method: "POST",
+          body: JSON.stringify({
+            includeUnknownPlatform: true,
+            staleDays: 30,
+          }),
+        });
+
+        itemsCache = Array.isArray(payload.items) ? payload.items : [];
+        invalidMarked = true;
+        renderTable(itemsCache);
+        updateSummary(itemsCache);
+        statusEl.className = "meta";
+        statusEl.textContent = "Marked invalid=" + String(payload.invalidCount || 0) + " / total=" + String(payload.total || itemsCache.length);
+      }
+
+      async function deleteChecked() {
+        const bindings = checkedBindings();
+        if (bindings.length === 0) {
+          statusEl.className = "error";
+          statusEl.textContent = "No checked rows.";
+          return;
+        }
+
+        statusEl.className = "meta";
+        statusEl.textContent = "Deleting " + bindings.length + " token(s)...";
+        const payload = await fetchJson("/auth/device-tokens/delete", {
+          method: "POST",
+          body: JSON.stringify({ bindings }),
+        });
+
+        statusEl.className = "meta";
+        statusEl.textContent = "Deleted=" + String(payload.removed || 0) + " / requested=" + String(payload.requested || bindings.length);
+        await refreshList();
+      }
+
+      refreshBtn.addEventListener("click", async () => {
+        try {
+          await refreshList();
+        } catch (error) {
+          statusEl.className = "error";
+          statusEl.textContent = String(error.message || error);
+        }
+      });
+
+      markInvalidBtn.addEventListener("click", async () => {
+        try {
+          await markInvalidCandidates();
+        } catch (error) {
+          statusEl.className = "error";
+          statusEl.textContent = String(error.message || error);
+        }
+      });
+
+      deleteCheckedBtn.addEventListener("click", async () => {
+        try {
+          await deleteChecked();
+        } catch (error) {
+          statusEl.className = "error";
+          statusEl.textContent = String(error.message || error);
+        }
+      });
+
+      refreshList().catch((error) => {
+        statusEl.className = "error";
+        statusEl.textContent = String(error.message || error);
+      });
+    </script>
+  </body>
+</html>

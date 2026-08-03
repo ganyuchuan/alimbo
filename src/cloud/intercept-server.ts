@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { createServer } from "node:http";
-import dotenv from "dotenv";
+import dotenv, { config } from "dotenv";
 import fs from "node:fs";
 import os from "node:os";
 import { createApnsClient, loadApnsPrivateKeyFromEnv } from "./apns-client.js";
@@ -84,6 +84,7 @@ const appleIssuer = String(process.env.APPLE_SIGNIN_ISSUER ?? "https://appleid.a
 const adminSessionTtlMs = toInt(process.env.CLOUD_ADMIN_SESSION_TTL_MS, 7 * 24 * 60 * 60 * 1000);
 const adminSessionCookieName = "alimbo_admin_session";
 const authTokenAllowPasswordGrant = toBool(process.env.CLOUD_AUTH_TOKEN_ALLOW_PASSWORD_GRANT, false);
+const agentProvider = String(process.env.AGENT_PROVIDER ?? "").trim();
 
 function setToArray(setLike) {
   return Array.isArray(setLike) ? setLike : [...setLike];
@@ -458,6 +459,8 @@ const interceptApprovalPagePath = new URL("./intercept-approval.html", import.me
 let interceptApprovalPageCache = "";
 const authUsersPagePath = new URL("./auth-users.html", import.meta.url);
 let authUsersPageCache = "";
+const deviceTokensPagePath = new URL("./device-tokens.html", import.meta.url);
+let deviceTokensPageCache = "";
 const indexPagePath = new URL("./index.html", import.meta.url);
 let indexPageCache = "";
 const onboardingMarkdownPath = new URL("./SKILL.md", import.meta.url);
@@ -491,6 +494,21 @@ function renderAuthUsersPage() {
   }
 
   return authUsersPageCache;
+}
+
+function renderDeviceTokensPage() {
+  if (deviceTokensPageCache) {
+    return deviceTokensPageCache;
+  }
+
+  try {
+    deviceTokensPageCache = fs.readFileSync(deviceTokensPagePath, "utf8");
+  } catch (error) {
+    console.warn(`[cloud-server][device-tokens] failed to load page: ${String(error?.message ?? error)}`);
+    deviceTokensPageCache = "<!doctype html><html><body><h1>Device Tokens page unavailable</h1></body></html>";
+  }
+
+  return deviceTokensPageCache;
 }
 
 function renderLoginRequiredPage(returnTo, error = "") {
@@ -758,6 +776,10 @@ function toPublicInterceptState(state) {
   };
 }
 
+function isLikelyDeviceToken(value) {
+  return /^[0-9a-fA-F]{64,200}$/.test(String(value ?? "").trim());
+}
+
 async function sendApnsInterceptNotification({
   userId,
   requestId,
@@ -875,7 +897,7 @@ async function sendApnsInterceptNotification({
       deviceToken: target.deviceToken,
       topic: target.topic,
       title,
-      body: `${message}\nrequestId=${normalizedRequestId} tool=${normalizedTool} decision=${normalizedDecision}`,
+      body: `${message}`,
       sound: "default",
       data: {
         source: "intercept-server",
@@ -1050,6 +1072,18 @@ const server = createServer(async (req, res) => {
 
       logApi(req, pathname, `serve auth users page admin=${admin.userId}`);
       return html(res, 200, renderAuthUsersPage());
+    }
+
+    if (req.method === "GET" && pathname === "/auth/device-tokens-ui") {
+      const admin = requireAdminSession(req, res);
+      if (!admin) {
+        logApi(req, pathname, "redirect to login");
+        redirectToLogin(res, req.url || "/auth/device-tokens-ui");
+        return;
+      }
+
+      logApi(req, pathname, `serve device tokens page admin=${admin.userId}`);
+      return html(res, 200, renderDeviceTokensPage());
     }
 
     if (req.method === "GET" && pathname === "/health") {
@@ -1361,6 +1395,108 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    if (req.method === "GET" && pathname === "/auth/device-tokens") {
+      const admin = requireAdminSession(req, res);
+      if (!admin) {
+        logApi(req, pathname, "unauthorized: admin session required");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      const limit = toInt(url.searchParams.get("limit"), 2000);
+      logApi(req, pathname, `list device tokens limit=${limit} admin=${admin.userId}`);
+      const items = apnsStore.listAllDeviceBindings(limit).map((item) => {
+        const user = interceptStore.getUserById(item.userId);
+        return {
+          ...item,
+          username: String(user?.username ?? "").trim(),
+          authType: String(user?.authType ?? "").trim() || "user",
+          tokenPreview: item.deviceToken.length > 16
+            ? `${item.deviceToken.slice(0, 8)}...${item.deviceToken.slice(-8)}`
+            : item.deviceToken,
+        };
+      });
+
+      return json(res, 200, { ok: true, items, limit });
+    }
+
+    if (req.method === "POST" && pathname === "/auth/device-tokens/mark-invalid") {
+      const admin = requireAdminSession(req, res);
+      if (!admin) {
+        logApi(req, pathname, "unauthorized: admin session required");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      const body = await parseBody<Record<string, unknown>>(req);
+      const includeUnknownPlatform = String(body?.includeUnknownPlatform ?? "true").trim().toLowerCase() !== "false";
+      const staleDays = toInt(body?.staleDays, 30);
+      const staleUnknownThresholdMs = Date.now() - staleDays * 24 * 60 * 60 * 1000;
+      const items = apnsStore.listAllDeviceBindings(20000);
+
+      const candidates = items.map((item) => {
+        const reasons: string[] = [];
+        if (!isLikelyDeviceToken(item.deviceToken)) {
+          reasons.push("malformed-token");
+        }
+        if (includeUnknownPlatform && item.platform === "unknown") {
+          reasons.push("unknown-platform");
+        }
+        if (item.platform === "unknown" && Number(item.updatedAtMs || 0) > 0 && item.updatedAtMs < staleUnknownThresholdMs) {
+          reasons.push(`stale-unknown>${staleDays}d`);
+        }
+
+        const user = interceptStore.getUserById(item.userId);
+        return {
+          ...item,
+          username: String(user?.username ?? "").trim(),
+          authType: String(user?.authType ?? "").trim() || "user",
+          reasons,
+          markedInvalid: reasons.length > 0,
+          tokenPreview: item.deviceToken.length > 16
+            ? `${item.deviceToken.slice(0, 8)}...${item.deviceToken.slice(-8)}`
+            : item.deviceToken,
+        };
+      });
+
+      const invalidItems = candidates.filter((item) => item.markedInvalid);
+      logApi(req, pathname, `mark invalid candidates=${invalidItems.length} total=${candidates.length} admin=${admin.userId}`);
+      return json(res, 200, {
+        ok: true,
+        items: candidates,
+        invalidCount: invalidItems.length,
+        total: candidates.length,
+      });
+    }
+
+    if (req.method === "POST" && pathname === "/auth/device-tokens/delete") {
+      const admin = requireAdminSession(req, res);
+      if (!admin) {
+        logApi(req, pathname, "unauthorized: admin session required");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      const body = await parseBody<Record<string, unknown>>(req);
+      const bindings = Array.isArray(body?.bindings) ? body.bindings : [];
+      const normalizedBindings = bindings
+        .map((item) => ({
+          userId: String((item as Record<string, unknown>)?.userId ?? "").trim(),
+          deviceToken: String((item as Record<string, unknown>)?.deviceToken ?? "").replace(/\s+/g, "").trim(),
+        }))
+        .filter((item) => item.userId && item.deviceToken);
+
+      if (normalizedBindings.length === 0) {
+        logApi(req, pathname, "invalid request: bindings is required");
+        return json(res, 400, { error: "bindings is required" });
+      }
+
+      const removed = apnsStore.unbindDeviceTokens(normalizedBindings);
+      logApi(req, pathname, `delete device tokens requested=${normalizedBindings.length} removed=${removed} admin=${admin.userId}`);
+      return json(res, 200, {
+        ok: true,
+        requested: normalizedBindings.length,
+        removed,
+      });
+    }
+
     if (pathname.startsWith("/api/copilot/intercepts/")) {
       const principal = requireInterceptAuth(req, res);
       if (!principal) {
@@ -1593,8 +1729,8 @@ const server = createServer(async (req, res) => {
             requestId: result.item.id,
             tool: result.item.tool,
             decision: "wait",
-            title: "Approval Required",
-            message: "A tool call is waiting for manual approval.",
+            title: `${agentProvider} waiting for your decision`,
+            message: `Quickly tap to let it continue: ${result.item.tool} - ${result.item.hint}`,
             eventKey: `pretool-wait:${principalUserId}:${result.item.id}`,
           });
         }
@@ -1922,8 +2058,8 @@ const server = createServer(async (req, res) => {
             requestId,
             tool,
             decision: "completed",
-            title: "Session Completed",
-            message: String(event?.msg ?? "Session completed.").trim() || "Session completed.",
+            title: `${agentProvider} has exited`,
+            message: `Typing in the terminal to resume: alimbo ${agentProvider}`,
             eventKey: `session-completed:${principalUserId}:${requestId}`,
           });
         }

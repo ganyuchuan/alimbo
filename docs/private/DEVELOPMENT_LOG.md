@@ -1,5 +1,50 @@
 # Development Log
 
+## 2026-08-03
+
+### 50) Device Token 管理页面 + APNS 无效 token 清理闭环
+
+变更目标：
+- 提供管理员可用的 device token 单页管理能力，支持查看、单条删除、标记无效后勾选批量删除。
+- 降低 APNS 推送失败日志噪音，自动回收无效 token，并在可恢复场景做 topic 自愈重试。
+- 修复新页面上线后 `Device Tokens page unavailable` 的打包遗漏问题。
+
+主要改动：
+- `src/cloud/device-tokens.html`（新增）
+  - 新增 Device Token Manager 单页。
+  - 支持全量列表展示（userId/username/authType/platform/deviceToken/时间戳等关键信息）。
+  - 支持单条删除（Delete）与批量勾选删除（Delete Checked）。
+  - 支持一键标记无效候选（Mark Invalid Candidates），并自动勾选候选行。
+- `src/cloud/intercept-server.ts`
+  - 新增管理员页面路由：`GET /auth/device-tokens-ui`。
+  - 新增管理员 API：
+    - `GET /auth/device-tokens`（拉取全量 token 绑定）
+    - `POST /auth/device-tokens/mark-invalid`（标记无效候选）
+    - `POST /auth/device-tokens/delete`（删除指定/勾选 token）
+  - APNS 推送链路增强：
+    - 发送前清理无效绑定。
+    - unknown 平台在 `DeviceTokenNotForTopic` 时自动使用 watch topic 重试一次，成功后回写平台。
+    - 对 `Unregistered/BadDeviceToken` 等失败自动解绑。
+    - 失败日志改为聚合摘要，附带 `removedBindings/switchedTopic`。
+  - Apple 登录请求体补齐 `platform` 字段类型定义。
+- `src/cloud/apns-store.ts`
+  - 新增 `listAllDeviceBindings`、`unbindDeviceTokens`。
+  - 新增 `setDevicePlatform`、`unbindDeviceToken`。
+  - 新增 `cleanupInvalidDeviceBindingsByUserId`。
+- 导航入口补充
+  - `src/cloud/auth-users.html` 新增 Device tokens 入口链接。
+  - `src/cloud/intercept-approval.html` 新增 Manage device tokens 入口链接。
+- 打包修复
+  - `package.json` 的 `postbuild` 增加 `src/cloud/device-tokens.html -> dist/cloud/device-tokens.html` 复制步骤。
+
+兼容性说明：
+- Device token 管理接口与页面均复用现有管理员会话校验，未改变原有鉴权模型。
+- 无效候选标记为启发式规则（格式异常、unknown 平台、unknown 且超时），删除动作仍需人工勾选确认。
+
+验证记录：
+- `npm run build`：通过
+- `ls -l dist/cloud/device-tokens.html`：存在
+
 ## 2026-07-27
 
 ### 49) /auth/token 新增可选密码授权（无 Cookie 场景）

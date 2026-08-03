@@ -163,6 +163,26 @@ class ApnsStore {
       .filter((item: any) => isLikelyDeviceToken(item.deviceToken));
   }
 
+  listAllDeviceBindings(limit = 5000) {
+    const normalizedLimit = Math.max(1, Math.min(Number.parseInt(String(limit ?? "5000"), 10) || 5000, 20000));
+    const rows = this.db.prepare(`
+      SELECT user_id, device_token, device_platform, created_at_ms, updated_at_ms
+      FROM apns_device_bindings
+      ORDER BY updated_at_ms DESC, created_at_ms DESC, user_id ASC
+      LIMIT ?
+    `).all(normalizedLimit);
+
+    return rows
+      .map((row: any) => ({
+        userId: String(row?.user_id ?? "").trim(),
+        deviceToken: normalizeDeviceToken(row?.device_token),
+        platform: normalizeDevicePlatform(row?.device_platform),
+        createdAtMs: Number(row?.created_at_ms ?? 0),
+        updatedAtMs: Number(row?.updated_at_ms ?? 0),
+      }))
+      .filter((item: any) => Boolean(item.userId) && Boolean(item.deviceToken));
+  }
+
   setDevicePlatform(userId: string, deviceToken: string, platform = "unknown", now = Date.now()) {
     const normalizedUserId = String(userId ?? "").trim();
     const normalizedToken = normalizeDeviceToken(deviceToken);
@@ -195,6 +215,18 @@ class ApnsStore {
     `).run(normalizedUserId, normalizedToken);
 
     return Number(result?.changes ?? 0) > 0;
+  }
+
+  unbindDeviceTokens(bindings: Array<{ userId?: string; deviceToken?: string }>) {
+    const list = Array.isArray(bindings) ? bindings : [];
+    let removedCount = 0;
+    for (const item of list) {
+      const removed = this.unbindDeviceToken(String(item?.userId ?? ""), String(item?.deviceToken ?? ""));
+      if (removed) {
+        removedCount += 1;
+      }
+    }
+    return removedCount;
   }
 
   cleanupInvalidDeviceBindingsByUserId(userId: string) {
