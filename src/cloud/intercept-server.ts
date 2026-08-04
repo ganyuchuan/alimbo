@@ -85,6 +85,11 @@ const adminSessionTtlMs = toInt(process.env.CLOUD_ADMIN_SESSION_TTL_MS, 7 * 24 *
 const adminSessionCookieName = "alimbo_admin_session";
 const authTokenAllowPasswordGrant = toBool(process.env.CLOUD_AUTH_TOKEN_ALLOW_PASSWORD_GRANT, false);
 const agentProvider = String(process.env.AGENT_PROVIDER ?? "").trim();
+const pushHost = String(process.env.ALIMBO_PUSH_HOST ?? process.env.HOSTNAME ?? os.hostname() ?? "").trim() || "unknown";
+
+const APNS_CATEGORY_APPROVAL = "ALIMBO_APPROVAL_V1";
+const APNS_CATEGORY_SESSION_COMPLETED = "ALIMBO_SESSION_COMPLETED_V1";
+const APNS_CATEGORY_INFORMATION = "ALIMBO_INFORMATION_V1";
 
 function setToArray(setLike) {
   return Array.isArray(setLike) ? setLike : [...setLike];
@@ -248,6 +253,9 @@ type ApnsAlertBody = {
   badge?: number | string;
   threadId?: string;
   category?: string;
+  requestId?: string;
+  eventType?: string;
+  host?: string;
   mutableContent?: boolean;
   contentAvailable?: boolean;
   data?: Record<string, unknown>;
@@ -463,6 +471,10 @@ const deviceTokensPagePath = new URL("./device-tokens.html", import.meta.url);
 let deviceTokensPageCache = "";
 const indexPagePath = new URL("./index.html", import.meta.url);
 let indexPageCache = "";
+const watchAlphaSurveyPagePath = new URL("./watch-alpha-survey.html", import.meta.url);
+let watchAlphaSurveyPageCache = "";
+const watchAlphaSurveyAdminPagePath = new URL("./watch-alpha-survey-admin.html", import.meta.url);
+let watchAlphaSurveyAdminPageCache = "";
 const onboardingMarkdownPath = new URL("./SKILL.md", import.meta.url);
 let onboardingMarkdownCache = "";
 
@@ -513,6 +525,36 @@ function renderDeviceTokensPage() {
 
 function renderLoginRequiredPage(returnTo, error = "") {
   return buildLoginPage({ returnTo, error });
+}
+
+function renderWatchAlphaSurveyPage() {
+  if (watchAlphaSurveyPageCache) {
+    return watchAlphaSurveyPageCache;
+  }
+
+  try {
+    watchAlphaSurveyPageCache = fs.readFileSync(watchAlphaSurveyPagePath, "utf8");
+  } catch (error) {
+    console.warn(`[cloud-server][watch-alpha-survey] failed to load page: ${String(error?.message ?? error)}`);
+    watchAlphaSurveyPageCache = "<!doctype html><html><body><h1>Survey page unavailable</h1></body></html>";
+  }
+
+  return watchAlphaSurveyPageCache;
+}
+
+function renderWatchAlphaSurveyAdminPage() {
+  if (watchAlphaSurveyAdminPageCache) {
+    return watchAlphaSurveyAdminPageCache;
+  }
+
+  try {
+    watchAlphaSurveyAdminPageCache = fs.readFileSync(watchAlphaSurveyAdminPagePath, "utf8");
+  } catch (error) {
+    console.warn(`[cloud-server][watch-alpha-survey-admin] failed to load page: ${String(error?.message ?? error)}`);
+    watchAlphaSurveyAdminPageCache = "<!doctype html><html><body><h1>Survey admin page unavailable</h1></body></html>";
+  }
+
+  return watchAlphaSurveyAdminPageCache;
 }
 
 function requireAdminSession(req, res) {
@@ -616,6 +658,108 @@ function parseBody<T extends Record<string, unknown> = Record<string, unknown>>(
     });
     req.on("error", reject);
   });
+}
+
+function normalizeOneOf(value, allowed: string[], fallback = "") {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    return fallback;
+  }
+  return allowed.includes(normalized) ? normalized : fallback;
+}
+
+function normalizeMultiChoices(value, allowed: string[]) {
+  const raw = Array.isArray(value) ? value : [];
+  const picked = new Set<string>();
+  for (const item of raw) {
+    const normalized = String(item ?? "").trim();
+    if (!normalized || !allowed.includes(normalized)) {
+      continue;
+    }
+    picked.add(normalized);
+  }
+  return [...picked];
+}
+
+function normalizeScore(value) {
+  const n = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(n)) {
+    return null;
+  }
+  if (n < 1 || n > 5) {
+    return null;
+  }
+  return n;
+}
+
+function sanitizeCsvCell(value) {
+  const text = String(value ?? "").replace(/\r?\n/g, " ").trim();
+  if (!text) {
+    return "";
+  }
+  const escaped = text.replace(/"/g, '""');
+  return `"${escaped}"`;
+}
+
+function surveysToCsv(items) {
+  const header = [
+    "id",
+    "submittedAtIso",
+    "userId",
+    "username",
+    "contact",
+    "terminalUsed",
+    "usageFrequency",
+    "usageScenarios",
+    "usageScenariosOther",
+    "installIphoneScore",
+    "installWatchScore",
+    "permissionGuideScore",
+    "loginStabilityScore",
+    "pairingFlowScore",
+    "pairingStatusScore",
+    "approvalArrivalScore",
+    "approvalReliabilityScore",
+    "cardCompletenessScore",
+    "nextPriority",
+    "nextPriorityOther",
+    "extraFeedback",
+    "clientMeta",
+  ];
+
+  const lines = [header.join(",")];
+  for (const item of items) {
+    const submittedIso = item?.submittedAtMs ? new Date(Number(item.submittedAtMs)).toISOString() : "";
+    const usageScenarios = Array.isArray(item?.usageScenarios) ? item.usageScenarios.join("|") : "";
+    const clientMeta = item?.clientMeta && typeof item.clientMeta === "object" ? JSON.stringify(item.clientMeta) : "";
+    const row = [
+      sanitizeCsvCell(item?.id),
+      sanitizeCsvCell(submittedIso),
+      sanitizeCsvCell(item?.userId),
+      sanitizeCsvCell(item?.username),
+      sanitizeCsvCell(item?.contact),
+      sanitizeCsvCell(item?.terminalUsed),
+      sanitizeCsvCell(item?.usageFrequency),
+      sanitizeCsvCell(usageScenarios),
+      sanitizeCsvCell(item?.usageScenariosOther),
+      sanitizeCsvCell(item?.installIphoneScore ?? ""),
+      sanitizeCsvCell(item?.installWatchScore ?? ""),
+      sanitizeCsvCell(item?.permissionGuideScore ?? ""),
+      sanitizeCsvCell(item?.loginStabilityScore ?? ""),
+      sanitizeCsvCell(item?.pairingFlowScore ?? ""),
+      sanitizeCsvCell(item?.pairingStatusScore ?? ""),
+      sanitizeCsvCell(item?.approvalArrivalScore ?? ""),
+      sanitizeCsvCell(item?.approvalReliabilityScore ?? ""),
+      sanitizeCsvCell(item?.cardCompletenessScore ?? ""),
+      sanitizeCsvCell(item?.nextPriority),
+      sanitizeCsvCell(item?.nextPriorityOther),
+      sanitizeCsvCell(item?.extraFeedback),
+      sanitizeCsvCell(clientMeta),
+    ];
+    lines.push(row.join(","));
+  }
+
+  return lines.join("\n");
 }
 
 function appendEntry(state, text) {
@@ -788,6 +932,8 @@ async function sendApnsInterceptNotification({
   title,
   message,
   eventKey,
+  category,
+  eventType,
 }: {
   userId: string;
   requestId: string;
@@ -796,12 +942,16 @@ async function sendApnsInterceptNotification({
   title: string;
   message: string;
   eventKey: string;
+  category: string;
+  eventType: string;
 }) {
   const normalizedUserId = String(userId ?? "").trim();
   const normalizedRequestId = String(requestId ?? "").trim();
   const normalizedTool = String(tool ?? "").trim().toLowerCase();
   const normalizedDecision = String(decision ?? "").trim().toLowerCase();
   const normalizedEventKey = String(eventKey ?? "").trim();
+  const normalizedCategory = String(category ?? "").trim();
+  const normalizedEventType = String(eventType ?? "").trim();
 
   console.log(
     `[cloud-server][apns] intercept notify start userId=${normalizedUserId || "-"} requestId=${normalizedRequestId || "-"} tool=${normalizedTool} decision=${normalizedDecision} eventKey=${normalizedEventKey || "-"}`,
@@ -820,6 +970,13 @@ async function sendApnsInterceptNotification({
   if (!normalizedUserId || !normalizedRequestId || !normalizedEventKey) {
     console.log(
       `[cloud-server][apns] intercept notify skip reason=invalid_args userId=${normalizedUserId ? "ok" : "missing"} requestId=${normalizedRequestId ? "ok" : "missing"} eventKey=${normalizedEventKey ? "ok" : "missing"}`,
+    );
+    return;
+  }
+
+  if (!normalizedCategory || !normalizedEventType) {
+    console.log(
+      `[cloud-server][apns] intercept notify skip reason=invalid_meta category=${normalizedCategory ? "ok" : "missing"} eventType=${normalizedEventType ? "ok" : "missing"}`,
     );
     return;
   }
@@ -899,8 +1056,11 @@ async function sendApnsInterceptNotification({
       title,
       body: `${message}`,
       sound: "default",
+      category: normalizedCategory,
       data: {
         source: "intercept-server",
+        host: pushHost,
+        eventType: normalizedEventType,
         requestId: normalizedRequestId,
         tool: normalizedTool,
         decision: normalizedDecision,
@@ -1091,6 +1251,150 @@ const server = createServer(async (req, res) => {
       return json(res, 200, {
         ok: true
       });
+    }
+
+    if (req.method === "GET" && (pathname === "/survey/watch-alpha" || pathname === "/survey/watch-alpha.html")) {
+      logApi(req, pathname, "serve watch alpha survey page");
+      return html(res, 200, renderWatchAlphaSurveyPage());
+    }
+
+    if (req.method === "GET" && pathname === "/admin/surveys/watch-alpha") {
+      const admin = requireAdminSession(req, res);
+      if (!admin) {
+        logApi(req, pathname, "redirect to login");
+        redirectToLogin(res, req.url || "/admin/surveys/watch-alpha");
+        return;
+      }
+
+      logApi(req, pathname, `serve survey admin page admin=${admin.userId}`);
+      return html(res, 200, renderWatchAlphaSurveyAdminPage());
+    }
+
+    if (req.method === "POST" && pathname === "/api/surveys/watch-alpha") {
+      const body = await parseBody<Record<string, unknown>>(req);
+
+      const terminalUsed = normalizeOneOf(body?.terminalUsed, ["iphone", "watch", "both"]);
+      const usageFrequency = normalizeOneOf(body?.usageFrequency, [
+        "multiple_daily",
+        "daily_once",
+        "weekly_2_3",
+        "weekly_or_less",
+      ]);
+      const usageScenarios = normalizeMultiChoices(body?.usageScenarios, [
+        "watch_view_approve_status",
+        "iphone_view_approve_status",
+        "im_view_approve_status",
+        "try_only",
+        "other",
+      ]);
+      const nextPriority = normalizeOneOf(body?.nextPriority, [
+        "more_agents",
+        "pairing_simpler",
+        "card_more_complete",
+        "other",
+      ]);
+
+      if (!terminalUsed || !usageFrequency || usageScenarios.length === 0 || !nextPriority) {
+        logApi(req, pathname, "invalid request: required fields missing");
+        return json(res, 400, { error: "missing required fields" });
+      }
+
+      const submitted = interceptStore.withTransaction(() => {
+        return interceptStore.insertWatchAlphaSurvey({
+          userId: String(body?.userId ?? "").trim(),
+          username: String(body?.username ?? "").trim(),
+          contact: String(body?.contact ?? "").trim(),
+          terminalUsed,
+          usageFrequency,
+          usageScenarios,
+          usageScenariosOther: String(body?.usageScenariosOther ?? "").trim(),
+          installIphoneScore: normalizeScore(body?.installIphoneScore),
+          installWatchScore: normalizeScore(body?.installWatchScore),
+          permissionGuideScore: normalizeScore(body?.permissionGuideScore),
+          loginStabilityScore: normalizeScore(body?.loginStabilityScore),
+          pairingFlowScore: normalizeScore(body?.pairingFlowScore),
+          pairingStatusScore: normalizeScore(body?.pairingStatusScore),
+          approvalArrivalScore: normalizeScore(body?.approvalArrivalScore),
+          approvalReliabilityScore: normalizeScore(body?.approvalReliabilityScore),
+          cardCompletenessScore: normalizeScore(body?.cardCompletenessScore),
+          nextPriority,
+          nextPriorityOther: String(body?.nextPriorityOther ?? "").trim(),
+          extraFeedback: String(body?.extraFeedback ?? "").trim(),
+          clientMeta: {
+            userAgent: String(req.headers["user-agent"] ?? "").trim(),
+            ip: String(req.socket?.remoteAddress ?? "").trim(),
+            source: String(body?.source ?? "web").trim(),
+            username: String(body?.username ?? "").trim(),
+            email: String(body?.email ?? "").trim(),
+            appVersion: String(body?.appVersion ?? "").trim(),
+            appBuild: String(body?.appBuild ?? "").trim(),
+            appBundleID: String(body?.appBundleID ?? "").trim(),
+            iosVersion: String(body?.iosVersion ?? "").trim(),
+            device: String(body?.device ?? "").trim(),
+            host: String(body?.host ?? "").trim(),
+            pushNotificationEnabled: String(body?.pushNotificationEnabled ?? "").trim(),
+            tokenPersent: String(body?.tokenPersent ?? "").trim(),
+          },
+          submittedAtMs: Date.now(),
+        });
+      });
+
+      logApi(req, pathname, `survey submitted id=${submitted.id}`);
+      return json(res, 200, {
+        ok: true,
+        id: submitted.id,
+        submittedAtMs: submitted.submittedAtMs,
+      });
+    }
+
+    if (req.method === "GET" && pathname === "/api/admin/surveys/watch-alpha") {
+      const admin = requireAdminSession(req, res);
+      if (!admin) {
+        logApi(req, pathname, "unauthorized: admin session required");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      const limit = Math.min(toInt(url.searchParams.get("limit"), 200), 5000);
+      const fromMs = Number.parseInt(String(url.searchParams.get("fromMs") ?? "0"), 10) || 0;
+      const toMs = Number.parseInt(String(url.searchParams.get("toMs") ?? "0"), 10) || 0;
+
+      const items = interceptStore.listWatchAlphaSurveys({ limit, fromMs, toMs });
+      const total = interceptStore.countWatchAlphaSurveys({ fromMs, toMs });
+
+      logApi(req, pathname, `list surveys admin=${admin.userId} limit=${limit} count=${items.length} total=${total}`);
+      return json(res, 200, {
+        ok: true,
+        items,
+        total,
+        limit,
+        filters: {
+          fromMs,
+          toMs,
+        },
+      });
+    }
+
+    if (req.method === "GET" && pathname === "/api/admin/surveys/watch-alpha.csv") {
+      const admin = requireAdminSession(req, res);
+      if (!admin) {
+        logApi(req, pathname, "unauthorized: admin session required");
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      const limit = Math.min(toInt(url.searchParams.get("limit"), 1000), 10000);
+      const fromMs = Number.parseInt(String(url.searchParams.get("fromMs") ?? "0"), 10) || 0;
+      const toMs = Number.parseInt(String(url.searchParams.get("toMs") ?? "0"), 10) || 0;
+      const items = interceptStore.listWatchAlphaSurveys({ limit, fromMs, toMs });
+      const csvText = surveysToCsv(items);
+      const fileName = `watch-alpha-surveys-${dayKey()}.csv`;
+
+      logApi(req, pathname, `export csv admin=${admin.userId} rows=${items.length}`);
+      res.writeHead(200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename=${fileName}`,
+      });
+      res.end(`\uFEFF${csvText}`);
+      return;
     }
 
     if (req.method === "POST" && pathname === "/auth/token") {
@@ -1732,6 +2036,8 @@ const server = createServer(async (req, res) => {
             title: `${agentProvider} waiting for your decision`,
             message: `Quickly tap to let it continue: ${result.item.tool} - ${result.item.hint}`,
             eventKey: `pretool-wait:${principalUserId}:${result.item.id}`,
+            category: APNS_CATEGORY_APPROVAL,
+            eventType: "intercept.approval_required",
           });
         }
 
@@ -2061,6 +2367,8 @@ const server = createServer(async (req, res) => {
             title: `${agentProvider} has exited`,
             message: `Typing in the terminal to resume: alimbo ${agentProvider}`,
             eventKey: `session-completed:${principalUserId}:${requestId}`,
+            category: APNS_CATEGORY_SESSION_COMPLETED,
+            eventType: "session.completed",
           });
         }
 
@@ -2073,6 +2381,17 @@ const server = createServer(async (req, res) => {
         const title = String(body?.title ?? "").trim();
         const message = String(body?.body ?? "").trim();
         const badge = Number.parseInt(String(body?.badge ?? ""), 10);
+        const requestId = String(body?.requestId ?? body?.data?.requestId ?? `manual-alert:${Date.now()}`).trim();
+        const eventType = String(body?.eventType ?? body?.data?.eventType ?? "information.general").trim();
+        const category = String(body?.category ?? "").trim() || APNS_CATEGORY_INFORMATION;
+        const host = String(body?.host ?? body?.data?.host ?? pushHost).trim() || pushHost;
+        const inputData = body?.data && typeof body.data === "object" ? body.data : {};
+        const data = {
+          ...inputData,
+          requestId,
+          eventType,
+          host,
+        };
 
         logApi(
           req,
@@ -2108,10 +2427,10 @@ const server = createServer(async (req, res) => {
           sound: String(body?.sound ?? "").trim() || undefined,
           badge: Number.isFinite(badge) ? badge : undefined,
           threadId: String(body?.threadId ?? "").trim() || undefined,
-          category: String(body?.category ?? "").trim() || undefined,
+          category,
           mutableContent: body?.mutableContent === true,
           contentAvailable: body?.contentAvailable === true,
-          data: body?.data && typeof body.data === "object" ? body.data : undefined,
+          data,
         });
 
         logApi(

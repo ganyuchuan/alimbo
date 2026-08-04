@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent Limbo 内测问卷</title>
+    <style>
+      :root {
+        --bg0: #f9f4e8;
+        --bg1: #efe5cf;
+        --paper: #fffdf6;
+        --ink: #1f1d18;
+        --muted: #6b6558;
+        --line: #dacfb6;
+        --accent: #0a6a5a;
+        --accent-2: #d95f2a;
+        --danger: #a12525;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        background:
+          radial-gradient(circle at 10% 10%, rgba(217, 95, 42, 0.12), transparent 35%),
+          radial-gradient(circle at 90% 20%, rgba(10, 106, 90, 0.15), transparent 40%),
+          linear-gradient(160deg, var(--bg0), var(--bg1));
+        min-height: 100vh;
+      }
+
+      .wrap {
+        max-width: 920px;
+        margin: 26px auto;
+        padding: 0 14px 28px;
+      }
+
+      .hero {
+        background: linear-gradient(135deg, rgba(10, 106, 90, 0.94), rgba(7, 84, 71, 0.95));
+        color: #f5fff8;
+        border-radius: 24px;
+        padding: 26px 22px;
+        box-shadow: 0 20px 50px rgba(12, 47, 41, 0.28);
+      }
+
+      .hero h1 {
+        margin: 0 0 10px;
+        font-size: clamp(24px, 3vw, 34px);
+        line-height: 1.2;
+      }
+
+      .hero p {
+        margin: 0;
+        line-height: 1.7;
+        color: rgba(245, 255, 248, 0.92);
+      }
+
+      form {
+        margin-top: 14px;
+      }
+
+      .card {
+        margin-top: 14px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 18px 16px;
+        box-shadow: 0 8px 20px rgba(58, 45, 20, 0.08);
+      }
+
+      .q {
+        font-size: 18px;
+        margin: 0 0 12px;
+        line-height: 1.45;
+      }
+
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: -5px;
+        margin-bottom: 12px;
+      }
+
+      .grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        border: 1px solid transparent;
+      }
+
+      .row:hover {
+        border-color: var(--line);
+        background: rgba(217, 95, 42, 0.04);
+      }
+
+      label {
+        cursor: pointer;
+      }
+
+      input[type="text"],
+      textarea,
+      select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: #fff;
+        font: inherit;
+        color: inherit;
+      }
+
+      textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+
+      .inline-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .stars {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .star-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 7px 10px;
+        font-size: 14px;
+      }
+
+      .required {
+        color: var(--accent-2);
+        font-weight: 600;
+        margin-left: 4px;
+      }
+
+      .actions {
+        margin-top: 16px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        flex-direction: column;
+      }
+
+      .btn {
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .btn-secondary {
+        background: #f3ecdc;
+        color: var(--ink);
+        border: 1px solid var(--line);
+      }
+
+      .msg {
+        margin-top: 12px;
+        min-height: 22px;
+        font-size: 14px;
+      }
+
+      .msg.ok {
+        color: var(--accent);
+      }
+
+      .msg.err {
+        color: var(--danger);
+      }
+
+      .foot {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 720px) {
+        .inline-2 {
+          grid-template-columns: 1fr;
+        }
+
+        .hero,
+        .card {
+          border-radius: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="hero">
+        <h1>Agent Limbo 内测问卷</h1>
+        <p>
+          建议 6-9 分钟完成。问卷匿名，结果仅用于产品改进。<br />
+          评分项默认 1-5 分，1=非常不同意/非常差，5=非常同意/非常好。
+        </p>
+      </section>
+
+      <form id="surveyForm">
+        <section class="card">
+          <h2 class="q">1. 你本次主要使用了哪些端？<span class="required">*</span></h2>
+          <div class="grid">
+            <label class="row"><input type="radio" name="terminalUsed" value="iphone" required /> iPhone</label>
+            <label class="row"><input type="radio" name="terminalUsed" value="watch" /> Apple Watch</label>
+            <label class="row"><input type="radio" name="terminalUsed" value="both" /> 两者都用了</label>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2 class="q">2. 你的使用频率是？<span class="required">*</span></h2>
+          <div class="grid">
+            <label class="row"><input type="radio" name="usageFrequency" value="multiple_daily" required /> 每天多次</label>
+            <label class="row"><input type="radio" name="usageFrequency" value="daily_once" /> 每天 1 次</label>
+            <label class="row"><input type="radio" name="usageFrequency" value="weekly_2_3" /> 每周 2-3 次</label>
+            <label class="row"><input type="radio" name="usageFrequency" value="weekly_or_less" /> 每周 1 次或更少</label>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2 class="q">3. 你是通过什么场景使用本 App？<span class="required">*</span></h2>
+          <div class="grid">
+            <label class="row"><input type="radio" name="usageScenarios" value="watch_view_approve_status" required /> Agent 工作时能够在「手表」上查看、审批它</label>
+            <label class="row"><input type="radio" name="usageScenarios" value="iphone_view_approve_status" /> Agent 工作时能够在「手机」上查看、审批它</label>
+            <label class="row"><input type="radio" name="usageScenarios" value="im_view_approve_status" /> Agent 工作时能够在「飞书/微信/钉钉等 IM 工具」上查看、审批它的状态</label>
+            <label class="row"><input type="radio" name="usageScenarios" value="try_only" /> 仅尝鲜、体验</label>
+            <label class="row"><input type="radio" name="usageScenarios" value="other" /> 其他（请补充）</label>
+          </div>
+          <div style="margin-top: 10px;">
+            <input id="usageScenariosOther" name="usageScenariosOther" type="text" maxlength="200" placeholder="其他场景补充" />
+          </div>
+        </section>
+
+        <section class="card">
+          <h2 class="q">4-10. 体验评分（1-5 分）</h2>
+          <div class="grid">
+            <div>
+              <label>4. iPhone 上首次安装与启动 App 是否顺利？</label>
+              <div class="stars" data-score="installIphoneScore"></div>
+            </div>
+            <div>
+              <label>5. Apple Watch 上首次安装与启动 App 是否顺利？</label>
+              <div class="stars" data-score="installWatchScore"></div>
+            </div>
+            <div>
+              <label>6. 首次安装、启动 App 后出现的权限引导是否清晰易懂？</label>
+              <div class="stars" data-score="permissionGuideScore"></div>
+            </div>
+            <div>
+              <label>7. 登录过程是否稳定（无卡顿/无崩溃）？</label>
+              <div class="stars" data-score="loginStabilityScore"></div>
+            </div>
+            <div>
+              <label>8. 将 Agent 与 iPhone/Watch 的配对流程是否顺畅？</label>
+              <div class="stars" data-score="pairingFlowScore"></div>
+            </div>
+            <div>
+              <label>9. 清楚知道 Agent 与 iPhone/Watch 的配对状态吗？</label>
+              <div class="stars" data-score="pairingStatusScore"></div>
+            </div>
+            <div>
+              <label>10. 审批消息到达是否及时？</label>
+              <div class="stars" data-score="approvalArrivalScore"></div>
+            </div>
+            <div>
+              <label>11. 审批操作（Yes/No）是否可靠生效？</label>
+              <div class="stars" data-score="approvalReliabilityScore"></div>
+            </div>
+            <div>
+              <label>12. 你对当前审批卡信息完整度的满意度（工具名称、指令、发生时间和等待时长）？</label>
+              <div class="stars" data-score="cardCompletenessScore"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2 class="q">13. 你最希望下个版本优先修复、优化或增加功能的是？<span class="required">*</span></h2>
+          <div class="grid">
+            <label class="row"><input type="radio" name="nextPriority" value="more_agents" required /> 支持更多 Agent 的接入，比如 Codex</label>
+            <label class="row"><input type="radio" name="nextPriority" value="pairing_simpler" /> Agent 与手表的配对流程更简单</label>
+            <label class="row"><input type="radio" name="nextPriority" value="card_more_complete" /> 审批卡信息更完整</label>
+            <label class="row"><input type="radio" name="nextPriority" value="other" /> 其它</label>
+          </div>
+          <div style="margin-top: 10px;">
+            <input id="nextPriorityOther" name="nextPriorityOther" type="text" maxlength="200" placeholder="若选其它，请补充" />
+          </div>
+        </section>
+
+        <section class="card">
+          <h2 class="q">补充反馈（可选）</h2>
+          <textarea id="extraFeedback" name="extraFeedback" placeholder="你希望我们重点关注什么问题？"></textarea>
+        </section>
+
+        <div class="actions">
+            <button class="btn btn-primary" type="submit">提交问卷</button>
+            <button class="btn btn-secondary" type="button" id="resetBtn">重置</button>
+        </div>
+        <div id="result" class="msg"></div>
+      </form>
+    </div>
+
+    <script>
+      function createScoreChips(container, name) {
+        const fragment = document.createDocumentFragment();
+        for (let i = 5; i >= 1; i -= 1) {
+          const label = document.createElement("label");
+          label.className = "star-item";
+          const input = document.createElement("input");
+          input.type = "radio";
+          input.name = name;
+          input.value = String(i);
+          label.appendChild(input);
+          label.appendChild(document.createTextNode(`${i} 分`));
+          fragment.appendChild(label);
+        }
+        container.appendChild(fragment);
+      }
+
+      document.querySelectorAll(".stars").forEach((el) => {
+        const name = el.getAttribute("data-score");
+        if (name) {
+          createScoreChips(el, name);
+        }
+      });
+
+      const form = document.getElementById("surveyForm");
+      const result = document.getElementById("result");
+      const resetBtn = document.getElementById("resetBtn");
+      const trackedQueryKeys = [
+        "username",
+        "email",
+        "appVersion",
+        "appBuild",
+        "appBundleID",
+        "iosVersion",
+        "device",
+        "host",
+        "pushNotificationEnabled",
+        "tokenPersent",
+      ];
+
+      function readSurveyQueryContext() {
+        const params = new URLSearchParams(window.location.search || "");
+        const context = {};
+        for (const key of trackedQueryKeys) {
+          const value = String(params.get(key) || "").trim();
+          if (!value) {
+            continue;
+          }
+          context[key] = value;
+        }
+        return context;
+      }
+
+      function getRadioValue(name) {
+        const el = form.querySelector(`input[name=\"${name}\"]:checked`);
+        return el ? el.value : "";
+      }
+
+      function getScore(name) {
+        const value = getRadioValue(name);
+        if (!value) {
+          return null;
+        }
+        const n = Number.parseInt(value, 10);
+        if (!Number.isFinite(n) || n < 1 || n > 5) {
+          return null;
+        }
+        return n;
+      }
+
+      function getCheckedValues(name) {
+        return Array.from(form.querySelectorAll(`input[name=\"${name}\"]:checked`)).map((item) => item.value);
+      }
+
+      function getOptionalInputValue(id) {
+        const el = document.getElementById(id);
+        return el ? String(el.value || "").trim() : "";
+      }
+
+      function setMessage(text, ok) {
+        result.textContent = text;
+        result.className = ok ? "msg ok" : "msg err";
+      }
+
+      resetBtn.addEventListener("click", () => {
+        form.reset();
+        setMessage("", true);
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        setMessage("正在提交...", true);
+        const queryContext = readSurveyQueryContext();
+
+        const usageScenarios = getCheckedValues("usageScenarios");
+        if (usageScenarios.length === 0) {
+          setMessage("请选择一个使用场景。", false);
+          return;
+        }
+
+        const payload = {
+          userId: getOptionalInputValue("userId"),
+          username: getOptionalInputValue("username"),
+          contact: getOptionalInputValue("contact"),
+          terminalUsed: getRadioValue("terminalUsed"),
+          usageFrequency: getRadioValue("usageFrequency"),
+          usageScenarios,
+          usageScenariosOther: getOptionalInputValue("usageScenariosOther"),
+          installIphoneScore: getScore("installIphoneScore"),
+          installWatchScore: getScore("installWatchScore"),
+          permissionGuideScore: getScore("permissionGuideScore"),
+          loginStabilityScore: getScore("loginStabilityScore"),
+          pairingFlowScore: getScore("pairingFlowScore"),
+          pairingStatusScore: getScore("pairingStatusScore"),
+          approvalArrivalScore: getScore("approvalArrivalScore"),
+          approvalReliabilityScore: getScore("approvalReliabilityScore"),
+          cardCompletenessScore: getScore("cardCompletenessScore"),
+          nextPriority: getRadioValue("nextPriority"),
+          nextPriorityOther: getOptionalInputValue("nextPriorityOther"),
+          extraFeedback: getOptionalInputValue("extraFeedback"),
+          source: "watch-alpha-web",
+          ...queryContext,
+        };
+
+        if (!payload.terminalUsed || !payload.usageFrequency || !payload.nextPriority) {
+          setMessage("请先完成所有必填题。", false);
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/surveys/watch-alpha", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || !data?.ok) {
+            throw new Error(data?.error || `请求失败（${response.status}）`);
+          }
+
+          setMessage("提交成功，感谢你的反馈。", true);
+          form.reset();
+        } catch (error) {
+          setMessage(`提交失败：${String(error?.message || error)}`, false);
+        }
+      });
+    </script>
+  </body>
+</html>

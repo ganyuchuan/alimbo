@@ -244,6 +244,17 @@ function normalizeEmail(value) {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function normalizeRating(value) {
+  const n = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(n)) {
+    return null;
+  }
+  if (n < 1 || n > 5) {
+    return null;
+  }
+  return n;
+}
+
 function buildAppleUsername(appleSub) {
   const digest = crypto.createHash("sha1").update(String(appleSub ?? ""), "utf8").digest("hex");
   return `apple-${digest.slice(0, 8)}`;
@@ -454,11 +465,43 @@ function openDatabase(dbFile) {
       expires_at_ms INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS watch_alpha_surveys (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL DEFAULT '',
+      username TEXT NOT NULL DEFAULT '',
+      contact TEXT NOT NULL DEFAULT '',
+      terminal_used TEXT NOT NULL DEFAULT '',
+      usage_frequency TEXT NOT NULL DEFAULT '',
+      usage_scenarios_json TEXT NOT NULL DEFAULT '[]',
+      usage_scenarios_other TEXT NOT NULL DEFAULT '',
+      install_iphone_score INTEGER,
+      install_watch_score INTEGER,
+      permission_guide_score INTEGER,
+      login_stability_score INTEGER,
+      pairing_flow_score INTEGER,
+      pairing_status_score INTEGER,
+      approval_arrival_score INTEGER,
+      approval_reliability_score INTEGER,
+      card_completeness_score INTEGER,
+      next_priority TEXT NOT NULL DEFAULT '',
+      next_priority_other TEXT NOT NULL DEFAULT '',
+      extra_feedback TEXT NOT NULL DEFAULT '',
+      client_meta_json TEXT,
+      submitted_at_ms INTEGER NOT NULL DEFAULT 0,
+      created_at_ms INTEGER NOT NULL DEFAULT 0
+    );
+
     CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id
       ON auth_sessions(user_id);
 
     CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at
       ON auth_sessions(expires_at_ms);
+
+    CREATE INDEX IF NOT EXISTS idx_watch_alpha_surveys_submitted_at
+      ON watch_alpha_surveys(submitted_at_ms DESC, created_at_ms DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_watch_alpha_surveys_user_id
+      ON watch_alpha_surveys(user_id, submitted_at_ms DESC);
   `);
 
   migrateInterceptStateTableIfNeeded(database);
@@ -1504,6 +1547,203 @@ class InterceptStore {
       createdAtMs: Number.isFinite(row.created_at_ms) ? row.created_at_ms : 0,
       updatedAtMs: Number.isFinite(row.updated_at_ms) ? row.updated_at_ms : 0,
     }));
+  }
+
+  insertWatchAlphaSurvey(input) {
+    const id = `survey_${crypto.randomUUID()}`;
+    const now = Date.now();
+    const submittedAtMs = Number.parseInt(String(input?.submittedAtMs ?? now), 10);
+
+    const userId = String(input?.userId ?? "").trim();
+    const username = String(input?.username ?? "").trim();
+    const contact = String(input?.contact ?? "").trim();
+    const terminalUsed = String(input?.terminalUsed ?? "").trim();
+    const usageFrequency = String(input?.usageFrequency ?? "").trim();
+    const usageScenarios = Array.isArray(input?.usageScenarios)
+      ? input.usageScenarios.map((item) => String(item ?? "").trim()).filter(Boolean).slice(0, 30)
+      : [];
+
+    const usageScenariosOther = String(input?.usageScenariosOther ?? "").trim();
+    const nextPriority = String(input?.nextPriority ?? "").trim();
+    const nextPriorityOther = String(input?.nextPriorityOther ?? "").trim();
+    const extraFeedback = String(input?.extraFeedback ?? "").trim();
+    const clientMeta = input?.clientMeta && typeof input.clientMeta === "object" ? input.clientMeta : null;
+
+    const installIphoneScore = normalizeRating(input?.installIphoneScore);
+    const installWatchScore = normalizeRating(input?.installWatchScore);
+    const permissionGuideScore = normalizeRating(input?.permissionGuideScore);
+    const loginStabilityScore = normalizeRating(input?.loginStabilityScore);
+    const pairingFlowScore = normalizeRating(input?.pairingFlowScore);
+    const pairingStatusScore = normalizeRating(input?.pairingStatusScore);
+    const approvalArrivalScore = normalizeRating(input?.approvalArrivalScore);
+    const approvalReliabilityScore = normalizeRating(input?.approvalReliabilityScore);
+    const cardCompletenessScore = normalizeRating(input?.cardCompletenessScore);
+
+    this.db.prepare(`
+      INSERT INTO watch_alpha_surveys (
+        id,
+        user_id,
+        username,
+        contact,
+        terminal_used,
+        usage_frequency,
+        usage_scenarios_json,
+        usage_scenarios_other,
+        install_iphone_score,
+        install_watch_score,
+        permission_guide_score,
+        login_stability_score,
+        pairing_flow_score,
+        pairing_status_score,
+        approval_arrival_score,
+        approval_reliability_score,
+        card_completeness_score,
+        next_priority,
+        next_priority_other,
+        extra_feedback,
+        client_meta_json,
+        submitted_at_ms,
+        created_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      userId,
+      username,
+      contact,
+      terminalUsed,
+      usageFrequency,
+      stringifyJson(usageScenarios, "[]"),
+      usageScenariosOther,
+      installIphoneScore,
+      installWatchScore,
+      permissionGuideScore,
+      loginStabilityScore,
+      pairingFlowScore,
+      pairingStatusScore,
+      approvalArrivalScore,
+      approvalReliabilityScore,
+      cardCompletenessScore,
+      nextPriority,
+      nextPriorityOther,
+      extraFeedback,
+      stringifyJson(clientMeta, "null"),
+      Number.isFinite(submittedAtMs) && submittedAtMs > 0 ? submittedAtMs : now,
+      now,
+    );
+
+    return {
+      id,
+      submittedAtMs: Number.isFinite(submittedAtMs) && submittedAtMs > 0 ? submittedAtMs : now,
+      createdAtMs: now,
+    };
+  }
+
+  listWatchAlphaSurveys({ limit = 200, fromMs = 0, toMs = 0 } = {}) {
+    const normalizedLimit = Math.max(1, Math.min(toInt(limit, 200), 5000));
+    const normalizedFromMs = Number.parseInt(String(fromMs ?? "0"), 10) || 0;
+    const normalizedToMs = Number.parseInt(String(toMs ?? "0"), 10) || 0;
+
+    const rows = normalizedFromMs > 0 || normalizedToMs > 0
+      ? this.db.prepare(`
+          SELECT
+            id,
+            user_id,
+            username,
+            contact,
+            terminal_used,
+            usage_frequency,
+            usage_scenarios_json,
+            usage_scenarios_other,
+            install_iphone_score,
+            install_watch_score,
+            permission_guide_score,
+            login_stability_score,
+            pairing_flow_score,
+            pairing_status_score,
+            approval_arrival_score,
+            approval_reliability_score,
+            card_completeness_score,
+            next_priority,
+            next_priority_other,
+            extra_feedback,
+            client_meta_json,
+            submitted_at_ms,
+            created_at_ms
+          FROM watch_alpha_surveys
+          WHERE (? <= 0 OR submitted_at_ms >= ?)
+            AND (? <= 0 OR submitted_at_ms <= ?)
+          ORDER BY submitted_at_ms DESC, created_at_ms DESC
+          LIMIT ?
+        `).all(normalizedFromMs, normalizedFromMs, normalizedToMs, normalizedToMs, normalizedLimit)
+      : this.db.prepare(`
+          SELECT
+            id,
+            user_id,
+            username,
+            contact,
+            terminal_used,
+            usage_frequency,
+            usage_scenarios_json,
+            usage_scenarios_other,
+            install_iphone_score,
+            install_watch_score,
+            permission_guide_score,
+            login_stability_score,
+            pairing_flow_score,
+            pairing_status_score,
+            approval_arrival_score,
+            approval_reliability_score,
+            card_completeness_score,
+            next_priority,
+            next_priority_other,
+            extra_feedback,
+            client_meta_json,
+            submitted_at_ms,
+            created_at_ms
+          FROM watch_alpha_surveys
+          ORDER BY submitted_at_ms DESC, created_at_ms DESC
+          LIMIT ?
+        `).all(normalizedLimit);
+
+    return rows.map((row) => ({
+      id: String(row.id ?? "").trim(),
+      userId: String(row.user_id ?? "").trim(),
+      username: String(row.username ?? "").trim(),
+      contact: String(row.contact ?? "").trim(),
+      terminalUsed: String(row.terminal_used ?? "").trim(),
+      usageFrequency: String(row.usage_frequency ?? "").trim(),
+      usageScenarios: parseJsonText(row.usage_scenarios_json, []),
+      usageScenariosOther: String(row.usage_scenarios_other ?? "").trim(),
+      installIphoneScore: Number.isFinite(row.install_iphone_score) ? row.install_iphone_score : null,
+      installWatchScore: Number.isFinite(row.install_watch_score) ? row.install_watch_score : null,
+      permissionGuideScore: Number.isFinite(row.permission_guide_score) ? row.permission_guide_score : null,
+      loginStabilityScore: Number.isFinite(row.login_stability_score) ? row.login_stability_score : null,
+      pairingFlowScore: Number.isFinite(row.pairing_flow_score) ? row.pairing_flow_score : null,
+      pairingStatusScore: Number.isFinite(row.pairing_status_score) ? row.pairing_status_score : null,
+      approvalArrivalScore: Number.isFinite(row.approval_arrival_score) ? row.approval_arrival_score : null,
+      approvalReliabilityScore: Number.isFinite(row.approval_reliability_score) ? row.approval_reliability_score : null,
+      cardCompletenessScore: Number.isFinite(row.card_completeness_score) ? row.card_completeness_score : null,
+      nextPriority: String(row.next_priority ?? "").trim(),
+      nextPriorityOther: String(row.next_priority_other ?? "").trim(),
+      extraFeedback: String(row.extra_feedback ?? "").trim(),
+      clientMeta: parseJsonText(row.client_meta_json, null),
+      submittedAtMs: Number.isFinite(row.submitted_at_ms) ? row.submitted_at_ms : 0,
+      createdAtMs: Number.isFinite(row.created_at_ms) ? row.created_at_ms : 0,
+    }));
+  }
+
+  countWatchAlphaSurveys({ fromMs = 0, toMs = 0 } = {}) {
+    const normalizedFromMs = Number.parseInt(String(fromMs ?? "0"), 10) || 0;
+    const normalizedToMs = Number.parseInt(String(toMs ?? "0"), 10) || 0;
+
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM watch_alpha_surveys
+      WHERE (? <= 0 OR submitted_at_ms >= ?)
+        AND (? <= 0 OR submitted_at_ms <= ?)
+    `).get(normalizedFromMs, normalizedFromMs, normalizedToMs, normalizedToMs);
+
+    return Number.isFinite(row?.total) ? row.total : 0;
   }
 }
 

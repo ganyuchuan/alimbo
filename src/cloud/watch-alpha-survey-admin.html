@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>问卷结果管理</title>
+    <style>
+      :root {
+        --bg: #f3f7f2;
+        --card: #fffffd;
+        --line: #d6e2d2;
+        --ink: #1f2a20;
+        --muted: #5f6c61;
+        --accent: #116c5b;
+        --accent-2: #0e5c4e;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 8% 8%, rgba(17,108,91,0.12), transparent 30%),
+          radial-gradient(circle at 88% 12%, rgba(173,120,43,0.12), transparent 33%),
+          linear-gradient(160deg, #edf5ec 0%, #f7f2e9 50%, #eef7f4 100%);
+      }
+      .wrap {
+        max-width: 1280px;
+        margin: 20px auto;
+        padding: 0 12px 24px;
+      }
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      h1 { margin: 0; font-size: 27px; }
+      .meta { color: var(--muted); font-size: 13px; line-height: 1.6; }
+      .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+      .nav a, .nav button {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255,255,255,0.85);
+        color: var(--ink);
+        text-decoration: none;
+        font: inherit;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px;
+        box-shadow: 0 8px 28px rgba(31,42,32,0.08);
+        margin-bottom: 12px;
+      }
+      .row { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
+      .field { display: grid; gap: 6px; }
+      label { font-size: 12px; color: var(--muted); }
+      input {
+        min-width: 180px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 9px 10px;
+        font: inherit;
+        background: #fff;
+      }
+      button.primary {
+        border: 0;
+        border-radius: 10px;
+        background: var(--accent);
+        color: #fff;
+        padding: 10px 14px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button.primary:hover { background: var(--accent-2); }
+      button.ghost {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        color: var(--ink);
+        padding: 10px 14px;
+        font: inherit;
+        cursor: pointer;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      th, td {
+        border: 1px solid var(--line);
+        padding: 7px 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th { background: #f5faf4; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+      .muted { color: var(--muted); }
+      .status { min-height: 20px; }
+      .ok { color: #136c4a; }
+      .err { color: #b3261e; }
+      .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+      .chip {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 2px 8px;
+        background: #fff;
+      }
+      @media (max-width: 900px) {
+        .hero { flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="hero">
+        <div>
+          <h1>内测问卷结果管理</h1>
+          <div class="meta">管理员查看问卷列表、按时间筛选并导出 CSV。</div>
+        </div>
+        <div class="nav">
+          <a href="/survey/watch-alpha" target="_blank" rel="noreferrer">打开问卷页</a>
+          <a href="/auth/users-ui">用户管理</a>
+          <a href="/auth/device-tokens-ui">设备 Token</a>
+          <form method="post" action="/auth/logout" style="display:inline;">
+            <input type="hidden" name="returnTo" value="/auth/login" />
+            <button type="submit">退出登录</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="row">
+          <div class="field">
+            <label for="limit">最大条数</label>
+            <input id="limit" type="number" min="1" max="5000" value="200" />
+          </div>
+          <div class="field">
+            <label for="fromMs">起始时间戳（毫秒，可选）</label>
+            <input id="fromMs" type="number" min="0" placeholder="如 1785600000000" />
+          </div>
+          <div class="field">
+            <label for="toMs">结束时间戳（毫秒，可选）</label>
+            <input id="toMs" type="number" min="0" placeholder="如 1785700000000" />
+          </div>
+          <button id="refreshBtn" class="primary" type="button">刷新列表</button>
+          <button id="exportBtn" class="ghost" type="button">导出 CSV</button>
+        </div>
+        <div id="status" class="status meta" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="panel">
+        <div id="summary" class="meta">加载中...</div>
+        <div id="table" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const limitEl = $("limit");
+      const fromMsEl = $("fromMs");
+      const toMsEl = $("toMs");
+      const refreshBtn = $("refreshBtn");
+      const exportBtn = $("exportBtn");
+      const statusEl = $("status");
+      const summaryEl = $("summary");
+      const tableEl = $("table");
+
+      function toInt(value, fallback) {
+        const n = Number.parseInt(String(value || "").trim(), 10);
+        return Number.isFinite(n) && n > 0 ? n : fallback;
+      }
+
+      function toTs(value) {
+        const n = Number.parseInt(String(value || "").trim(), 10);
+        return Number.isFinite(n) && n > 0 ? n : 0;
+      }
+
+      function fmtTime(ms) {
+        if (!ms) return "-";
+        return new Date(ms).toLocaleString();
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (c) => {
+          switch (c) {
+            case "&": return "&amp;";
+            case "<": return "&lt;";
+            case ">": return "&gt;";
+            case '"': return "&quot;";
+            case "'": return "&#39;";
+            default: return c;
+          }
+        });
+      }
+
+      function setStatus(text, ok) {
+        statusEl.textContent = text;
+        statusEl.className = ok ? "status meta ok" : "status meta err";
+      }
+
+      function queryString() {
+        const limit = Math.min(toInt(limitEl.value, 200), 5000);
+        const fromMs = toTs(fromMsEl.value);
+        const toMs = toTs(toMsEl.value);
+        const params = new URLSearchParams();
+        params.set("limit", String(limit));
+        if (fromMs > 0) params.set("fromMs", String(fromMs));
+        if (toMs > 0) params.set("toMs", String(toMs));
+        return params.toString();
+      }
+
+      function render(items) {
+        if (!Array.isArray(items) || items.length === 0) {
+          tableEl.innerHTML = '<div class="muted">暂无数据</div>';
+          return;
+        }
+
+        const rows = items.map((item, index) => {
+          const usageScenarios = Array.isArray(item.usageScenarios)
+            ? item.usageScenarios.map((s) => `<span class="chip">${escapeHtml(s)}</span>`).join("")
+            : "";
+
+          const scores = [
+            item.installIphoneScore,
+            item.installWatchScore,
+            item.permissionGuideScore,
+            item.loginStabilityScore,
+            item.pairingFlowScore,
+            item.pairingStatusScore,
+            item.approvalArrivalScore,
+            item.approvalReliabilityScore,
+            item.cardCompletenessScore,
+          ].map((v) => (v == null ? "-" : String(v))).join("/");
+
+          return [
+            "<tr>",
+            `<td>${index + 1}</td>`,
+            `<td class="mono">${escapeHtml(item.id || "-")}</td>`,
+            `<td>${fmtTime(item.submittedAtMs)}</td>`,
+            `<td>${escapeHtml(item.userId || "-")}</td>`,
+            `<td>${escapeHtml(item.username || "-")}</td>`,
+            `<td>${escapeHtml(item.contact || "-")}</td>`,
+            `<td>${escapeHtml(item.terminalUsed || "-")}</td>`,
+            `<td>${escapeHtml(item.usageFrequency || "-")}</td>`,
+            `<td><div class="chips">${usageScenarios}</div><div class="muted">${escapeHtml(item.usageScenariosOther || "")}</div></td>`,
+            `<td>${scores}</td>`,
+            `<td>${escapeHtml(item.nextPriority || "-")}<div class="muted">${escapeHtml(item.nextPriorityOther || "")}</div></td>`,
+            `<td>${escapeHtml(item.extraFeedback || "")}</td>`,
+            "</tr>",
+          ].join("");
+        }).join("");
+
+        tableEl.innerHTML = [
+          "<table>",
+          "<thead><tr>",
+          "<th>#</th><th>ID</th><th>提交时间</th><th>UserID</th><th>昵称</th><th>联系方式</th><th>终端</th><th>频率</th><th>场景</th><th>九项评分</th><th>下版优先项</th><th>补充反馈</th>",
+          "</tr></thead>",
+          `<tbody>${rows}</tbody>`,
+          "</table>",
+        ].join("");
+      }
+
+      async function loadSurveys() {
+        setStatus("加载中...", true);
+        const qs = queryString();
+        const url = `/api/admin/surveys/watch-alpha?${qs}`;
+        try {
+          const res = await fetch(url, {
+            headers: {
+              Accept: "application/json",
+            },
+          });
+
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data?.ok) {
+            throw new Error(data?.error || `请求失败（${res.status}）`);
+          }
+
+          const items = Array.isArray(data.items) ? data.items : [];
+          render(items);
+          summaryEl.textContent = `已加载 ${items.length} 条，符合筛选总数 ${data.total ?? items.length}。`;
+          setStatus("加载成功", true);
+        } catch (error) {
+          summaryEl.textContent = "加载失败";
+          tableEl.innerHTML = "";
+          setStatus(`加载失败：${String(error?.message || error)}`, false);
+        }
+      }
+
+      function exportCsv() {
+        const qs = queryString();
+        const url = `/api/admin/surveys/watch-alpha.csv?${qs}`;
+        window.location.href = url;
+      }
+
+      refreshBtn.addEventListener("click", loadSurveys);
+      exportBtn.addEventListener("click", exportCsv);
+
+      loadSurveys();
+    </script>
+  </body>
+</html>

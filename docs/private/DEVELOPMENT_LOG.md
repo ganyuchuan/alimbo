@@ -1,5 +1,66 @@
 # Development Log
 
+## 2026-08-04
+
+### 51) APNS category 联调约定落地 + Watch Alpha 问卷页面/接口上线
+
+变更目标：
+- 对齐移动端联调约定：审批/完成/普通信息三类推送使用固定 APNS category，并统一携带 `requestId`、`host`、`eventType`。
+- 上线 Watch Alpha 内测问卷链路：用户填写页、管理员结果页、列表与 CSV 导出接口，以及落库能力。
+- 补充管理后台导航与构建产物复制，避免页面可访问性与打包遗漏。
+
+主要改动：
+- `src/cloud/intercept-server.ts`
+  - APNS 推送新增固定 category 常量：
+    - `ALIMBO_APPROVAL_V1`
+    - `ALIMBO_SESSION_COMPLETED_V1`
+    - `ALIMBO_INFORMATION_V1`
+  - `sendApnsInterceptNotification(...)` 入参增加 `category`、`eventType`，并在推送 data 中统一注入：
+    - `requestId`
+    - `host`
+    - `eventType`
+  - 预工具审批等待推送强制使用：
+    - `category=ALIMBO_APPROVAL_V1`
+    - `eventType=intercept.approval_required`
+  - 会话完成推送强制使用：
+    - `category=ALIMBO_SESSION_COMPLETED_V1`
+    - `eventType=session.completed`
+  - 手动 APNS alert 接口（`POST /api/copilot/intercepts/apns/alert`）支持 `requestId/eventType/host` 入参并默认：
+    - `category=ALIMBO_INFORMATION_V1`
+    - `eventType=information.general`
+  - 新增问卷与管理页面路由：
+    - `GET /survey/watch-alpha`
+    - `GET /admin/surveys/watch-alpha`
+  - 新增问卷 API：
+    - `POST /api/surveys/watch-alpha`
+    - `GET /api/admin/surveys/watch-alpha`
+    - `GET /api/admin/surveys/watch-alpha.csv`
+  - 新增问卷页面文件加载与缓存逻辑。
+- `src/cloud/intercept-store.ts`
+  - 新增 `watch_alpha_surveys` 表与索引。
+  - 新增数据方法：
+    - `insertWatchAlphaSurvey`
+    - `listWatchAlphaSurveys`
+    - `countWatchAlphaSurveys`
+- `src/cloud/watch-alpha-survey.html`（新增）
+  - 新增内测问卷填写页面与前端提交逻辑。
+- `src/cloud/watch-alpha-survey-admin.html`（新增）
+  - 新增管理员结果查看与 CSV 导出页面。
+- 导航与文档补充
+  - `src/cloud/auth-users.html`、`src/cloud/device-tokens.html` 新增问卷管理入口链接。
+  - `README.md` 新增问卷接口说明与最小调用示例。
+- 构建复制补齐
+  - `package.json` 的 `postbuild` 增加：
+    - `src/cloud/watch-alpha-survey.html -> dist/cloud/watch-alpha-survey.html`
+    - `src/cloud/watch-alpha-survey-admin.html -> dist/cloud/watch-alpha-survey-admin.html`
+
+兼容性说明：
+- APNS 联调中，客户端可继续自定义 alert 文案，但审批/完成推送 category 由服务端固定输出。
+- `/api/copilot/intercepts/apns/alert` 若未传 category/eventType，将回退到信息通知默认值，不影响旧调用方。
+
+验证记录：
+- `npm run build`：通过
+
 ## 2026-08-03
 
 ### 50) Device Token 管理页面 + APNS 无效 token 清理闭环

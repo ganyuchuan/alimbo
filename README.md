@@ -117,6 +117,9 @@ npm run feishu
 # 启动云端服务（可选）
 npm run cloud
 
+# 访问内测问卷页面（cloud 服务）
+# http://127.0.0.1:18790/survey/watch-alpha
+
 # 通过 PM2 启动网关、飞书桥和云端服务
 pm2 start npm --name alimbo-gateway -- run start
 pm2 start npm --name alimbo-feishu -- run feishu
@@ -137,6 +140,48 @@ bash scripts/apns-smoke.sh <ios_device_token>
 
 ```bash
 bash scripts/apns-smoke.sh <ios_device_token> "自定义标题" "自定义正文"
+```
+
+## 内测问卷接口（cloud）
+
+- 问卷页面：`GET /survey/watch-alpha`
+- 提交接口：`POST /api/surveys/watch-alpha`
+- 管理页面（管理员登录态）：`GET /admin/surveys/watch-alpha`
+- 管理列表接口（管理员登录态）：`GET /api/admin/surveys/watch-alpha`
+- 导出 CSV 接口（管理员登录态）：`GET /api/admin/surveys/watch-alpha.csv`
+- 存储位置：`data/cloud.db` 的 `watch_alpha_surveys` 表
+
+问卷页面支持通过 URL Query 预置客户端信息并随提交一并上送：
+
+- `username`
+- `email`
+- `appVersion`
+- `appBuild`
+- `appBundleID`
+- `iosVersion`
+- `device`
+- `host`
+- `pushNotificationEnabled`
+- `tokenPersent`
+
+示例：
+
+```text
+http://127.0.0.1:18790/survey/watch-alpha?username=tester&email=a%40b.com&appVersion=1.0.0&appBuild=100
+```
+
+最小提交示例：
+
+```bash
+curl -X POST http://127.0.0.1:18790/api/surveys/watch-alpha \
+  -H "Content-Type: application/json" \
+  -d '{
+    "terminalUsed": "both",
+    "usageFrequency": "daily_once",
+    "usageScenarios": ["watch_view_approve_status", "iphone_approve"],
+    "nextPriority": "more_agents",
+    "username": "tester"
+  }'
 ```
 
 ## 核心功能一览
