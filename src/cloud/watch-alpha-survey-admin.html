@@ -3,30 +3,52 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>问卷结果管理</title>
+    <title>Watch Alpha Survey Admin</title>
     <style>
       :root {
-        --bg: #f3f7f2;
-        --card: #fffffd;
-        --line: #d6e2d2;
-        --ink: #1f2a20;
-        --muted: #5f6c61;
-        --accent: #116c5b;
-        --accent-2: #0e5c4e;
+        --bg: #000000;
+        --bg-2: #06110d;
+        --card: rgba(8, 15, 12, 0.88);
+        --line: rgba(122, 160, 141, 0.34);
+        --line-strong: rgba(172, 217, 193, 0.56);
+        --ink: #e8fff1;
+        --muted: #8eb29d;
+        --accent: #2e9662;
+        --accent-2: #1b6f47;
+        --danger: #ff6f7d;
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        font-family: "SF Mono", "JetBrains Mono", "IBM Plex Mono", "Menlo", "Consolas", monospace;
         color: var(--ink);
         background:
-          radial-gradient(circle at 8% 8%, rgba(17,108,91,0.12), transparent 30%),
-          radial-gradient(circle at 88% 12%, rgba(173,120,43,0.12), transparent 33%),
-          linear-gradient(160deg, #edf5ec 0%, #f7f2e9 50%, #eef7f4 100%);
+          radial-gradient(circle at 12% 8%, rgba(16, 88, 52, 0.36), transparent 34%),
+          radial-gradient(circle at 84% 12%, rgba(62, 136, 94, 0.2), transparent 30%),
+          linear-gradient(165deg, var(--bg) 0%, var(--bg-2) 54%, var(--bg) 100%);
+        min-height: 100vh;
+        position: relative;
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          repeating-linear-gradient(
+            to bottom,
+            rgba(112, 224, 0, 0.08) 0,
+            rgba(112, 224, 0, 0.08) 1px,
+            transparent 1px,
+            transparent 5px
+          );
+        opacity: 0.28;
       }
       .wrap {
+        position: relative;
+        z-index: 1;
         max-width: 1280px;
-        margin: 20px auto;
+        margin: 18px auto;
         padding: 0 12px 24px;
       }
       .hero {
@@ -34,57 +56,68 @@
         justify-content: space-between;
         align-items: flex-start;
         gap: 12px;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
+        border: 1px solid var(--line-strong);
+        border-radius: 12px;
+        padding: 14px;
+        background:
+          linear-gradient(120deg, rgba(16, 33, 25, 0.8), rgba(7, 17, 13, 0.95)),
+          radial-gradient(circle at 84% 20%, rgba(60, 181, 111, 0.18), transparent 44%);
+        box-shadow: 0 16px 42px rgba(0, 0, 0, 0.45);
       }
-      h1 { margin: 0; font-size: 27px; }
-      .meta { color: var(--muted); font-size: 13px; line-height: 1.6; }
+      h1 { margin: 0; font-size: 25px; letter-spacing: 0.25px; }
+      .meta { color: var(--muted); font-size: 12px; line-height: 1.6; }
       .nav { display: flex; gap: 8px; flex-wrap: wrap; }
       .nav a, .nav button {
-        border: 1px solid var(--line);
+        border: 1px solid rgba(129, 173, 151, 0.44);
         border-radius: 999px;
-        background: rgba(255,255,255,0.85);
+        background: rgba(7, 14, 11, 0.78);
         color: var(--ink);
         text-decoration: none;
         font: inherit;
-        padding: 8px 12px;
+        font-size: 12px;
+        padding: 8px 11px;
         cursor: pointer;
       }
       .panel {
         background: var(--card);
         border: 1px solid var(--line);
-        border-radius: 16px;
+        border-radius: 10px;
         padding: 14px;
-        box-shadow: 0 8px 28px rgba(31,42,32,0.08);
-        margin-bottom: 12px;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+        margin-bottom: 10px;
       }
       .row { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
       .field { display: grid; gap: 6px; }
       label { font-size: 12px; color: var(--muted); }
       input {
         min-width: 180px;
-        border: 1px solid var(--line);
-        border-radius: 10px;
+        border: 1px solid rgba(124, 160, 141, 0.36);
+        border-radius: 8px;
         padding: 9px 10px;
         font: inherit;
-        background: #fff;
+        background: rgba(4, 10, 8, 0.88);
+        color: var(--ink);
       }
       button.primary {
-        border: 0;
-        border-radius: 10px;
-        background: var(--accent);
-        color: #fff;
+        border: 1px solid rgba(154, 221, 186, 0.56);
+        border-radius: 8px;
+        background: linear-gradient(120deg, var(--accent), var(--accent-2));
+        color: #f2fff7;
         padding: 10px 14px;
         font: inherit;
+        font-size: 12px;
         cursor: pointer;
       }
-      button.primary:hover { background: var(--accent-2); }
+      button.primary:hover { filter: brightness(1.08); }
       button.ghost {
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background: #fff;
+        border: 1px solid rgba(124, 160, 141, 0.5);
+        border-radius: 8px;
+        background: rgba(7, 14, 11, 0.82);
         color: var(--ink);
         padding: 10px 14px;
         font: inherit;
+        font-size: 12px;
         cursor: pointer;
       }
       table {
@@ -93,23 +126,40 @@
         font-size: 12px;
       }
       th, td {
-        border: 1px solid var(--line);
+        border: 1px solid rgba(122, 160, 141, 0.32);
         padding: 7px 8px;
         text-align: left;
         vertical-align: top;
       }
-      th { background: #f5faf4; }
+      th {
+        background: rgba(15, 34, 25, 0.92);
+        color: #d9f8e5;
+      }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
       .muted { color: var(--muted); }
       .status { min-height: 20px; }
-      .ok { color: #136c4a; }
-      .err { color: #b3261e; }
+      .ok { color: #90e2ae; }
+      .err { color: var(--danger); }
       .chips { display: flex; flex-wrap: wrap; gap: 4px; }
       .chip {
-        border: 1px solid var(--line);
+        border: 1px solid rgba(129, 173, 151, 0.45);
         border-radius: 999px;
-        padding: 2px 8px;
-        background: #fff;
+        padding: 2px 7px;
+        background: rgba(60, 181, 111, 0.14);
+      }
+      .title-sub {
+        margin-top: 8px;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .badge {
+        border: 1px solid rgba(152, 210, 178, 0.48);
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 11px;
+        color: #bce8cc;
+        background: rgba(13, 35, 26, 0.72);
       }
       @media (max-width: 900px) {
         .hero { flex-direction: column; }
@@ -120,8 +170,13 @@
     <div class="wrap">
       <div class="hero">
         <div>
-          <h1>内测问卷结果管理</h1>
+          <h1>WATCH ALPHA // SURVEY RESULTS</h1>
           <div class="meta">管理员查看问卷列表、按时间筛选并导出 CSV。</div>
+          <div class="title-sub">
+            <span class="badge">ADMIN CONSOLE</span>
+            <span class="badge">MATRIX DENSITY</span>
+            <span class="badge">READ-ONLY ANALYTICS</span>
+          </div>
         </div>
         <div class="nav">
           <a href="/survey/watch-alpha" target="_blank" rel="noreferrer">打开问卷页</a>
