@@ -30,11 +30,65 @@ Alimbo 是一个基于 Node.js 的 AI 中转站：把本地 Copilot、Claude Cod
   - [GitHub Copilot CLI 安装和身份验证](https://docs.github.com/zh/copilot/how-tos/set-up/install-copilot-cli)：`copilot --version` 有输出 `GitHub Copilot CLI 1.0.59.`
   - [Claude Code](https://code.claude.com/docs/en/agent-sdk/overview#typescript)：`claude --version` 有输出 `2.1.175 (Claude Code)`
 
-### 2) 安装与初始化
+### 2) 安装
+
+#### 场景 A：从源码构建
 
 ```bash
 npm install
 cp .env.example .env
+npm run build
+```
+
+构建完成后，在需要运行 Agent 的目标项目目录中执行：
+
+```bash
+cd /path/to/your/project
+node /path/to/alimbo/dist/cli.js claude 1234
+
+# 或启动 GitHub Copilot CLI
+node /path/to/alimbo/dist/cli.js copilot 1234
+```
+
+也可以在 Alimbo 源码目录执行 `npm link` 注册全局命令，之后直接使用 `alimbo`：
+
+```bash
+cd /path/to/alimbo
+npm link
+
+cd /path/to/your/project
+alimbo claude 1234
+```
+
+#### 场景 B：安装 npm 包
+
+```bash
+npm install -g alimbo
+```
+
+安装后，在需要运行 Agent 的目标项目目录中执行：
+
+```bash
+cd /path/to/your/project
+alimbo claude 1234
+
+# 或启动 GitHub Copilot CLI
+alimbo copilot 1234
+```
+
+上述命令会依次完成配对、写入本地配置、安装 hooks、启动网关，并启动对应的 Agent CLI。退出 Agent 后会自动清理 hooks。已经完成配对时，只需记住 Agent 名称：
+
+```bash
+alimbo claude
+alimbo copilot
+```
+
+如果本地尚未配对而直接运行 `alimbo claude` 或 `alimbo copilot`，终端会提示输入 4 位配对码。原有的 `--pairing-code 1234` 写法仍然兼容。
+
+如使用私有云，可在配对时指定服务地址：
+
+```bash
+alimbo claude 1234 --base-url https://your-cloud.example.com
 ```
 
 ### 3) 最小必填配置

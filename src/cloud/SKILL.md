@@ -110,16 +110,19 @@ alimbo feishu --app-id YOUR_FEISHU_APP_ID --app-secret YOUR_FEISHU_APP_SECRET
 当用户希望在当前项目直接进入 Claude/Copilot 并自动接管 hooks + gateway 生命周期时，优先使用：
 
 ```bash
-alimbo claude
+alimbo claude 1234
 ```
 
 或
 
 ```bash
-alimbo copilot
+alimbo copilot 1234
 ```
 
 说明：
+- 传入 4 位配对码时，会先完成 token 下发和连通性验证，再继续启动 Agent；已经配对时可省略配对码。
+- 本地未配对时直接启动，终端会交互式提示输入配对码；旧的 `--pairing-code 1234` 写法仍兼容。
+- 私有云配对可同时传入 `--base-url https://your-cloud.example.com`。
 - 命令会自动写入必要 env 覆盖、执行 `alimbo hook --force`、启动网关并拉起对应 CLI。
 - 退出 Claude/Copilot 后会自动执行 `alimbo unhook` 清理。
 - 默认会设置 `ALIMBO_AUTO_STOP_GATEWAY_ON_SESSION_END=true`，会话结束后可自动停网关。

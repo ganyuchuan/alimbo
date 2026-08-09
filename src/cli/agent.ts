@@ -3,6 +3,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import {
   PM2_GATEWAY_NAME,
@@ -19,7 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function printHelp() {
-  console.log("Usage: alimbo <claude|copilot|kimi>");
+  console.log("Usage: alimbo <claude|copilot> [4digits] [--base-url <url>]\n       alimbo kimi\n\nLegacy: --pairing-code <4digits> is still supported.");
 }
 
 function normalizeProvider(raw: string) {
@@ -28,6 +29,87 @@ function normalizeProvider(raw: string) {
     return value;
   }
   return "";
+}
+
+function parseAgentOptions(args: string[]) {
+  let pairingCodeOption = "";
+  let cloudBaseUrl = "";
+  const positional: string[] = [];
+
+  for (let i = 1; i < args.length; i += 1) {
+    const token = String(args[i] ?? "").trim();
+    if (!token || token === "--help" || token === "-h") {
+      continue;
+    }
+    if (token === "--pairing-code" || token === "--base-url") {
+      const value = String(args[i + 1] ?? "").trim();
+      if (!value || value.startsWith("-")) {
+        throw new Error(`${token} requires a value`);
+      }
+      if (token === "--pairing-code") {
+        pairingCodeOption = value;
+      } else {
+        cloudBaseUrl = value;
+      }
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--pairing-code=")) {
+      pairingCodeOption = token.slice("--pairing-code=".length).trim();
+      continue;
+    }
+    if (token.startsWith("--base-url=")) {
+      cloudBaseUrl = token.slice("--base-url=".length).trim();
+      continue;
+    }
+    if (token.startsWith("-")) {
+      throw new Error(`unknown option: ${token}`);
+    }
+    positional.push(token);
+  }
+
+  if (positional.length > 1) {
+    throw new Error("only one pairing code may be provided");
+  }
+  if (pairingCodeOption && positional.length) {
+    throw new Error("provide the pairing code either as 4digits or with --pairing-code, not both");
+  }
+
+  const pairingCode = pairingCodeOption || positional[0] || "";
+  if (pairingCode && !/^\d{4}$/.test(pairingCode)) {
+    throw new Error("pairing code must be exactly 4 digits");
+  }
+
+  return { pairingCode, cloudBaseUrl };
+}
+
+function hasLocalPairing(envValues: Record<string, string>) {
+  const tokenKeys = [
+    "GATEWAY_TOKEN",
+    "FEISHU_GATEWAY_TOKEN",
+    "FEISHU_INTERCEPT_AUTH_TOKEN",
+    "COPILOT_INTERCEPT_AUTH_TOKEN",
+  ];
+  const tokens = tokenKeys.map((key) => String(envValues[key] ?? "").trim());
+  return tokens.every(Boolean) && tokens.every((token) => token === tokens[0]);
+}
+
+async function promptForPairingCode() {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error("no local pairing found; run alimbo <claude|copilot> <4digits>");
+  }
+
+  const readline = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    console.log("[alimbo-agent] no local pairing found");
+    const pairingCode = String(await readline.question("Enter the 4-digit pairing code: ")).trim();
+    if (!/^\d{4}$/.test(pairingCode)) {
+      throw new Error("pairing code must be exactly 4 digits");
+    }
+    return pairingCode;
+  } finally {
+    readline.close();
+  }
 }
 
 function runNodeScript(entryFile: string, args: string[] = []) {
@@ -88,7 +170,32 @@ async function main() {
     throw new Error("provider must be claude, copilot, or kimi");
   }
 
+  const options = parseAgentOptions(args);
+  let pairingCode = options.pairingCode;
+  const cloudBaseUrl = options.cloudBaseUrl;
+  if (pairingCode && provider === "kimi") {
+    throw new Error("pairing during startup is only supported for claude and copilot");
+  }
+
   const cwd = process.cwd();
+  const alreadyPaired = hasLocalPairing(parseEnvFile(path.resolve(cwd, ".env")));
+
+  if (!pairingCode && !alreadyPaired && provider !== "kimi") {
+    pairingCode = await promptForPairingCode();
+  }
+  if (cloudBaseUrl && !pairingCode) {
+    throw new Error("--base-url can only be used when pairing");
+  }
+
+  if (pairingCode) {
+    const pairArgs = [pairingCode];
+    if (cloudBaseUrl) {
+      pairArgs.push("--base-url", cloudBaseUrl);
+    }
+    console.log(`[alimbo-${provider}] pairing before agent startup`);
+    await runNodeScript("pair.js", pairArgs);
+  }
+
   const envPath = writeEnvOverrides({
     cwd,
     dirname: __dirname,

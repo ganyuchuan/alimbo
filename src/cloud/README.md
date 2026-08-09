@@ -70,6 +70,16 @@ alimbo --port 18789
 alimbo pair 1234
 ```
 
+也可以在目标项目中用一个命令完成配对并直接启动 Agent CLI：
+
+```bash
+alimbo claude 1234
+# 或
+alimbo copilot 1234
+```
+
+私有云可追加 `--base-url https://your-cloud.example.com`。也可以只运行 `alimbo claude` 或 `alimbo copilot`，未配对时终端会提示输入配对码。
+
 > 首次打开 Alimbo Watch，输入完用户名后会显示 4 位配对码，比如这里的 1234。非首次想再次获取配对码，请在 Alimbo Watch 的设置里点击「new pairing code」。
 
 你会在 Apple Watch 收到一条消息 `Setup intercept decision connectivity check` ，以及在电脑终端收到 setup 成功提示 `[alimbo-setup] Success`！

@@ -1,5 +1,33 @@
 # Development Log
 
+## 2026-08-09
+
+### 52) Agent 启动命令简化与一键配对
+
+变更目标：
+- 降低用户记忆和输入成本，让配对与 Agent 启动可以通过一条命令完成。
+- 保留现有 `--pairing-code` 参数兼容性，不增加短别名。
+
+主要改动：
+- `src/cli.ts`
+  - `claude`、`copilot` 子命令透传启动参数。
+  - 帮助信息新增简短的位置配对码用法。
+- `src/cli/agent.ts`
+  - 支持 `alimbo claude 1234` 与 `alimbo copilot 1234`。
+  - 支持 `--base-url` 和原有 `--pairing-code 1234` 写法。
+  - 检测当前目录 `.env` 中的共享 Token；已有有效配对时可直接执行 `alimbo claude` 或 `alimbo copilot`。
+  - 未配对且处于交互终端时，自动提示输入 4 位配对码。
+  - 非交互环境未配对时，输出可直接复制的启动提示。
+  - 拒绝无效配对码、重复配对码和未知参数。
+- `README.md`、`src/cloud/README.md`、`src/cloud/SKILL.md`
+  - 同步源码构建、npm 安装和一键配对启动示例。
+  - 补充首次配对、日常启动和私有云地址用法。
+
+验证记录：
+- `npm run build`：通过。
+- CLI 帮助、无效配对码、重复配对码和非交互未配对场景冒烟测试：通过。
+- 本次修改文件无诊断错误。
+
 ## 2026-08-04
 
 ### 51) APNS category 联调约定落地 + Watch Alpha 问卷页面/接口上线
