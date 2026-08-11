@@ -115,6 +115,16 @@ export function normalizeSet(values, fallback = []) {
   return new Set(source.map((item) => String(item ?? "").trim().toLowerCase()).filter(Boolean));
 }
 
+export function firstNonEmpty(...values) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+}
+
 export function getInterceptToolsSet() {
   return normalizeSet(parseCsv(process.env.COPILOT_INTERCEPT_TOOLS), []);
 }

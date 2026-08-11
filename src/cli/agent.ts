@@ -20,12 +20,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function printHelp() {
-  console.log("Usage: alimbo <claude|copilot> [4digits] [--base-url <url>]\n       alimbo kimi\n\nLegacy: --pairing-code <4digits> is still supported.");
+  console.log("Usage: alimbo <claude|copilot|codex> [4digits] [--base-url <url>]\n       alimbo kimi\n\nLegacy: --pairing-code <4digits> is still supported.");
 }
 
 function normalizeProvider(raw: string) {
   const value = String(raw ?? "").trim().toLowerCase();
-  if (value === "claude" || value === "copilot" || value === "kimi") {
+  if (value === "claude" || value === "copilot" || value === "codex" || value === "kimi") {
     return value;
   }
   return "";
@@ -96,7 +96,7 @@ function hasLocalPairing(envValues: Record<string, string>) {
 
 async function promptForPairingCode() {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error("no local pairing found; run alimbo <claude|copilot> <4digits>");
+    throw new Error("no local pairing found; run alimbo <claude|copilot|codex> <4digits>");
   }
 
   const readline = createInterface({ input: process.stdin, output: process.stdout });
@@ -167,7 +167,7 @@ async function main() {
 
   const provider = normalizeProvider(String(args[0] ?? ""));
   if (!provider) {
-    throw new Error("provider must be claude, copilot, or kimi");
+    throw new Error("provider must be claude, copilot, codex, or kimi");
   }
 
   const options = parseAgentOptions(args);
@@ -204,6 +204,7 @@ async function main() {
       AGENT_VERSION: `${provider}-cli`,
       COPILOT_HOOK_ENABLED: "true",
       COPILOT_INTERCEPT_ENABLED: "true",
+      CODEX_INTERCEPT_ENABLED: "true",
       CLAUDE_INTERCEPT_ENABLED: "true",
       ALIMBO_AUTO_STOP_GATEWAY_ON_SESSION_END: "true",
       ALIMBO_PM2_GATEWAY_NAME: PM2_GATEWAY_NAME,
@@ -236,7 +237,7 @@ async function main() {
 
     console.log(`[alimbo-${provider}] gateway started on port ${gatewayPort} pid=${gatewayPid ?? "unknown"}`);
 
-    const bin = provider === "claude" ? "claude" : provider === "kimi" ? "kimi" : "copilot";
+    const bin = provider === "claude" ? "claude" : provider === "kimi" ? "kimi" : provider === "codex" ? "codex" : "copilot";
     console.log(`[alimbo-${provider}] launching ${bin}`);
     exitCode = await runAgentCli(bin);
   } finally {

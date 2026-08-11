@@ -1,0 +1,55 @@
+{
+  "description": "Alimbo mobile approval and activity hooks for Codex.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/alimbo/session-start.mjs",
+            "timeout": 30,
+            "statusMessage": "Reporting Codex session start"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "other",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/alimbo/session-end.mjs",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/alimbo/pretool.mjs",
+            "timeout": 600,
+            "statusMessage": "Waiting for Alimbo approval"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/alimbo/posttool.mjs",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

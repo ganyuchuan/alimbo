@@ -47,7 +47,7 @@ export const config = {
   },
   copilot: {
     enabled: toBool(process.env.COPILOT_ENABLED, true),
-    // Agent provider routing: "copilot" (default) or "claude"
+    // Agent provider routing: "copilot" (default), "claude", or "codex" (CLI hooks only)
     agentProvider: process.env.AGENT_PROVIDER?.trim().toLowerCase() || "copilot",
     // Claude Code SDK settings (used when agentProvider === "claude")
     claudeApiKey: process.env.CLAUDE_API_KEY?.trim() || "",

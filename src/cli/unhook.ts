@@ -35,6 +35,18 @@ function removeIfEmpty(targetDir: string) {
   }
 }
 
+function restoreOrRemoveHookConfig(targetPath: string) {
+  const targetBackupPath = `${targetPath}.alimbo.backup`;
+  if (fs.existsSync(targetBackupPath)) {
+    fs.rmSync(targetPath, { recursive: true, force: true });
+    fs.renameSync(targetBackupPath, targetPath);
+    console.log(`[alimbo-unhook] restored: ${targetPath}`);
+    return;
+  }
+
+  removePath(targetPath);
+}
+
 function main() {
   const args = process.argv.slice(2);
   if (args.includes("--help") || args.includes("-h")) {
@@ -44,13 +56,23 @@ function main() {
 
   const cwd = process.cwd();
 
-  const targets = [
+  const hookConfigTargets = [
     path.resolve(cwd, ".claude/settings.json"),
-    path.resolve(cwd, ".claude/scripts"),
     path.resolve(cwd, ".github/hooks/alimbo-intercept.json"),
-    path.resolve(cwd, ".github/hooks/scripts"),
     path.resolve(cwd, ".kimi-code/config.toml"),
+    path.resolve(cwd, ".codex/hooks.json"),
+  ];
+
+  for (const target of hookConfigTargets) {
+    restoreOrRemoveHookConfig(target);
+  }
+
+  const targets = [
+    path.resolve(cwd, ".claude/scripts"),
+    path.resolve(cwd, ".github/hooks/scripts"),
     path.resolve(cwd, ".kimi-code/hooks"),
+    path.resolve(cwd, ".codex/hooks/_common.mjs"),
+    path.resolve(cwd, ".codex/hooks/alimbo"),
   ];
 
   for (const target of targets) {
@@ -61,6 +83,8 @@ function main() {
   removeIfEmpty(path.resolve(cwd, ".github/hooks"));
   removeIfEmpty(path.resolve(cwd, ".github"));
   removeIfEmpty(path.resolve(cwd, ".kimi-code"));
+  removeIfEmpty(path.resolve(cwd, ".codex/hooks"));
+  removeIfEmpty(path.resolve(cwd, ".codex"));
 
   console.log("[alimbo-unhook] done");
   console.log(`[alimbo-unhook] cwd: ${cwd}`);

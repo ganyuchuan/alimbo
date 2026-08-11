@@ -2799,3 +2799,43 @@
 后续测试：
 - 发送图片 -> 文本消息序列，验证 Copilot 能正确读取图片文件。
 
+---
+
+## 2026-08-11
+
+### 39) 新增 Codex CLI Hook 接入并统一四类 Provider 的 Hook 配置生命周期
+
+变更目标：
+- 支持通过 `alimbo codex` 启动 Codex CLI，并接入项目级 `.codex/hooks.json`。
+- 复用 Gateway 现有拦截审批和生命周期上报能力，支持 Codex 的工具调用与会话事件。
+- 统一 Claude、Copilot、Kimi、Codex 的 Hook 配置安装策略，避免覆盖用户配置后无法恢复。
+
+主要改动：
+- 新增 Codex CLI 入口、Codex Hook 配置模板及 `SessionStart`、`SessionEnd`、`PreToolUse`、`PostToolUse` 脚本。
+- 新增 Gateway `codex` provider，支持 Codex 工具拦截审批、工具结果上报和会话生命周期上报。
+- 新增 `CODEX_INTERCEPT_*` 配置，并在未设置时回退到对应的 `COPILOT_INTERCEPT_*` 配置。
+- 将 `getCodexInterceptConfig()` 移至 Codex 专属公共模块，将 `firstNonEmpty()` 保留在共享 Hook 公共模块中。
+- 移除 Codex 专属 Hook 合并逻辑；四类 Provider 均采用“首次安装备份、整体覆盖、卸载恢复”策略：
+  - 已有配置备份为 `<target>.alimbo.backup`；
+  - `unhook` 时恢复原配置并删除备份；
+  - 没有备份的 Alimbo 配置在卸载时删除。
+- 增加 `.codex/` 和 `.kimi-code/` 忽略规则，并补充 Codex 配置说明文档。
+
+涉及文件：
+- `src/cli.ts`
+- `src/cli/agent.ts`
+- `src/cli/hook.ts`
+- `src/cli/unhook.ts`
+- `src/config.ts`
+- `src/gateway/http-server.ts`
+- `src/gateway/http-hooks-codex.ts`
+- `hooks/configs/codex-hooks.json`
+- `hooks/scripts/codex/`
+- `.env.example`
+- `.gitignore`
+- `docs/codex-config-advanced.md`
+
+验证记录：
+- `npm run build`：通过。
+- 临时 Git 项目端到端测试：四类已有 Hook 配置均成功备份，`unhook` 后原始配置成功恢复，备份文件成功删除。
+

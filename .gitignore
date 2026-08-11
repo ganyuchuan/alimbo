@@ -3,6 +3,8 @@
 .DS_Store
 .claude/
 .github/
+.codex/
+.kimi-code/
 .agentwatch/
 .APNs/
 node_modules/

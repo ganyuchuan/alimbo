@@ -2,6 +2,7 @@ import path from "node:path";
 import process from "node:process";
 import {
   collectHumanReadableHint,
+  firstNonEmpty,
   loadEnvFromCwd,
   normalizeSet,
   parseCsv,
@@ -23,16 +24,6 @@ const TOOL_NAME_MAP = {
   grep: "grep",
   webfetch: "webfetch",
 };
-
-function firstNonEmpty(...values) {
-  for (const value of values) {
-    const text = String(value ?? "").trim();
-    if (text) {
-      return text;
-    }
-  }
-  return "";
-}
 
 export function loadClaudeHookContext() {
   loadEnvFromCwd();
