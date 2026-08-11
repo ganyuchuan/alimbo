@@ -2839,3 +2839,13 @@
 - `npm run build`：通过。
 - 临时 Git 项目端到端测试：四类已有 Hook 配置均成功备份，`unhook` 后原始配置成功恢复，备份文件成功删除。
 
+---
+
+## 2026-08-11
+
+### 40) 发布 v0.2.12
+
+- 发布 Codex CLI Hook 接入及四类 Provider Hook 配置统一备份恢复策略。
+- 同步更新 `package.json` 与 `package-lock.json` 版本号至 `0.2.12`。
+- 发布目标：npm 包与 GitHub Release `v0.2.12`。
+
