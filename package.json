@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json --noCheck",
-    "postbuild": "mkdir -p dist/cloud && cp src/cloud/intercept-approval.html dist/cloud/intercept-approval.html && cp src/cloud/auth-users.html dist/cloud/auth-users.html && cp src/cloud/device-tokens.html dist/cloud/device-tokens.html && cp src/cloud/watch-alpha-survey.html dist/cloud/watch-alpha-survey.html && cp src/cloud/watch-alpha-survey-admin.html dist/cloud/watch-alpha-survey-admin.html && cp src/cloud/index.html dist/cloud/index.html && cp src/cloud/SKILL.md dist/cloud/SKILL.md && rm -rf dist/hooks && cp -R hooks dist/hooks",
+    "postbuild": "mkdir -p dist/cloud && rm -rf dist/cloud/static && cp -R src/cloud/static dist/cloud/static && rm -rf dist/hooks && cp -R hooks dist/hooks",
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "npm run build && node --title=alimbo-gateway dist/index.js",

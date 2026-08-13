@@ -1,0 +1,1131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgentCompanion Demo</title>
+  <style>
+    :root {
+      --bg: #080808;
+      --bg-soft: #121212;
+      --panel: #111111;
+      --panel-soft: rgba(255, 255, 255, 0.03);
+      --stroke: rgba(132, 132, 132, 0.72);
+      --stroke-soft: rgba(132, 132, 132, 0.45);
+      --text: #f3f3f3;
+      --text-dim: #9e9e9e;
+      --body: rgb(202, 124, 94);
+      --ok: #30d158;
+      --warn: #ffd60a;
+      --danger: #ff453a;
+      --radius-xl: 18px;
+      --radius-lg: 14px;
+      --radius-md: 10px;
+      --shadow: 0 12px 40px rgba(0, 0, 0, 0.42);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-size: 26px 26px;
+      opacity: 0.35;
+    }
+
+    .app {
+      max-width: 980px;
+      margin: 0 auto;
+      min-height: 100%;
+      padding: 14px 14px 84px;
+      position: relative;
+    }
+
+    .page-header {
+      padding: 8px 4px 18px;
+      display: grid;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .page-header h1 {
+      margin: 0;
+      font-size: clamp(28px, 5vw, 64px);
+      line-height: 1.08;
+      letter-spacing: 0.2px;
+      text-align: center;
+    }
+
+    .page-header p {
+      margin: 0;
+      color: var(--text-dim);
+      font-size: 24px;
+      line-height: 1.5;
+      max-width: 62ch;
+      text-align: center;
+    }
+
+    .screen {
+      display: none;
+      animation: fade-in 260ms ease;
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    .nav {
+      margin-bottom: 16px;
+      padding: 10px 4px;
+    }
+
+    .nav-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .title-block h1 {
+      margin: 0;
+      font-size: clamp(24px, 4.8vw, 24px);
+      letter-spacing: 0.2px;
+      line-height: 1.15;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--text-dim);
+      word-break: break-all;
+    }
+
+    .presence {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 108px;
+      min-height: 34px;
+      border: 1px solid var(--stroke-soft);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ok);
+      box-shadow: 0 0 10px rgba(48, 209, 88, 0.75);
+    }
+
+    .section-title {
+      margin: 16px 0 10px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--body);
+      letter-spacing: 0.35px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .approval-card,
+    .tool-card,
+    .kv-row,
+    .input-shell {
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius-lg);
+      background: var(--panel-soft);
+      backdrop-filter: blur(7px);
+      box-shadow: var(--shadow);
+    }
+
+    .approval-card {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .muted {
+      color: var(--text-dim);
+      font-size: 12px;
+    }
+
+    .approval-tool {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .approval-hint {
+      color: var(--text-dim);
+      font-size: 13px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .actions-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid var(--stroke-soft);
+      background: transparent;
+      color: var(--text);
+      border-radius: 12px;
+      min-height: 40px;
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 120ms ease, background 160ms ease, border-color 160ms ease;
+    }
+
+    button:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.45);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    .btn-accent {
+      color: var(--body);
+      border-color: rgba(202, 124, 94, 0.75);
+    }
+
+    .btn-danger {
+      color: #fff;
+      border-color: #fff;
+    }
+
+    .tool-card {
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+      border-radius: var(--radius-md);
+    }
+
+    .tag {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      letter-spacing: 0.35px;
+    }
+
+    .tag.allow {
+      color: var(--ok);
+    }
+
+    .tag.deny {
+      color: var(--danger);
+    }
+
+    .tag.waiting {
+      color: var(--warn);
+    }
+
+    .cmd {
+      border: 1px solid var(--stroke-soft);
+      background: rgba(0, 0, 0, 0.28);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--text);
+      overflow-wrap: anywhere;
+    }
+
+    .small-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+    }
+
+    .kv-row {
+      padding: 8px;
+      border-radius: var(--radius-md);
+      display: grid;
+      gap: 3px;
+    }
+
+    .kv-row .key {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .kv-row .value {
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .input-shell {
+      border-radius: var(--radius-md);
+      padding: 4px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      min-height: 36px;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      padding: 8px;
+    }
+
+    .button-line {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .iphone-preview {
+      margin-top: 64px;
+      margin-bottom: 64px;
+      display: grid;
+      gap: 24px;
+    }
+
+    .iphone-preview-layout {
+      display: grid;
+      gap: 32px;
+      align-items: start;
+    }
+
+    .iphone-copy {
+      padding: 32px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .iphone-copy h2 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 2;
+      letter-spacing: 0.2px;
+    }
+
+    .iphone-copy p {
+      margin: 0;
+      color: var(--text-dim);
+      font-size: 16px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+    }
+
+    .iphone-stage {
+      position: relative;
+      margin: 0 auto;
+    }
+
+    .iphone-screen {
+      padding: 32px 32px;
+      width: 384px;
+      height: 704px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .iphone-screen::before {
+      content: "";
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 120px;
+      height: 26px;
+      border-radius: 999px;
+      background: #000;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .iphone-content {
+      padding-top: 24px;
+    }
+
+    .iphone-overlay {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(384px, 100%);
+      height: auto;
+      display: block;
+      z-index: 2;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .watch-preview {
+      margin-top: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .aux-previews {
+      margin-top: 18px;
+      display: grid;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .feature-zone {
+      margin-top: 64px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .feature-zone h2 {
+      margin: 0;
+      font-size: 36px;
+      line-height: 1.2;
+      letter-spacing: 0.2px;
+      text-align: center;
+    }
+
+    .feature-zone p {
+      margin: 0;
+      color: var(--text-dim);
+      font-size: 20px;
+      line-height: 1.6;
+      text-align: center;
+    }
+
+    .feature-grid {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .feature-card {
+      border: 1px solid var(--stroke-soft);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.02);
+      min-height: 92px;
+      padding: 24px;
+      display: grid;
+      gap: 24px;
+      align-content: center;
+      justify-items: center;
+    }
+    
+    .feature-card-more {
+      min-height: 92px;
+      padding: 24px;
+      display: grid;
+      gap: 24px;
+      align-content: center;
+      justify-items: center;
+    }
+
+    .feature-icon {
+      width: 64px;
+      height: 64px;
+      color: var(--body);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 64px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+
+    .feature-icon img {
+      width: 100%;
+      height: auto;
+      object-fit: contain;
+      display: block;
+    }
+
+    .feature-icon svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .feature-title {
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.3;
+      text-align: center;
+    }
+
+    .iphone-followup {
+      margin-top: 18px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .iphone-followup h2 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.2;
+      letter-spacing: 0.2px;
+    }
+
+    .iphone-followup-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .iphone-followup-card {
+      border: 1px solid var(--stroke-soft);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.02);
+      min-height: 512px;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+      justify-items: center;
+    }
+
+    .iphone-followup-icon {
+      width: 64px;
+      height: 64px;
+      color: var(--body);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+
+    .iphone-followup-title {
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .iphone-followup-desc {
+      margin: 8px;
+      color: var(--text-dim);
+      font-size: 18px;
+      line-height: 1.55;
+    }
+
+    .watch-stage {
+      position: relative;
+      margin: 0 auto;
+      display: grid;
+      justify-items: center;
+      height: min(400px, 100%);
+    }
+
+    .watch-stage-image {
+      display: block;
+      width: auto;
+      height: 400px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+      border-radius: 18px;
+    }
+
+    .watch-stage-center {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 2;
+    }
+
+    .terminal-preview {
+      margin-top: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .terminal-shell {
+      width: min(860px, 100%);
+      margin: 0 auto;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: #0a0a0a;
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
+      overflow: hidden;
+    }
+
+    .terminal-header {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.03);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .terminal-dots {
+      display: inline-flex;
+      gap: 6px;
+    }
+
+    .terminal-dots span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .terminal-dots span:nth-child(1) { background: #ff5f57; }
+    .terminal-dots span:nth-child(2) { background: #febc2e; }
+    .terminal-dots span:nth-child(3) { background: #28c840; }
+
+    .terminal-content {
+      margin: 0;
+      padding: 14px;
+      color: #e8e8e8;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      max-height: 420px;
+      overflow: auto;
+    }
+
+    .terminal-bullet {
+      color: var(--body);
+      font-weight: 700;
+    }
+
+    .terminal-frame-char {
+      color: var(--body);
+    }
+
+    .terminal-brand {
+      color: var(--body);
+      font-weight: 700;
+    }
+
+    .terminal-col-highlight {
+      background: var(--body);
+      color: var(--bg);
+    }
+
+    .watch-screen {
+      background: #000;
+      border-radius: 64px;
+      padding: 8px;
+      width: 192px;
+      height: 224px;
+      display: grid;
+      align-content: center;
+      gap: 10px;
+    }
+
+    .watch-title {
+      color: var(--body);
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      font-weight: 700;
+    }
+
+    .watch-approve-card {
+      background: rgba(255, 255, 255, 0.04);
+      padding: 12px;
+      display: grid;
+      gap: 9px;
+    }
+
+    .watch-approve-card .actions-2 button {
+      min-height: 36px;
+      font-size: 12px;
+      border-radius: 10px;
+    }
+
+    @keyframes fade-in {
+      from {
+        opacity: 0;
+        transform: translateY(5px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (min-width: 940px) {
+      .dashboard-grid {
+        display: table-columns;
+        grid-template-columns: 1.05fr 1fr;
+        gap: 16px;
+        align-items: start;
+      }
+
+      .watch-preview {
+        grid-template-columns: 1fr;
+      }
+
+      .aux-previews {
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+      }
+
+      .aux-previews .terminal-preview,
+      .aux-previews .watch-preview {
+        margin-top: 0;
+      }
+
+      .iphone-preview-layout {
+        grid-template-columns: minmax(320px, 1fr) minmax(0, 1.46fr);
+        align-items: start;
+      }
+
+      .iphone-copy {
+        align-self: start;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .feature-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .iphone-followup-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="page-header" aria-label="页面标题">
+      <h1>腕上 AI 审批官</h1>
+      <p>把本地 AI Agent 的「关键操作」审批和运行状态提醒搬到 Apple Watch 上，让用户离开电脑也能随时掌控任务进展。</p>
+    </header>
+
+    <section id="screen-dashboard" class="screen active" aria-label="Dashboard 页面">
+      <div class="aux-previews" aria-label="并排预览区">
+        <div class="terminal-preview" aria-label="终端内容预览">
+          <div class="terminal-shell">
+            <div class="terminal-header">
+              <span class="terminal-dots" aria-hidden="true">
+                <span></span><span></span><span></span>
+              </span>
+              <span>claude.txt</span>
+            </div>
+            <pre id="terminal-content" class="terminal-content"></pre>
+          </div>
+        </div>
+
+        <div class="watch-preview" aria-label="Apple Watch ApproveView 预览">
+          <div class="watch-stage">
+            <img class="watch-stage-image" src="./aw-ultra-3.png" alt="Apple Watch Ultra 3" />
+            <div class="watch-stage-center">
+                <div class="watch-screen">
+                  <article class="watch-approve-card">
+                    <div class="row">
+                      <span class="muted">1/1</span>
+                      <strong style="font-size: 13px; color: var(--body);">删除 test.tx...</strong>
+                    </div>
+                    <div class="approval-tool">Bash</div>
+                    <div class="approval-hint">rm /Users/demo/Desktop/tmp/alimbo-v0.2.8/test.txt</div>
+                    <div class="actions-2">
+                      <button class="btn-danger" type="button">No</button>
+                      <button class="btn-accent" type="button">Yes</button>
+                    </div>
+                  </article>
+                </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section class="feature-zone" aria-label="能力展示区">
+        <h2>将你得力 Agent 放进手表</h2>
+        <p>接入各类官方 Agent 提供的 Hooks，不改变工作流的情况下使你可以随时随地与 Agent 进行互动。</p>
+        <div class="feature-grid">
+          <article class="feature-card"><span class="feature-icon"><svg viewBox="0 0 59 42" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="cardIcon-iRitjS"><path d="M58.1575 8.30769V0H0.00367956H0V33.2344H8.30769V41.5385H49.8498H58.1575V33.2308V8.30402V8.30769ZM49.8498 33.2344H8.30769V8.30769H49.8498V33.2344Z" fill="currentColor"></path><path d="M23.2062 14.7695L17.332 20.6437L23.2062 26.5179L29.0804 20.6437L23.2062 14.7695Z" fill="currentColor"></path><path d="M39.8215 14.7664L33.9473 20.6406L39.8215 26.5148L45.6957 20.6406L39.8215 14.7664Z" fill="currentColor"></path></svg></span><div class="feature-title">TRAE IDE</div></article>
+          <article class="feature-card"><span class="feature-icon"><img src="https://www.agentapprove.com/claude-logo.svg" alt="Claude logo" /></span><div class="feature-title">Claude Code</div></article>
+          <article class="feature-card"><span class="feature-icon"><img src="https://www.agentapprove.com/_next/image?url=%2Fcodex-logo.png&w=96&q=75" alt="Codex logo" /></span><div class="feature-title">Codex</div></article>
+          <article class="feature-card"><span class="feature-icon"><img src="https://www.agentapprove.com/github-logo-dark.svg" alt="Copilot CLI logo" /></span><div class="feature-title">Copilot CLI</div></article>
+          <article class="feature-card"><span class="feature-icon">🦞</span><div class="feature-title">OpenClaw</div></article>
+          <article class="feature-card"><span class="feature-icon"><img src="https://www.agentapprove.com/_next/image?url=%2Fhermesagent-dark.png&w=96&q=75" alt="Hermes logo" /></span><div class="feature-title">Hermes</div></article>
+          <article class="feature-card"><span class="feature-icon"><img src="https://www.agentapprove.com/cursor-logo-dark.svg" alt="Cursor logo" /></span><div class="feature-title">Cursor</div></article>
+          <article class="feature-card"><span class="feature-icon"><img src="https://www.agentapprove.com/opencode-logo-dark.svg" alt="OpenCode logo" /></span><div class="feature-title">OpenCode</div></article>
+          <article class="feature-card-more"><span class="feature-icon">•••</span></article>
+        </div>
+      </section>
+
+      <section class="feature-zone" aria-label="副标题区">
+        <h2>如何快速使用</h2>
+      </section>
+
+      <div class="iphone-preview" aria-label="iPhone Dashboard 预览">
+        <div class="iphone-preview-layout">
+          <div class="iphone-stage">
+            <div class="iphone-screen">
+              <div class="iphone-content">
+                <header class="nav">
+                  <div class="nav-top">
+                    <div class="title-block">
+                      <h1>Claude Code</h1>
+                      <div class="subtitle">/Users/demo/Desktop/tmp/alimbo-v0.2.8</div>
+                    </div>
+                    <div class="presence">
+                      <span class="dot" aria-hidden="true"></span>
+                      <span>在线中</span>
+                    </div>
+                  </div>
+                </header>
+
+                <div class="dashboard-grid">
+                  <div>
+                    <div class="section-title">申请执行</div>
+                    <div id="approval-list" class="stack"></div>
+                  </div>
+
+                  <div>
+                    <div class="section-title">审批记录</div>
+                    <div id="tool-call-list" class="stack"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <img class="iphone-overlay" src="./iphone-17.png" alt="iPhone 17 frame" />
+          </div>
+
+          <aside class="iphone-copy" aria-label="iPhone 文案区">
+            <h2>1. 下载 iOS App</h2>
+            <p>打开你的 iPhone 或 Apple Watch 的 App Store，搜索并下载 「AI 审判官」。</p>
+            <h2>2. 安装与配对</h2>
+            <p>打开 App 进行登录，登录完成后获得1个配对码，在你的电脑通过 npm 安装网关，输入该配对码完成手表与电脑 Agent 的配对。</p>
+            <h2>3. 离开电脑，开始审批</h2>
+            <p>完成配对后，你可以打开常用的 Agent 工具开始工作，即使离开电脑也能在 iPhone 或 Apple Watch 上进行审批操作。</p>
+          </aside>
+        </div>
+      </div>
+
+      <section class="feature-zone" aria-label="副标题区">
+        <h2>更多功能</h2>
+        <p></p>
+      </section>
+
+      <section class="iphone-followup" aria-label="iPhone 扩展信息区">
+        <div class="iphone-followup-grid">
+          <article class="iphone-followup-card">
+            <span class="iphone-followup-icon">🐈‍⬛</span>
+            <div class="iphone-followup-title">电子宠物</div>
+            <p class="iphone-followup-desc">为你的 Apple Watch 带来18只独特的像素小伙伴，它们会随着你的 AI 工作状态喜怒哀乐、一起打拼。简单介绍下：</p>
+            <p class="iphone-followup-desc">🌵 仙人掌 Cactus 明亮绿色的刺球，慵懒时会微微下垂，偶尔低声哼唱。</p>
+            <p class="iphone-followup-desc">🐱 猫咪 Cat 同款棕色的懒散喵星人。</p>
+            <p class="iphone-followup-desc">👻 幽灵 Ghost 纯白半透明的小鬼，会悄悄隐身、穿墙、再微笑着出现。</p>
+            <p class="iphone-followup-desc">...</p>
+          </article>
+          <article class="iphone-followup-card">
+            <span class="iphone-followup-icon">💬</span>
+            <div class="iphone-followup-title">在飞书上对话</div>
+            <p class="iphone-followup-desc">你也可以在飞书 App 上与 Agent 聊天，给它发送指令，或审批它的操作。</p>
+            <p class="iphone-followup-desc">聊天同时支持「文字」、「图片」和「文件」三类消息。</p>
+            <p class="iphone-followup-desc">支持 8+ 命令，你可以在飞书里远程调用常见的 SKILL、MCP、Git 等工具。</p>
+            <p class="iphone-followup-desc">当 Agent 需要审批时，你也可以在飞书 App 上收到一张交互卡片去 Yes or No。</p>
+          </article>
+          <article class="iphone-followup-card">
+            <span class="iphone-followup-icon">📢</span>
+            <div class="iphone-followup-title">Push 通知</div>
+            <p class="iphone-followup-desc">即使关掉 App 退到后台也不会让你错过 Agent 的任何审批请求，在它完成任务后也会及时通知到你！</p>
+          </article>
+        </div>
+      </section>
+    </section>
+
+  </div>
+
+  <script>
+    const fakeApprovals = [
+      {
+        id: "approval-1",
+        waitingSeconds: 7,
+        tool: "Bash",
+        hint: "rm /Users/demo/Desktop/tmp/alimbo-v0.2.8/test.txt",
+        state: "pending"
+      }
+    ];
+
+    const fakeToolCalls = [
+      {
+        id: "tool-2",
+        tool: "Bash",
+        time: "10:28:20",
+        decision: "waiting",
+        hint: "删除 test.txt 文件",
+        command: "rm /Users/demo/Desktop/tmp/alimbo-v0.2.8/test.txt"
+      },
+      {
+        id: "tool-1",
+        tool: "Git",
+        time: "10:23:10",
+        decision: "allow",
+        hint: "推送到 feat/watch-approval-retry",
+        command: "git push origin feat/watch-approval-retry"
+      },
+      {
+        id: "tool-3",
+        tool: "Bash",
+        time: "10:18:40",
+        decision: "deny",
+        hint: "清除缓存中的批准记录",
+        command: "rm -rf ~/Library/Caches/AgentCompanion/approvals"
+      }
+    ];
+
+    function renderApprovals() {
+      const container = document.getElementById("approval-list");
+      container.innerHTML = "";
+
+      fakeApprovals.forEach((item, index) => {
+        const card = document.createElement("article");
+        card.className = "approval-card";
+
+        const statusTitle = item.state === "sent" ? "sent..." : item.waitingSeconds + "s";
+        const body = `
+          <div class="row">
+            <span class="muted">${index + 1}/${fakeApprovals.length}</span>
+            <strong style="font-size: 13px; color: var(--body);">${statusTitle}</strong>
+          </div>
+          <div class="approval-tool">${item.tool}</div>
+          <div class="approval-hint">${item.hint}</div>
+          <div class="actions-2">
+            <button class="btn-danger" data-act="deny" data-id="${item.id}">No</button>
+            <button class="btn-accent" data-act="allow" data-id="${item.id}">Yes</button>
+          </div>
+        `;
+
+        card.innerHTML = body;
+        container.appendChild(card);
+      });
+    }
+
+    function renderToolCalls() {
+      const container = document.getElementById("tool-call-list");
+      container.innerHTML = "";
+
+      fakeToolCalls.forEach((item) => {
+        const card = document.createElement("article");
+        card.className = "tool-card";
+
+        card.innerHTML = `
+          <div class="row" style="align-items: center;">
+            <div style="display: flex; align-items: baseline; gap: 8px; min-width: 0;">
+              <strong style="font-size: 14px;">${item.tool}</strong>
+              <span class="muted">${item.time}</span>
+            </div>
+            <span class="tag ${item.decision}">${item.decision.toUpperCase()}</span>
+          </div>
+          <div class="muted" style="font-size: 12px;">${item.hint}</div>
+          <div class="cmd">${item.command}</div>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    document.addEventListener("click", (event) => {
+      const actionBtn = event.target.closest("button[data-act]");
+      if (actionBtn) {
+        const id = actionBtn.dataset.id;
+        const act = actionBtn.dataset.act;
+        const item = fakeApprovals.find((x) => x.id === id);
+        if (item) {
+          item.state = "sent";
+          const decision = act === "allow" ? "allow" : "deny";
+          fakeToolCalls.unshift({
+            id: "tool-live-" + Date.now(),
+            tool: item.tool,
+            time: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+            decision,
+            hint: decision === "allow" ? "来自网页演示的批准操作" : "来自网页演示的拒绝操作",
+            command: item.hint
+          });
+          if (fakeToolCalls.length > 8) fakeToolCalls.pop();
+          renderApprovals();
+          renderToolCalls();
+        }
+      }
+    });
+
+    const claudeTxtContent =`
+╭─── Claude Code v2.1.207 ─────────────────────────────────────────────────────╮
+│                                             │ Tips for getting started       │
+│                Welcome back!                │ Run /init to create a CLAUDE.… │
+│                                             │ Note: You have launched claud… │
+│                  ▗ ▗   ▖ ▖                  │ ────────────────────────────── │
+│                                             │ What's new                     │
+│                    ▘▘ ▝▝                    │ Auto mode is now available wi… │
+│                                             │ Fixed the terminal freezing a… │
+│   deepseek-v4-pro[1m] · API Usage Billing   │ Fixed remote managed settings… │
+│               /Users/demo                   │ /release-notes for more        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+> 删除 test.txt 文件
+  Thought for 4s, searched for 1 pattern (ctrito to expand)
+
+• Bash(rm /Users/demo/Desktop/tmp/alimbo-v0.2.8/test.txt)
+  Waiting...
+`;
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function markColumnHighlights(rawText, ranges) {
+      const lines = rawText.split("\n");
+      const tokens = [];
+
+      ranges.forEach((range, idx) => {
+        const lineIndex = range.line;
+        if (lineIndex < 0 || lineIndex >= lines.length) return;
+
+        const chars = Array.from(lines[lineIndex]);
+        const start = Math.max(1, range.start);
+        const end = Math.min(range.end, chars.length);
+        if (start > end) return;
+
+        const segment = chars.slice(start - 1, end).join("");
+        const token = `__COL_HL_${idx}__`;
+        chars.splice(start - 1, end - start + 1, token);
+        lines[lineIndex] = chars.join("");
+        tokens.push({ token, segment });
+      });
+
+      return {
+        text: lines.join("\n"),
+        tokens
+      };
+    }
+
+    function markPointHighlights(rawText, points) {
+      const lines = rawText.split("\n");
+      const tokens = [];
+
+      const grouped = new Map();
+      points.forEach((point, idx) => {
+        if (!grouped.has(point.line)) grouped.set(point.line, []);
+        grouped.get(point.line).push({ ...point, idx });
+      });
+
+      for (const [lineIndex, linePoints] of grouped.entries()) {
+        if (lineIndex < 0 || lineIndex >= lines.length) continue;
+
+        const chars = Array.from(lines[lineIndex]);
+        linePoints
+          .slice()
+          .sort((a, b) => b.col - a.col)
+          .forEach((point) => {
+            const colIndex = point.col - 1;
+            if (colIndex < 0 || colIndex >= chars.length) return;
+
+            // Use single-char private-use placeholders to avoid shifting later column indexes.
+            const token = String.fromCharCode(0xE000 + point.idx);
+            const segment = chars[colIndex];
+            chars.splice(colIndex, 1, token);
+            tokens.push({ token, segment });
+          });
+
+        lines[lineIndex] = chars.join("");
+      }
+
+      return {
+        text: lines.join("\n"),
+        tokens
+      };
+    }
+
+    const { text: pointMarkedClaudeTxtContent, tokens: pointHighlightTokens } = markPointHighlights(
+      claudeTxtContent,
+      [
+        { line: 5, col: 20 },
+        { line: 5, col: 28 },
+        { line: 7, col: 22 },
+        { line: 7, col: 23 },
+        { line: 7, col: 25 },
+        { line: 7, col: 26 }
+      ]
+    );
+
+    const { text: markedClaudeTxtContent, tokens: columnHighlightTokens } = markColumnHighlights(
+      pointMarkedClaudeTxtContent,
+      [
+        { line: 5, start: 21, end: 27 },
+        { line: 6, start: 21, end: 27 }
+      ]
+    );
+
+    let styledClaudeTxtContent = escapeHtml(markedClaudeTxtContent)
+      .replace(/Claude Code/g, "<span class=\"terminal-brand\">Claude Code</span>")
+      .replace(/(^|\n)•/g, "$1<span class=\"terminal-bullet\">•</span>")
+      .replace(/[─╮│╯╰╭]/g, "<span class=\"terminal-frame-char\">$&</span>");
+
+    for (const { token, segment } of columnHighlightTokens) {
+      styledClaudeTxtContent = styledClaudeTxtContent.replace(
+        token,
+        `<span class="terminal-col-highlight">${escapeHtml(segment)}</span>`
+      );
+    }
+
+    for (const { token, segment } of pointHighlightTokens) {
+      styledClaudeTxtContent = styledClaudeTxtContent.replace(
+        token,
+        `<span class="terminal-frame-char">${escapeHtml(segment)}</span>`
+      );
+    }
+    document.getElementById("terminal-content").innerHTML = styledClaudeTxtContent;
+
+    renderApprovals();
+    renderToolCalls();
+  </script>
+</body>
+</html>

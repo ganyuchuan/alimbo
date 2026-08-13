@@ -1,13 +1,14 @@
 import crypto from "node:crypto";
 import { createServer } from "node:http";
 import dotenv, { config } from "dotenv";
-import fs from "node:fs";
 import os from "node:os";
 import { createApnsClient, loadApnsPrivateKeyFromEnv } from "./apns-client.js";
 import { verifyAppleIdentityToken } from "./apple-auth.js";
 import { apnsStore } from "./apns-store.js";
+import { handleAuthServerRoute } from "./auth-server.js";
 import { interceptStore } from "./intercept-store.js";
 import { createPairingCodeRegistry } from "./pairing-code-registry.js";
+import { handleWebServerRoute } from "./web-server.js";
 
 process.title = process.env.PROCESS_TITLE || "alimbo-cloud";
 
@@ -219,29 +220,9 @@ type LoginPrincipal = Principal & {
   authType?: string;
 };
 
-type AuthTokenBody = {
-  username?: string;
-  password?: string;
-};
-
 type AdminLoginBody = {
   username?: string;
   password?: string;
-};
-
-type AppleLoginBody = {
-  identityToken?: string;
-  nonce?: string;
-  deviceToken?: string;
-  platform?: string;
-};
-
-type PairingCodeResolveBody = {
-  pairingCode?: string;
-};
-
-type PairingCodeRefreshBody = {
-  authToken?: string;
 };
 
 type ApnsAlertBody = {
@@ -259,12 +240,6 @@ type ApnsAlertBody = {
   mutableContent?: boolean;
   contentAvailable?: boolean;
   data?: Record<string, unknown>;
-};
-
-type ApnsRegisterBody = {
-  authToken?: string;
-  deviceToken?: string;
-  platform?: string;
 };
 
 function normalizeApnsPlatform(value: unknown) {
@@ -463,100 +438,6 @@ function buildOnboardingUrl(req) {
   return `${baseUrl}/`;
 }
 
-const interceptApprovalPagePath = new URL("./intercept-approval.html", import.meta.url);
-let interceptApprovalPageCache = "";
-const authUsersPagePath = new URL("./auth-users.html", import.meta.url);
-let authUsersPageCache = "";
-const deviceTokensPagePath = new URL("./device-tokens.html", import.meta.url);
-let deviceTokensPageCache = "";
-const indexPagePath = new URL("./index.html", import.meta.url);
-let indexPageCache = "";
-const watchAlphaSurveyPagePath = new URL("./watch-alpha-survey.html", import.meta.url);
-let watchAlphaSurveyPageCache = "";
-const watchAlphaSurveyAdminPagePath = new URL("./watch-alpha-survey-admin.html", import.meta.url);
-let watchAlphaSurveyAdminPageCache = "";
-const onboardingMarkdownPath = new URL("./SKILL.md", import.meta.url);
-let onboardingMarkdownCache = "";
-
-function renderInterceptApprovalPage() {
-  if (interceptApprovalPageCache) {
-    return interceptApprovalPageCache;
-  }
-
-  try {
-    interceptApprovalPageCache = fs.readFileSync(interceptApprovalPagePath, "utf8");
-  } catch (error) {
-    console.warn(`[cloud-server][intercept] failed to load approval page: ${String(error?.message ?? error)}`);
-    interceptApprovalPageCache = "<!doctype html><html><body><h1>Approval page unavailable</h1></body></html>";
-  }
-
-  return interceptApprovalPageCache;
-}
-
-function renderAuthUsersPage() {
-  if (authUsersPageCache) {
-    return authUsersPageCache;
-  }
-
-  try {
-    authUsersPageCache = fs.readFileSync(authUsersPagePath, "utf8");
-  } catch (error) {
-    console.warn(`[cloud-server][auth-users] failed to load users page: ${String(error?.message ?? error)}`);
-    authUsersPageCache = "<!doctype html><html><body><h1>Users page unavailable</h1></body></html>";
-  }
-
-  return authUsersPageCache;
-}
-
-function renderDeviceTokensPage() {
-  if (deviceTokensPageCache) {
-    return deviceTokensPageCache;
-  }
-
-  try {
-    deviceTokensPageCache = fs.readFileSync(deviceTokensPagePath, "utf8");
-  } catch (error) {
-    console.warn(`[cloud-server][device-tokens] failed to load page: ${String(error?.message ?? error)}`);
-    deviceTokensPageCache = "<!doctype html><html><body><h1>Device Tokens page unavailable</h1></body></html>";
-  }
-
-  return deviceTokensPageCache;
-}
-
-function renderLoginRequiredPage(returnTo, error = "") {
-  return buildLoginPage({ returnTo, error });
-}
-
-function renderWatchAlphaSurveyPage() {
-  if (watchAlphaSurveyPageCache) {
-    return watchAlphaSurveyPageCache;
-  }
-
-  try {
-    watchAlphaSurveyPageCache = fs.readFileSync(watchAlphaSurveyPagePath, "utf8");
-  } catch (error) {
-    console.warn(`[cloud-server][watch-alpha-survey] failed to load page: ${String(error?.message ?? error)}`);
-    watchAlphaSurveyPageCache = "<!doctype html><html><body><h1>Survey page unavailable</h1></body></html>";
-  }
-
-  return watchAlphaSurveyPageCache;
-}
-
-function renderWatchAlphaSurveyAdminPage() {
-  if (watchAlphaSurveyAdminPageCache) {
-    return watchAlphaSurveyAdminPageCache;
-  }
-
-  try {
-    watchAlphaSurveyAdminPageCache = fs.readFileSync(watchAlphaSurveyAdminPagePath, "utf8");
-  } catch (error) {
-    console.warn(`[cloud-server][watch-alpha-survey-admin] failed to load page: ${String(error?.message ?? error)}`);
-    watchAlphaSurveyAdminPageCache = "<!doctype html><html><body><h1>Survey admin page unavailable</h1></body></html>";
-  }
-
-  return watchAlphaSurveyAdminPageCache;
-}
-
 function requireAdminSession(req, res) {
   const sessionToken = getAdminSessionToken(req);
   if (!sessionToken) {
@@ -578,17 +459,6 @@ function requireAdminSession(req, res) {
   return principal;
 }
 
-function requireAdminPage(req, res, returnTo) {
-  const admin = requireAdminSession(req, res);
-  if (admin) {
-    return admin;
-  }
-
-  const target = encodeURIComponent(returnTo || "/");
-  html(res, 200, renderLoginRequiredPage(target));
-  return null;
-}
-
 function createAdminSessionForPrincipal(res, principal) {
   const session = interceptStore.createAuthSessionRecord({
     userId: principal.userId,
@@ -600,36 +470,6 @@ function createAdminSessionForPrincipal(res, principal) {
 
 function redirectToLogin(res, returnTo) {
   redirect(res, `/auth/login?returnTo=${encodeURIComponent(normalizeReturnTo(returnTo || "/"))}`);
-}
-
-function renderIndexPage() {
-  if (indexPageCache) {
-    return indexPageCache;
-  }
-
-  try {
-    indexPageCache = fs.readFileSync(indexPagePath, "utf8");
-  } catch (error) {
-    console.warn(`[cloud-server][index] failed to load index page: ${String(error?.message ?? error)}`);
-    indexPageCache = "<!doctype html><html><body><h1>Index page unavailable</h1></body></html>";
-  }
-
-  return indexPageCache;
-}
-
-function renderOnboardingMarkdown() {
-  if (onboardingMarkdownCache) {
-    return onboardingMarkdownCache;
-  }
-
-  try {
-    onboardingMarkdownCache = fs.readFileSync(onboardingMarkdownPath, "utf8");
-  } catch (error) {
-    console.warn(`[cloud-server][onboarding] failed to load SKILL.md: ${String(error?.message ?? error)}`);
-    onboardingMarkdownCache = "# Onboarding\n\nUnavailable.";
-  }
-
-  return onboardingMarkdownCache;
 }
 
 function notFound(res) {
@@ -1161,89 +1001,53 @@ const server = createServer(async (req, res) => {
   try {
     logApi(req, pathname, "received");
 
-    if (req.method === "GET" && (pathname === "/" || pathname === "/index.html")) {
-      logApi(req, pathname, "serve index page");
-      return html(res, 200, renderIndexPage());
-    }
-
-    if (req.method === "GET" && pathname === "/SKILL.md") {
-      logApi(req, pathname, "serve onboarding markdown");
-      res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8" });
-      res.end(renderOnboardingMarkdown());
+    const handledByWebServer = handleWebServerRoute({
+      req,
+      res,
+      url,
+      pathname,
+      logApi,
+      normalizeReturnTo,
+      buildLoginPage,
+      requireAdminSession,
+      redirectToLogin,
+    });
+    if (handledByWebServer) {
       return;
     }
 
-    if (req.method === "GET" && pathname === "/auth/login") {
-      const returnTo = normalizeReturnTo(url.searchParams.get("returnTo") ?? "/");
-      logApi(req, pathname, `serve login page returnTo=${returnTo}`);
-      return html(res, 200, buildLoginPage({ returnTo }));
-    }
-
-    if (req.method === "POST" && pathname === "/auth/login") {
-      const body = await readFormBody(req);
-      const username = String(body.get("username") ?? "").trim();
-      const password = String(body.get("password") ?? "").trim();
-      const returnTo = normalizeReturnTo(body.get("returnTo") ?? "/");
-      logApi(req, pathname, `admin login attempt username=${username || "-"}`);
-
-      if (!username || !password) {
-        return html(res, 200, buildLoginPage({ returnTo, error: "请输入用户名和密码。" }));
-      }
-
-      const principal = interceptStore.verifyAdminPassword(username, password);
-      if (!principal?.userId || !isAdminPrincipal(principal)) {
-        logApi(req, pathname, `admin login failed username=${username || "-"}`);
-        return html(res, 200, buildLoginPage({ returnTo, error: "用户名或密码错误。" }));
-      }
-
-      const session = createAdminSessionForPrincipal(res, principal);
-      logApi(req, pathname, `admin login ok userId=${principal.userId} session=${session.sessionToken.slice(0, 8)}...`);
-      redirect(res, returnTo || "/");
+    const handledByAuthServer = await handleAuthServerRoute({
+      req,
+      res,
+      pathname,
+      logApi,
+      html,
+      json,
+      parseBody,
+      readFormBody,
+      normalizeReturnTo,
+      buildLoginPage,
+      redirect,
+      clearAdminSessionCookie,
+      createAdminSessionForPrincipal,
+      isAdminPrincipal,
+      requireAdminSession,
+      requireInterceptAuth,
+      normalizeApnsPlatform,
+      interceptStore,
+      pairingCodeRegistry,
+      pairingCodeTtlMs,
+      authTokenAllowPasswordGrant,
+      buildOnboardingUrl,
+      verifyAppleIdentityToken,
+      appleClientId,
+      appleIssuer,
+      apnsStore,
+      isLikelyDeviceToken,
+      toInt,
+    });
+    if (handledByAuthServer) {
       return;
-    }
-
-    if (req.method === "POST" && pathname === "/auth/logout") {
-      clearAdminSessionCookie(res);
-      const body = await readFormBody(req);
-      const returnTo = normalizeReturnTo(body.get("returnTo") ?? "/auth/login");
-      redirect(res, returnTo || "/auth/login");
-      return;
-    }
-
-    if (req.method === "GET" && pathname === "/intercepts/approve") {
-      const admin = requireAdminSession(req, res);
-      if (!admin) {
-        logApi(req, pathname, "redirect to login");
-        redirectToLogin(res, req.url || "/intercepts/approve");
-        return;
-      }
-
-      logApi(req, pathname, `serve approval page admin=${admin.userId}`);
-      return html(res, 200, renderInterceptApprovalPage());
-    }
-
-    if (req.method === "GET" && pathname === "/auth/users-ui") {
-      const admin = requireAdminSession(req, res);
-      if (!admin) {
-        logApi(req, pathname, "redirect to login");
-        redirectToLogin(res, req.url || "/auth/users-ui");
-        return;
-      }
-
-      logApi(req, pathname, `serve auth users page admin=${admin.userId}`);
-      return html(res, 200, renderAuthUsersPage());
-    }
-
-    if (req.method === "GET" && pathname === "/auth/device-tokens-ui") {
-      const admin = requireAdminSession(req, res);
-      if (!admin) {
-        logApi(req, pathname, "redirect to login");
-        redirectToLogin(res, req.url || "/auth/device-tokens-ui");
-        return;
-      }
-
-      logApi(req, pathname, `serve device tokens page admin=${admin.userId}`);
-      return html(res, 200, renderDeviceTokensPage());
     }
 
     if (req.method === "GET" && pathname === "/health") {
@@ -1251,23 +1055,6 @@ const server = createServer(async (req, res) => {
       return json(res, 200, {
         ok: true
       });
-    }
-
-    if (req.method === "GET" && (pathname === "/survey/watch-alpha" || pathname === "/survey/watch-alpha.html")) {
-      logApi(req, pathname, "serve watch alpha survey page");
-      return html(res, 200, renderWatchAlphaSurveyPage());
-    }
-
-    if (req.method === "GET" && pathname === "/admin/surveys/watch-alpha") {
-      const admin = requireAdminSession(req, res);
-      if (!admin) {
-        logApi(req, pathname, "redirect to login");
-        redirectToLogin(res, req.url || "/admin/surveys/watch-alpha");
-        return;
-      }
-
-      logApi(req, pathname, `serve survey admin page admin=${admin.userId}`);
-      return html(res, 200, renderWatchAlphaSurveyAdminPage());
     }
 
     if (req.method === "POST" && pathname === "/api/surveys/watch-alpha") {
@@ -1397,409 +1184,6 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "POST" && pathname === "/auth/token") {
-      const body = await parseBody<AuthTokenBody>(req);
-      const username = String(body?.username ?? "").trim();
-      const password = String(body?.password ?? "").trim();
-
-      let admin = requireAdminSession(req, res);
-      let grantType = "cookie";
-
-      if (!admin) {
-        if (!authTokenAllowPasswordGrant) {
-          logApi(req, pathname, "unauthorized: admin session required");
-          return json(res, 401, { error: "unauthorized" });
-        }
-
-        if (!username || !password) {
-          logApi(req, pathname, "unauthorized: username/password required for password grant");
-          return json(res, 401, { error: "unauthorized" });
-        }
-
-        const principal = interceptStore.verifyAdminPassword(username, password);
-        if (!principal?.userId || !isAdminPrincipal(principal)) {
-          logApi(req, pathname, `password grant failed username=${username || "-"}`);
-          return json(res, 401, { error: "unauthorized" });
-        }
-
-        admin = principal;
-        grantType = "password";
-      }
-
-      logApi(req, pathname, `issue token requested username=${username || "-"} admin=${admin.userId} grant=${grantType}`);
-      if (!username) {
-        logApi(req, pathname, "invalid request: username is required");
-        return json(res, 400, { error: "username is required" });
-      }
-
-      const issued = interceptStore.withTransaction(() => interceptStore.createUserTokenRecord({ username }));
-      const pairing = pairingCodeRegistry.issue({
-        authToken: issued.authToken,
-        userId: issued.userId,
-        username: issued.username,
-      });
-      logApi(req, pathname, `issued userId=${issued.userId} pairingCode=${pairing.pairingCode}`);
-      const payload = {
-        ok: true,
-        userId: issued.userId,
-        authToken: issued.authToken,
-        username: issued.username,
-        pairingCode: pairing.pairingCode,
-        pairingCodeExpiresAtMs: pairing.expiresAtMs,
-        pairingCodeTtlMs,
-        onboardingUrl: buildOnboardingUrl(req),
-      };
-      return json(res, 200, {
-        ...payload,
-        token: payload.authToken,
-        accessToken: payload.authToken,
-        auth_token: payload.authToken,
-        pairing_code: payload.pairingCode,
-        pairingCodeExpiresAt: payload.pairingCodeExpiresAtMs,
-        data: payload,
-      });
-    }
-
-    if (req.method === "POST" && pathname === "/auth/apple/login") {
-      if (!appleClientId) {
-        logApi(req, pathname, "apple login disabled: APPLE_SIGNIN_CLIENT_ID missing");
-        return json(res, 503, { error: "apple sign-in is not configured" });
-      }
-
-      const body = await parseBody<AppleLoginBody>(req);
-      const identityToken = String(body?.identityToken ?? "").trim();
-      const nonce = String(body?.nonce ?? "").trim();
-      const deviceToken = String(body?.deviceToken ?? "").replace(/\s+/g, "").trim();
-      const devicePlatform = normalizeApnsPlatform(body?.platform);
-
-      if (!identityToken) {
-        logApi(req, pathname, "invalid request: identityToken is required");
-        return json(res, 400, { error: "identityToken is required" });
-      }
-
-      let verified;
-      try {
-        verified = await verifyAppleIdentityToken({
-          identityToken,
-          clientId: appleClientId,
-          nonce,
-          issuer: appleIssuer,
-        });
-      } catch (error) {
-        const message = String(error?.message ?? error);
-        logApi(req, pathname, `apple token verify failed: ${message}`);
-        return json(res, 401, { error: "invalid apple identity token", reason: message });
-      }
-
-      const now = Date.now();
-      const issued = interceptStore.withTransaction(() => {
-        return interceptStore.createOrRefreshAppleUserTokenRecord({
-          appleSub: verified.sub,
-          email: verified.email,
-          emailVerified: verified.emailVerified,
-          isPrivateEmail: verified.isPrivateEmail,
-          now,
-        });
-      });
-
-      if (deviceToken) {
-        try {
-          apnsStore.bindDeviceToken(issued.userId, deviceToken, devicePlatform);
-          logApi(req, pathname, `apple login device bound userId=${issued.userId} platform=${devicePlatform}`);
-        } catch (error) {
-          console.warn(
-            `[cloud-server][auth] apple login device bind failed userId=${issued.userId} reason=${String(error?.message ?? error)}`,
-          );
-        }
-      }
-
-      const pairing = pairingCodeRegistry.issue({
-        authToken: issued.authToken,
-        userId: issued.userId,
-        username: issued.username,
-      });
-
-      const payload = {
-        ok: true,
-        userId: issued.userId,
-        username: issued.username,
-        authType: "apple",
-        authToken: issued.authToken,
-        apple: {
-          sub: verified.sub,
-          email: verified.email,
-          emailVerified: verified.emailVerified,
-          isPrivateEmail: verified.isPrivateEmail,
-        },
-        pairingCode: pairing.pairingCode,
-        pairingCodeExpiresAtMs: pairing.expiresAtMs,
-        pairingCodeTtlMs,
-        onboardingUrl: buildOnboardingUrl(req),
-      };
-
-      logApi(req, pathname, `apple login success payload=${JSON.stringify(payload)}`);
-
-      return json(res, 200, payload);
-    }
-
-    if (req.method === "POST" && pathname === "/auth/pairing-token") {
-      const body = await parseBody<PairingCodeResolveBody>(req);
-      const pairingCode = String(body?.pairingCode ?? "").trim();
-      logApi(req, pathname, `resolve pairingCode=${pairingCode || "-"}`);
-      if (!/^\d{4}$/.test(pairingCode)) {
-        logApi(req, pathname, "invalid request: pairingCode must be 4 digits");
-        return json(res, 400, { error: "pairingCode must be 4 digits" });
-      }
-
-      const record = pairingCodeRegistry.resolve(pairingCode);
-      if (!record) {
-        logApi(req, pathname, `pairingCode not found or expired code=${pairingCode}`);
-        return json(res, 404, { error: "pairingCode not found or expired" });
-      }
-
-      logApi(req, pathname, `resolved pairingCode=${pairingCode} userId=${record.userId}`);
-
-      return json(res, 200, {
-        ok: true,
-        pairingCode: record.pairingCode,
-        userId: record.userId,
-        username: record.username,
-        authToken: record.authToken,
-        expiresAtMs: record.expiresAtMs,
-      });
-    }
-
-    if (req.method === "POST" && pathname === "/auth/pairing-code/refresh") {
-      const authorization = String(req.headers.authorization ?? "").trim();
-      const tokenFromAuth = authorization.toLowerCase().startsWith("bearer ")
-        ? authorization.slice("bearer ".length).trim()
-        : "";
-
-      const body = await parseBody<PairingCodeRefreshBody>(req);
-      const tokenFromBody = String(body?.authToken ?? "").trim();
-      const authToken = tokenFromAuth || tokenFromBody;
-      logApi(req, pathname, `refresh requested tokenSource=${tokenFromAuth ? "header" : tokenFromBody ? "body" : "none"}`);
-
-      if (!authToken) {
-        logApi(req, pathname, "unauthorized: missing token");
-        return json(res, 401, { error: "unauthorized" });
-      }
-
-      const principal = interceptStore.getUserByAuthToken(authToken);
-      if (!principal?.userId) {
-        logApi(req, pathname, "unauthorized: invalid token");
-        return json(res, 401, { error: "unauthorized" });
-      }
-
-      const pairing = pairingCodeRegistry.issue({
-        authToken,
-        userId: principal.userId,
-        username: principal.username,
-      });
-      logApi(req, pathname, `refreshed pairingCode=${pairing.pairingCode} userId=${principal.userId}`);
-
-      return json(res, 200, {
-        ok: true,
-        pairingCode: pairing.pairingCode,
-        pairingCodeExpiresAtMs: pairing.expiresAtMs,
-        pairingCodeTtlMs,
-        userId: principal.userId,
-        username: principal.username,
-      });
-    }
-
-    if (req.method === "GET" && pathname === "/auth/me") {
-      const authorization = String(req.headers.authorization ?? "").trim();
-      const tokenFromAuth = authorization.toLowerCase().startsWith("bearer ")
-        ? authorization.slice("bearer ".length).trim()
-        : "";
-
-      if (!tokenFromAuth) {
-        logApi(req, pathname, "unauthorized: missing token");
-        return json(res, 401, { error: "unauthorized" });
-      }
-
-      const principal = interceptStore.getUserByAuthToken(tokenFromAuth);
-      if (!principal?.userId) {
-        logApi(req, pathname, "unauthorized: invalid token");
-        return json(res, 401, { error: "unauthorized" });
-      }
-
-      logApi(req, pathname, `resolved current user userId=${principal.userId}`);
-      return json(res, 200, {
-        ok: true,
-        userId: principal.userId,
-        username: principal.username,
-        authType: principal.authType || "user",
-        appleSub: principal.appleSub || "",
-        email: principal.email || "",
-        emailVerified: principal.emailVerified === true,
-        isPrivateEmail: principal.isPrivateEmail === true,
-      });
-    }
-
-    if (req.method === "GET" && pathname === "/auth/users") {
-      const admin = requireAdminSession(req, res);
-      if (!admin) {
-        logApi(req, pathname, "unauthorized: admin session required");
-        return json(res, 401, { error: "unauthorized" });
-      }
-
-      const limit = toInt(url.searchParams.get("limit"), 100);
-      logApi(req, pathname, `list users limit=${limit} admin=${admin.userId}`);
-      const users = interceptStore.listUsers(limit);
-      const items = users.map((user) => {
-        const deviceBindings = apnsStore.listDeviceBindingsByUserId(user.userId);
-        const deviceTokens = deviceBindings.map((item) => item.deviceToken);
-        return {
-          ...user,
-          deviceBindings,
-          deviceTokens,
-          deviceToken: deviceTokens[0] || "",
-        };
-      });
-      logApi(req, pathname, `list users count=${items.length}`);
-      return json(res, 200, {
-        ok: true,
-        items,
-      });
-    }
-
-    if (req.method === "POST" && pathname === "/api/apns/register") {
-      const body = await parseBody<ApnsRegisterBody>(req);
-      const authToken = String(body?.authToken ?? "").trim();
-      const deviceToken = String(body?.deviceToken ?? "").replace(/\s+/g, "").trim();
-      const devicePlatform = normalizeApnsPlatform(body?.platform);
-
-      if (!authToken) {
-        logApi(req, pathname, "unauthorized: authToken is required");
-        return json(res, 401, { error: "unauthorized" });
-      }
-
-      if (!deviceToken) {
-        logApi(req, pathname, "invalid request: deviceToken is required");
-        return json(res, 400, { error: "deviceToken is required" });
-      }
-
-      const principal = interceptStore.getUserByAuthToken(authToken);
-      if (!principal?.userId) {
-        logApi(req, pathname, "unauthorized: invalid authToken");
-        return json(res, 401, { error: "unauthorized" });
-      }
-
-      const bound = apnsStore.bindDeviceToken(principal.userId, deviceToken, devicePlatform);
-      logApi(req, pathname, `registered apns device userId=${bound.userId} platform=${bound.platform}`);
-
-      return json(res, 200, {
-        ok: true,
-        userId: bound.userId,
-        deviceToken: bound.deviceToken,
-        platform: bound.platform,
-        updatedAtMs: bound.updatedAtMs,
-      });
-    }
-
-    if (req.method === "GET" && pathname === "/auth/device-tokens") {
-      const admin = requireAdminSession(req, res);
-      if (!admin) {
-        logApi(req, pathname, "unauthorized: admin session required");
-        return json(res, 401, { error: "unauthorized" });
-      }
-
-      const limit = toInt(url.searchParams.get("limit"), 2000);
-      logApi(req, pathname, `list device tokens limit=${limit} admin=${admin.userId}`);
-      const items = apnsStore.listAllDeviceBindings(limit).map((item) => {
-        const user = interceptStore.getUserById(item.userId);
-        return {
-          ...item,
-          username: String(user?.username ?? "").trim(),
-          authType: String(user?.authType ?? "").trim() || "user",
-          tokenPreview: item.deviceToken.length > 16
-            ? `${item.deviceToken.slice(0, 8)}...${item.deviceToken.slice(-8)}`
-            : item.deviceToken,
-        };
-      });
-
-      return json(res, 200, { ok: true, items, limit });
-    }
-
-    if (req.method === "POST" && pathname === "/auth/device-tokens/mark-invalid") {
-      const admin = requireAdminSession(req, res);
-      if (!admin) {
-        logApi(req, pathname, "unauthorized: admin session required");
-        return json(res, 401, { error: "unauthorized" });
-      }
-
-      const body = await parseBody<Record<string, unknown>>(req);
-      const includeUnknownPlatform = String(body?.includeUnknownPlatform ?? "true").trim().toLowerCase() !== "false";
-      const staleDays = toInt(body?.staleDays, 30);
-      const staleUnknownThresholdMs = Date.now() - staleDays * 24 * 60 * 60 * 1000;
-      const items = apnsStore.listAllDeviceBindings(20000);
-
-      const candidates = items.map((item) => {
-        const reasons: string[] = [];
-        if (!isLikelyDeviceToken(item.deviceToken)) {
-          reasons.push("malformed-token");
-        }
-        if (includeUnknownPlatform && item.platform === "unknown") {
-          reasons.push("unknown-platform");
-        }
-        if (item.platform === "unknown" && Number(item.updatedAtMs || 0) > 0 && item.updatedAtMs < staleUnknownThresholdMs) {
-          reasons.push(`stale-unknown>${staleDays}d`);
-        }
-
-        const user = interceptStore.getUserById(item.userId);
-        return {
-          ...item,
-          username: String(user?.username ?? "").trim(),
-          authType: String(user?.authType ?? "").trim() || "user",
-          reasons,
-          markedInvalid: reasons.length > 0,
-          tokenPreview: item.deviceToken.length > 16
-            ? `${item.deviceToken.slice(0, 8)}...${item.deviceToken.slice(-8)}`
-            : item.deviceToken,
-        };
-      });
-
-      const invalidItems = candidates.filter((item) => item.markedInvalid);
-      logApi(req, pathname, `mark invalid candidates=${invalidItems.length} total=${candidates.length} admin=${admin.userId}`);
-      return json(res, 200, {
-        ok: true,
-        items: candidates,
-        invalidCount: invalidItems.length,
-        total: candidates.length,
-      });
-    }
-
-    if (req.method === "POST" && pathname === "/auth/device-tokens/delete") {
-      const admin = requireAdminSession(req, res);
-      if (!admin) {
-        logApi(req, pathname, "unauthorized: admin session required");
-        return json(res, 401, { error: "unauthorized" });
-      }
-
-      const body = await parseBody<Record<string, unknown>>(req);
-      const bindings = Array.isArray(body?.bindings) ? body.bindings : [];
-      const normalizedBindings = bindings
-        .map((item) => ({
-          userId: String((item as Record<string, unknown>)?.userId ?? "").trim(),
-          deviceToken: String((item as Record<string, unknown>)?.deviceToken ?? "").replace(/\s+/g, "").trim(),
-        }))
-        .filter((item) => item.userId && item.deviceToken);
-
-      if (normalizedBindings.length === 0) {
-        logApi(req, pathname, "invalid request: bindings is required");
-        return json(res, 400, { error: "bindings is required" });
-      }
-
-      const removed = apnsStore.unbindDeviceTokens(normalizedBindings);
-      logApi(req, pathname, `delete device tokens requested=${normalizedBindings.length} removed=${removed} admin=${admin.userId}`);
-      return json(res, 200, {
-        ok: true,
-        requested: normalizedBindings.length,
-        removed,
-      });
-    }
 
     if (pathname.startsWith("/api/copilot/intercepts/")) {
       const principal = requireInterceptAuth(req, res);

@@ -1,0 +1,9 @@
+  ╭─╮╭─╮
+  ╰─╯╰─╯  Copilot v1.0.59 uses AI.
+  █ ▘▝ █  Check for mistakes.
+   ▔▔▔▔ 
+
+● Tip: /autopilot
+  └ Toggle autopilot mode
+
+● No copilot-instructions.md found. Run /init to generate.

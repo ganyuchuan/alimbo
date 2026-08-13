@@ -1,5 +1,45 @@
 # Development Log
 
+## 2026-08-13
+
+### 53) Cloud 静态资源目录统一 + 图片资源加载修复
+
+变更目标：
+- 将 cloud 目录下页面与文档静态资源统一归档到单一目录，便于后续继续加入图片、样式、脚本等资源。
+- 修复 `index.html` 中本地图片（`aw-ultra-3.png`、`iphone-17.png`）无法加载的问题。
+
+主要改动：
+- 静态资源目录归档
+  - 将 `src/cloud` 根目录下历史 `*.html`、`*.md` 文件迁移到 `src/cloud/static/`。
+  - 保留现有 HTTP 路径不变，仅调整服务端读取磁盘位置。
+- 页面路由与资源读取拆分
+  - 新增 `src/cloud/web-server.ts`，承接 cloud 页面路由。
+  - 页面与文档读取根路径统一为：`new URL("./static/", import.meta.url)`。
+  - 保留已有页面路由与鉴权逻辑（登录页、审批页、用户页、设备页、问卷页）。
+- 新增通用静态文件服务能力（修复图片不显示）
+  - 在 `src/cloud/web-server.ts` 增加静态资源路由处理，支持直接返回 `static` 目录中的文件。
+  - 支持类型包括：`png/jpg/jpeg/gif/webp/svg/ico/css/js/json/txt/md/woff/woff2/ttf`。
+  - 修复根因：此前仅支持固定页面路由，不支持 `*.png` 请求，导致图片 404。
+- 构建产物复制统一
+  - `package.json` 的 `postbuild` 改为整体复制 `src/cloud/static -> dist/cloud/static`。
+  - 移除按文件逐个复制的旧逻辑，避免新增静态文件时遗漏。
+
+涉及文件：
+- `src/cloud/web-server.ts`
+- `src/cloud/intercept-server.ts`
+- `src/cloud/auth-server.ts`
+- `src/cloud/static/*`
+- `package.json`
+- `docs/private/DEVELOPMENT_LOG.md`
+
+验证记录：
+- `npm run build`：通过
+- `src/cloud/web-server.ts` / `src/cloud/intercept-server.ts` 诊断：无错误
+
+兼容性说明：
+- 公网路由与页面访问路径保持不变。
+- 若继续新增网页图片等资源，放入 `src/cloud/static/` 即可随构建产物发布。
+
 ## 2026-08-09
 
 ### 52) Agent 启动命令简化与一键配对
