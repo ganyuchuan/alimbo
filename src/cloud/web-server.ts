@@ -15,6 +15,14 @@ const watchAlphaSurveyAdminPagePath = new URL("./watch-alpha-survey-admin.html",
 let watchAlphaSurveyAdminPageCache = "";
 const onboardingMarkdownPath = new URL("./SKILL.md", staticRoot);
 let onboardingMarkdownCache = "";
+const termsOfServiceZhPath = new URL("./terms-of-service.zh-CN.md", staticRoot);
+let termsOfServiceZhCache = "";
+const termsOfServiceEnPath = new URL("./terms-of-service.en.md", staticRoot);
+let termsOfServiceEnCache = "";
+const privacyPolicyZhPath = new URL("./privacy-policy.zh-CN.md", staticRoot);
+let privacyPolicyZhCache = "";
+const privacyPolicyEnPath = new URL("./privacy-policy.en.md", staticRoot);
+let privacyPolicyEnCache = "";
 
 const staticContentTypes = new Map([
 	[".html", "text/html; charset=utf-8"],
@@ -122,6 +130,34 @@ function renderOnboardingMarkdown() {
 	return onboardingMarkdownCache;
 }
 
+function renderTermsOfServiceZh() {
+	if (!termsOfServiceZhCache) {
+		termsOfServiceZhCache = readStaticPage(termsOfServiceZhPath, "# Terms of Service\n\nUnavailable.", "terms-of-service.zh-CN.md");
+	}
+	return termsOfServiceZhCache;
+}
+
+function renderTermsOfServiceEn() {
+	if (!termsOfServiceEnCache) {
+		termsOfServiceEnCache = readStaticPage(termsOfServiceEnPath, "# Terms of Service\n\nUnavailable.", "terms-of-service.en.md");
+	}
+	return termsOfServiceEnCache;
+}
+
+function renderPrivacyPolicyZh() {
+	if (!privacyPolicyZhCache) {
+		privacyPolicyZhCache = readStaticPage(privacyPolicyZhPath, "# Privacy Policy\n\nUnavailable.", "privacy-policy.zh-CN.md");
+	}
+	return privacyPolicyZhCache;
+}
+
+function renderPrivacyPolicyEn() {
+	if (!privacyPolicyEnCache) {
+		privacyPolicyEnCache = readStaticPage(privacyPolicyEnPath, "# Privacy Policy\n\nUnavailable.", "privacy-policy.en.md");
+	}
+	return privacyPolicyEnCache;
+}
+
 function extname(pathname) {
 	const index = pathname.lastIndexOf(".");
 	if (index < 0) {
@@ -198,6 +234,36 @@ export function handleWebServerRoute(context: WebServerRouteContext) {
 		res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8" });
 		res.end(renderOnboardingMarkdown());
 		return true;
+	}
+
+	if (req.method === "GET") {
+		if (pathname === "/terms-of-service" || pathname === "/terms-of-service.zh-CN") {
+			logApi(req, pathname, "serve terms of service zh-cn");
+			res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8" });
+			res.end(renderTermsOfServiceZh());
+			return true;
+		}
+
+		if (pathname === "/terms-of-service.en") {
+			logApi(req, pathname, "serve terms of service en");
+			res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8" });
+			res.end(renderTermsOfServiceEn());
+			return true;
+		}
+
+		if (pathname === "/privacy-policy" || pathname === "/privacy-policy.zh-CN") {
+			logApi(req, pathname, "serve privacy policy zh-cn");
+			res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8" });
+			res.end(renderPrivacyPolicyZh());
+			return true;
+		}
+
+		if (pathname === "/privacy-policy.en") {
+			logApi(req, pathname, "serve privacy policy en");
+			res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8" });
+			res.end(renderPrivacyPolicyEn());
+			return true;
+		}
 	}
 
 	if (req.method === "GET" && pathname === "/auth/login") {
