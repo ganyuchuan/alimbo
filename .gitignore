@@ -6,6 +6,7 @@
 .codex/
 .kimi-code/
 .agentwatch/
+.deepseek/
 .APNs/
 node_modules/
 data/
