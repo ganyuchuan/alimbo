@@ -237,7 +237,15 @@ export function handleWebServerRoute(context: WebServerRouteContext) {
 	}
 
 	if (req.method === "GET") {
-		if (pathname === "/terms-of-service" || pathname === "/terms-of-service.zh-CN") {
+		if (pathname === "/terms-of-service") {
+			const isChinese = url.searchParams.get("language") === "zh";
+			logApi(req, pathname, `serve terms of service ${isChinese ? "zh-cn" : "en"}`);
+			res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8" });
+			res.end(isChinese ? renderTermsOfServiceZh() : renderTermsOfServiceEn());
+			return true;
+		}
+
+		if (pathname === "/terms-of-service.zh-CN") {
 			logApi(req, pathname, "serve terms of service zh-cn");
 			res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8" });
 			res.end(renderTermsOfServiceZh());
@@ -251,7 +259,15 @@ export function handleWebServerRoute(context: WebServerRouteContext) {
 			return true;
 		}
 
-		if (pathname === "/privacy-policy" || pathname === "/privacy-policy.zh-CN") {
+		if (pathname === "/privacy-policy") {
+			const isChinese = url.searchParams.get("language") === "zh";
+			logApi(req, pathname, `serve privacy policy ${isChinese ? "zh-cn" : "en"}`);
+			res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8" });
+			res.end(isChinese ? renderPrivacyPolicyZh() : renderPrivacyPolicyEn());
+			return true;
+		}
+
+		if (pathname === "/privacy-policy.zh-CN") {
 			logApi(req, pathname, "serve privacy policy zh-cn");
 			res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8" });
 			res.end(renderPrivacyPolicyZh());
