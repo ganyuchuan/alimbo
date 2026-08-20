@@ -54,8 +54,77 @@
       position: relative;
     }
 
+    .site-nav {
+      min-height: 48px;
+      padding: 4px 0 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 700;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(202, 124, 94, 0.8);
+      border-radius: 9px;
+      color: var(--body);
+      background: rgba(202, 124, 94, 0.12);
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .brand-image {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+    }
+
+    .site-nav-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .site-nav-button {
+      padding: 6px 11px;
+      border-radius: 9px;
+      font-size: 12px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .github-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: white;
+    }
+
+    .github-button svg {
+      width: 15px;
+      height: 15px;
+      fill: currentColor;
+    }
+
     .page-header {
-      padding: 8px 4px 18px;
+      padding: 18px 0px 18px;
       display: grid;
       gap: 8px;
       justify-content: center;
@@ -435,6 +504,19 @@
       text-align: center;
     }
 
+    .app-store-button {
+      justify-self: center;
+      margin-top: 6px;
+      display: inline-block;
+      line-height: 0;
+    }
+
+    .app-store-button img {
+      display: block;
+      width: 180px;
+      height: auto;
+    }
+
     .feature-grid {
       margin-top: 18px;
       display: grid;
@@ -461,6 +543,157 @@
       gap: 24px;
       align-content: center;
       justify-items: center;
+    }
+      .feature-card {
+        cursor: pointer;
+        transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+      }
+
+      .feature-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(202, 124, 94, 0.75);
+        background: rgba(202, 124, 94, 0.08);
+      }
+
+      .feature-card:focus-visible {
+        outline: 2px solid var(--body);
+        outline-offset: 3px;
+      }
+
+      .agent-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.72);
+        backdrop-filter: blur(5px);
+      }
+
+      .agent-modal[hidden] {
+        display: none;
+      }
+
+      .agent-modal-card {
+        width: min(520px, 100%);
+        max-height: min(680px, 100%);
+        overflow: auto;
+        padding: 24px;
+        border: 1px solid var(--stroke);
+        border-radius: var(--radius-xl);
+        background: #111;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+      }
+
+      .agent-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .agent-modal-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .agent-modal-title .feature-icon {
+        flex: 0 0 auto;
+        width: 48px;
+        height: 48px;
+        font-size: 42px;
+      }
+
+      .agent-modal-title h2 {
+        margin: 0;
+        font-size: 20px;
+        overflow-wrap: anywhere;
+      }
+
+      .modal-close {
+        min-height: 34px;
+        padding: 4px 10px;
+        color: var(--text-dim);
+        font-size: 20px;
+        line-height: 1;
+      }
+
+      .command-tabs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 24px;
+      }
+
+      .command-tab.active {
+        color: var(--body);
+        border-color: rgba(202, 124, 94, 0.75);
+        background: rgba(202, 124, 94, 0.1);
+      }
+
+      .command-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .command-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+        padding: 10px;
+        border: 1px solid var(--stroke-soft);
+        border-radius: var(--radius-md);
+        background: rgba(0, 0, 0, 0.34);
+      }
+
+      .command-row code {
+        color: var(--text);
+        font-family: inherit;
+        font-size: 13px;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+      }
+
+      .copy-command {
+        min-height: 32px;
+        padding: 5px 9px;
+        color: var(--body);
+        font-size: 11px;
+      }
+
+    .site-footer {
+      margin-top: 64px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      color: var(--text-dim);
+      font-size: 12px;
+    }
+
+    .site-footer-links {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+
+    .site-footer a {
+      color: inherit;
+      text-decoration: none;
+      transition: color 160ms ease;
+    }
+
+    .site-footer a:hover {
+      color: var(--body);
     }
 
     .feature-icon {
@@ -726,6 +959,23 @@
     }
 
     @media (max-width: 640px) {
+      .site-nav {
+        align-items: flex-start;
+      }
+
+      .brand-name {
+        display: none;
+      }
+
+      .site-nav-actions {
+        flex: 1;
+      }
+
+      .site-nav-button {
+        flex: 1;
+        padding-inline: 7px;
+      }
+
       .feature-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
@@ -733,14 +983,40 @@
       .iphone-followup-grid {
         grid-template-columns: 1fr;
       }
+
+      .site-footer {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .site-footer-links {
+        justify-content: flex-start;
+        gap: 10px 14px;
+      }
     }
   </style>
 </head>
 <body>
   <div class="app">
+    <nav class="site-nav" aria-label="主导航">
+      <a class="brand" href="/" aria-label="Agent Limbo 首页">
+        <img class="brand-image" src="./logo_128.png" alt="Agent Limbo" />
+        <span class="brand-name">Agent Limbo</span>
+      </a>
+      <div class="site-nav-actions">
+        <button id="language-toggle" class="site-nav-button" type="button" aria-label="切换语言">English</button>
+        <a class="site-nav-button github-button" href="https://github.com/ganyuchuan/alimbo" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 上收藏 Agent Limbo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.74.08-.74 1.2.08 1.83 1.23 1.83 1.23 1.07 1.83 2.8 1.3 3.48.99.11-.77.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.23-3.22-.12-.3-.53-1.52.12-3.17 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6.01 0c2.29-1.55 3.29-1.23 3.29-1.23.65 1.65.24 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.6-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z" /></svg>
+          <span data-nav-github>Github Star</span>
+        </a>
+        <a class="site-nav-button btn-accent" href="/auth/login">登录</a>
+      </div>
+    </nav>
+
     <header class="page-header" aria-label="页面标题">
-      <h1>腕上 AI 审批官</h1>
-      <p>把本地 AI Agent 的「关键操作」审批和运行状态提醒搬到 Apple Watch 上，让用户离开电脑也能随时掌控任务进展。</p>
+      <h1>你手腕上的 AI 审批官</h1>
+      <p>把本地 Agent 的「关键操作」审批和「运行状态」提醒搬到 iPhone 和 Apple Watch 等移动设备上，让你离开电脑也能随时随地掌控AI 编程任务进展。</p>
     </header>
 
     <section id="screen-dashboard" class="screen active" aria-label="Dashboard 页面">
@@ -751,7 +1027,6 @@
               <span class="terminal-dots" aria-hidden="true">
                 <span></span><span></span><span></span>
               </span>
-              <span>claude.txt</span>
             </div>
             <pre id="terminal-content" class="terminal-content"></pre>
           </div>
@@ -765,10 +1040,10 @@
                   <article class="watch-approve-card">
                     <div class="row">
                       <span class="muted">1/1</span>
-                      <strong style="font-size: 13px; color: var(--body);">删除 test.tx...</strong>
+                      <strong style="font-size: 13px; color: var(--body);">删除 notepad...</strong>
                     </div>
                     <div class="approval-tool">Bash</div>
-                    <div class="approval-hint">rm /Users/demo/Desktop/tmp/alimbo-v0.2.8/test.txt</div>
+                    <div class="approval-hint">rm /Users/admin/Desktop/notepad.txt</div>
                     <div class="actions-2">
                       <button class="btn-danger" type="button">No</button>
                       <button class="btn-accent" type="button">Yes</button>
@@ -781,20 +1056,41 @@
       </div>
 
       <section class="feature-zone" aria-label="能力展示区">
-        <h2>将你得力 Agent 放进手表</h2>
-        <p>接入各类官方 Agent 提供的 Hooks，不改变工作流的情况下使你可以随时随地与 Agent 进行互动。</p>
+        <h2>「两步」将 Agent 装进你的手表</h2>
+        <p>1. 前往 App Store 下载安装 App</p>
+        <a class="app-store-button" href="https://apps.apple.com/cn/search?term=AI%20%E5%AE%A1%E5%88%A4%E5%AE%98" target="_blank" rel="noopener noreferrer" aria-label="在 App Store 搜索并下载 AI 审判官">
+          <img src="./Download_on_the_App_Store_Badge_CNSC_RGB_wht_092917.svg" alt="在 App Store 下载" />
+        </a>
+        <p>2. 选择你的 Agent 并运行指令与 iOS/watchOS App 配对</p>
         <div class="feature-grid">
-          <article class="feature-card"><span class="feature-icon"><svg viewBox="0 0 59 42" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="cardIcon-iRitjS"><path d="M58.1575 8.30769V0H0.00367956H0V33.2344H8.30769V41.5385H49.8498H58.1575V33.2308V8.30402V8.30769ZM49.8498 33.2344H8.30769V8.30769H49.8498V33.2344Z" fill="currentColor"></path><path d="M23.2062 14.7695L17.332 20.6437L23.2062 26.5179L29.0804 20.6437L23.2062 14.7695Z" fill="currentColor"></path><path d="M39.8215 14.7664L33.9473 20.6406L39.8215 26.5148L45.6957 20.6406L39.8215 14.7664Z" fill="currentColor"></path></svg></span><div class="feature-title">TRAE IDE</div></article>
-          <article class="feature-card"><span class="feature-icon"><img src="https://www.agentapprove.com/claude-logo.svg" alt="Claude logo" /></span><div class="feature-title">Claude Code</div></article>
-          <article class="feature-card"><span class="feature-icon"><img src="https://www.agentapprove.com/_next/image?url=%2Fcodex-logo.png&w=96&q=75" alt="Codex logo" /></span><div class="feature-title">Codex</div></article>
-          <article class="feature-card"><span class="feature-icon"><img src="https://www.agentapprove.com/github-logo-dark.svg" alt="Copilot CLI logo" /></span><div class="feature-title">Copilot CLI</div></article>
-          <article class="feature-card"><span class="feature-icon">🦞</span><div class="feature-title">OpenClaw</div></article>
-          <article class="feature-card"><span class="feature-icon"><img src="https://www.agentapprove.com/_next/image?url=%2Fhermesagent-dark.png&w=96&q=75" alt="Hermes logo" /></span><div class="feature-title">Hermes</div></article>
-          <article class="feature-card"><span class="feature-icon"><img src="https://www.agentapprove.com/cursor-logo-dark.svg" alt="Cursor logo" /></span><div class="feature-title">Cursor</div></article>
-          <article class="feature-card"><span class="feature-icon"><img src="https://www.agentapprove.com/opencode-logo-dark.svg" alt="OpenCode logo" /></span><div class="feature-title">OpenCode</div></article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="trae"><span class="feature-icon"><svg viewBox="0 0 59 42" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="cardIcon-iRitjS"><path d="M58.1575 8.30769V0H0.00367956H0V33.2344H8.30769V41.5385H49.8498H58.1575V33.2308V8.30402V8.30769ZM49.8498 33.2344H8.30769V8.30769H49.8498V33.2344Z" fill="currentColor"></path><path d="M23.2062 14.7695L17.332 20.6437L23.2062 26.5179L29.0804 20.6437L23.2062 14.7695Z" fill="currentColor"></path><path d="M39.8215 14.7664L33.9473 20.6406L39.8215 26.5148L45.6957 20.6406Z" fill="currentColor"></path></svg></span><div class="feature-title">TRAE IDE</div></article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="claude"><span class="feature-icon"><img src="https://www.agentapprove.com/claude-logo.svg" alt="Claude logo" /></span><div class="feature-title">Claude Code</div></article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="codex"><span class="feature-icon"><img src="https://www.agentapprove.com/_next/image?url=%2Fcodex-logo.png&w=96&q=75" alt="Codex logo" /></span><div class="feature-title">Codex</div></article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="copilot"><span class="feature-icon"><img src="https://www.agentapprove.com/github-logo-dark.svg" alt="Copilot CLI logo" /></span><div class="feature-title">Copilot CLI</div></article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="openclaw"><span class="feature-icon">🦞</span><div class="feature-title">OpenClaw</div></article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="hermes"><span class="feature-icon"><img src="https://www.agentapprove.com/_next/image?url=%2Fhermesagent-dark.png&w=96&q=75" alt="Hermes logo" /></span><div class="feature-title">Hermes</div></article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="cursor"><span class="feature-icon"><img src="https://www.agentapprove.com/cursor-logo-dark.svg" alt="Cursor logo" /></span><div class="feature-title">Cursor</div></article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="opencode"><span class="feature-icon"><img src="https://www.agentapprove.com/opencode-logo-dark.svg" alt="OpenCode logo" /></span><div class="feature-title">OpenCode</div></article>
           <article class="feature-card-more"><span class="feature-icon">•••</span></article>
         </div>
       </section>
+
+      <div id="agent-modal" class="agent-modal" hidden role="dialog" aria-modal="true" aria-labelledby="agent-modal-title">
+        <div class="agent-modal-card">
+          <div class="agent-modal-header">
+            <div class="agent-modal-title">
+              <span id="agent-modal-icon" class="feature-icon" aria-hidden="true"></span>
+              <h2 id="agent-modal-title"></h2>
+            </div>
+            <button id="agent-modal-close" class="modal-close" type="button" aria-label="关闭">×</button>
+          </div>
+          <div class="command-tabs" role="tablist" aria-label="安装方式">
+            <button class="command-tab active" type="button" role="tab" aria-selected="true" data-package-manager="npx">npx</button>
+            <button class="command-tab" type="button" role="tab" aria-selected="false" data-package-manager="npm">npm</button>
+          </div>
+          <div id="command-list" class="command-list" aria-live="polite"></div>
+        </div>
+      </div>
 
       <section class="feature-zone" aria-label="副标题区">
         <h2>如何快速使用</h2>
@@ -877,6 +1173,16 @@
         </div>
       </section>
     </section>
+
+    <footer class="site-footer" aria-label="页脚">
+      <span>© 2026 yuchuan. All rights reserved.</span>
+      <nav class="site-footer-links" aria-label="页脚链接">
+        <a href="/terms-of-service">服务条款</a>
+        <a href="/privacy-policy">隐私政策</a>
+        <a href="mailto:bluesgump@foxmail.com">邮箱</a>
+        <a href="/survey/watch-alpha">调查问卷</a>
+      </nav>
+    </footer>
 
   </div>
 
@@ -1002,14 +1308,14 @@
 │                                             │ What's new                     │
 │                    ▘▘ ▝▝                    │ Auto mode is now available wi… │
 │                                             │ Fixed the terminal freezing a… │
-│   deepseek-v4-pro[1m] · API Usage Billing   │ Fixed remote managed settings… │
-│               /Users/demo                   │ /release-notes for more        │
+│        Sonnet 4.5 · API Usage Billing       │ Fixed remote managed settings… │
+│               /Users/admin                  │ /release-notes for more        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 
-> 删除 test.txt 文件
+> 删除桌面的 notepad.txt 文件
   Thought for 4s, searched for 1 pattern (ctrito to expand)
 
-• Bash(rm /Users/demo/Desktop/tmp/alimbo-v0.2.8/test.txt)
+• Bash(rm /Users/admin/Desktop/notepad.txt)
   Waiting...
 `;
     function escapeHtml(text) {
@@ -1123,6 +1429,99 @@
       );
     }
     document.getElementById("terminal-content").innerHTML = styledClaudeTxtContent;
+
+    const agentModal = document.getElementById("agent-modal");
+    const agentModalIcon = document.getElementById("agent-modal-icon");
+    const agentModalTitle = document.getElementById("agent-modal-title");
+    const commandList = document.getElementById("command-list");
+    let selectedAgent = "claude";
+    let selectedPackageManager = "npx";
+
+    function getCommands() {
+      const command = `${selectedPackageManager === "npx" ? "npx alimbo" : "alimbo"} ${selectedAgent} <配对码>`;
+      return selectedPackageManager === "npx" ? [command] : ["npm install -g alimbo", command];
+    }
+
+    function renderCommands() {
+      commandList.innerHTML = "";
+      getCommands().forEach((command) => {
+        const row = document.createElement("div");
+        row.className = "command-row";
+        row.innerHTML = `<code></code><button class="copy-command" type="button">复制</button>`;
+        row.querySelector("code").textContent = command;
+        row.querySelector("button").addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(command);
+          } catch {
+            const textArea = document.createElement("textarea");
+            textArea.value = command;
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand("copy");
+            textArea.remove();
+          }
+          const copyButton = row.querySelector("button");
+          copyButton.textContent = "已复制";
+          window.setTimeout(() => { copyButton.textContent = "复制"; }, 1400);
+        });
+        commandList.appendChild(row);
+      });
+    }
+
+    function openAgentModal(card) {
+      selectedAgent = card.dataset.agent;
+      agentModalTitle.textContent = card.querySelector(".feature-title").textContent;
+      agentModalIcon.innerHTML = card.querySelector(".feature-icon").innerHTML;
+      agentModal.hidden = false;
+      document.body.style.overflow = "hidden";
+      renderCommands();
+      document.querySelector(".command-tab.active")?.focus();
+    }
+
+    function closeAgentModal() {
+      agentModal.hidden = true;
+      document.body.style.overflow = "";
+    }
+
+    document.querySelectorAll(".feature-card[data-agent]").forEach((card) => {
+      card.addEventListener("click", () => openAgentModal(card));
+      card.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openAgentModal(card);
+        }
+      });
+    });
+
+    document.querySelectorAll(".command-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        selectedPackageManager = tab.dataset.packageManager;
+        document.querySelectorAll(".command-tab").forEach((item) => {
+          const active = item === tab;
+          item.classList.toggle("active", active);
+          item.setAttribute("aria-selected", String(active));
+        });
+        renderCommands();
+      });
+    });
+
+    document.getElementById("agent-modal-close").addEventListener("click", closeAgentModal);
+    agentModal.addEventListener("click", (event) => {
+      if (event.target === agentModal) closeAgentModal();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !agentModal.hidden) closeAgentModal();
+    });
+
+    const languageToggle = document.getElementById("language-toggle");
+    languageToggle.addEventListener("click", () => {
+      const isChinese = document.documentElement.lang === "zh-CN";
+      document.documentElement.lang = isChinese ? "en" : "zh-CN";
+      languageToggle.textContent = isChinese ? "简体中文" : "English";
+      languageToggle.setAttribute("aria-label", isChinese ? "Switch to Chinese" : "切换语言");
+    });
 
     renderApprovals();
     renderToolCalls();

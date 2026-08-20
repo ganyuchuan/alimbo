@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { createServer } from "node:http";
+import fs from "node:fs";
 import dotenv, { config } from "dotenv";
 import os from "node:os";
 import { createApnsClient, loadApnsPrivateKeyFromEnv } from "./apns-client.js";
@@ -87,6 +88,8 @@ const adminSessionCookieName = "alimbo_admin_session";
 const authTokenAllowPasswordGrant = toBool(process.env.CLOUD_AUTH_TOKEN_ALLOW_PASSWORD_GRANT, false);
 const agentProvider = String(process.env.AGENT_PROVIDER ?? "").trim();
 const pushHost = String(process.env.ALIMBO_PUSH_HOST ?? process.env.HOSTNAME ?? os.hostname() ?? "").trim() || "unknown";
+const adminLoginPagePath = new URL("./static/auth-login.html", import.meta.url);
+let adminLoginPageTemplate = "";
 
 const APNS_CATEGORY_APPROVAL = "ALIMBO_APPROVAL_V1";
 const APNS_CATEGORY_SESSION_COMPLETED = "ALIMBO_SESSION_COMPLETED_V1";
@@ -353,40 +356,18 @@ function clearAdminSessionCookie(res) {
 function buildLoginPage({ returnTo = "/", error = "" } = {}) {
   const safeReturnTo = escapeHtml(returnTo);
   const safeError = error ? `<p class="error">${escapeHtml(error)}</p>` : "";
-  return `<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>管理员登录</title>
-    <style>
-      :root { color-scheme: light; --bg: #f5efe6; --card: #fff8ef; --ink: #1f1f1f; --muted: #6a6157; --accent: #1f6feb; --border: #e5d8c7; }
-      body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: radial-gradient(circle at top, #fff 0, var(--bg) 38%, #eadfcd 100%); color: var(--ink); }
-      .card { width: min(440px, calc(100vw - 32px)); background: rgba(255,248,239,.96); border: 1px solid var(--border); border-radius: 22px; padding: 28px; box-shadow: 0 24px 80px rgba(37, 27, 12, .15); }
-      h1 { margin: 0 0 8px; font-size: 28px; }
-      p { margin: 0 0 16px; color: var(--muted); line-height: 1.6; }
-      label { display: block; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
-      input { width: 100%; box-sizing: border-box; border: 1px solid var(--border); background: #fff; border-radius: 12px; padding: 12px 14px; font-size: 15px; margin-bottom: 14px; }
-      button { border: 0; border-radius: 999px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 800; padding: 12px 18px; cursor: pointer; }
-      .error { color: #b42318; background: #fff1f0; border: 1px solid #fecaca; border-radius: 12px; padding: 10px 12px; }
-      .meta { margin-top: 14px; font-size: 13px; color: var(--muted); word-break: break-all; }
-    </style>
-  </head>
-  <body>
-    <form class="card" method="post" action="/auth/login">
-      <h1>管理员登录</h1>
-      <p>请输入管理员用户名和密码后继续访问。</p>
-      ${safeError}
-      <input type="hidden" name="returnTo" value="${safeReturnTo}" />
-      <label for="username">用户名</label>
-      <input id="username" name="username" autocomplete="username" required />
-      <label for="password">密码</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required />
-      <button type="submit">登录</button>
-      <div class="meta">登录后会建立管理员会话，仅用于受保护页面访问。</div>
-    </form>
-  </body>
-</html>`;
+  if (!adminLoginPageTemplate) {
+    try {
+      adminLoginPageTemplate = fs.readFileSync(adminLoginPagePath, "utf8");
+    } catch (loadError) {
+      console.warn(`[cloud-server][web] failed to load admin login page: ${String(loadError?.message ?? loadError)}`);
+      adminLoginPageTemplate = "<!doctype html><html><body><h1>Login page unavailable</h1></body></html>";
+    }
+  }
+
+  return adminLoginPageTemplate
+    .replace("{{ERROR}}", safeError)
+    .replace("{{RETURN_TO}}", safeReturnTo);
 }
 
 function buildLoggedOutPage(returnTo = "/") {

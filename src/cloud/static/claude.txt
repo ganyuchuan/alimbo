@@ -6,12 +6,12 @@
 │                                             │ What's new                     │
 │                    ▘▘ ▝▝                    │ Auto mode is now available wi… │
 │                                             │ Fixed the terminal freezing a… │
-│   deepseek-v4-pro[1m] · API Usage Billing   │ Fixed remote managed settings… │
-│               /Users/yuchuan                │ /release-notes for more        │
+│        Sonnet 4.5 · API Usage Billing       │ Fixed remote managed settings… │
+│                /Users/admin                 │ /release-notes for more        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 
-> 删除 test.txt 文件
+> 删除桌面的 notepad.txt 文件
   Thought for 4s, searched for 1 pattern (ctrito to expand)
 
-• Bash(rm /Users/yuchuan/Desktop/tmp/alimbo-v0.2.8/test.txt)
+• Bash(rm /Users/admin/Desktop/notepad.txt)
   Waiting...
