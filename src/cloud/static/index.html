@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -424,6 +425,12 @@
       white-space: pre-wrap;
     }
 
+    .iphone-copy-intro {
+      margin-bottom: 10px !important;
+      font-size: 18px !important;
+      line-height: 1.7 !important;
+    }
+
     .iphone-stage {
       position: relative;
       margin: 0 auto;
@@ -432,28 +439,79 @@
     .iphone-screen {
       padding: 32px 32px;
       width: 384px;
-      height: 704px;
+      height: 760px;
       overflow: hidden;
       position: relative;
     }
 
-    .iphone-screen::before {
-      content: "";
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 120px;
-      height: 26px;
-      border-radius: 999px;
-      background: #000;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      z-index: 2;
-      pointer-events: none;
+    .iphone-content {
+      padding-top: 30px;
     }
 
-    .iphone-content {
-      padding-top: 24px;
+    .iphone-dashboard-nav {
+      margin-bottom: 18px;
+      padding: 0 4px 12px;
+      border-bottom: 1px solid var(--stroke-soft);
+    }
+
+    .iphone-dashboard-nav-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .iphone-dashboard-title {
+      margin: 0;
+      font-size: 25px;
+      line-height: 1.1;
+      letter-spacing: -0.4px;
+    }
+
+    .iphone-dashboard-subtitle {
+      margin-top: 6px;
+      color: var(--text-dim);
+      font-size: 8px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .iphone-toolbar {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+
+    .iphone-toolbar-button {
+      position: relative;
+      width: 27px;
+      height: 27px;
+      min-height: 27px;
+      padding: 0;
+      border: 0;
+      color: var(--text);
+      font-size: 15px;
+    }
+
+    .iphone-toolbar-button:hover {
+      color: var(--body);
+    }
+
+    .iphone-approval-count {
+      position: absolute;
+      top: -4px;
+      right: -5px;
+      min-width: 13px;
+      height: 13px;
+      padding: 0 3px;
+      border-radius: 999px;
+      background: var(--body);
+      color: var(--bg);
+      font-size: 8px;
+      font-weight: 800;
+      line-height: 13px;
+      text-align: center;
     }
 
     .iphone-overlay {
@@ -467,6 +525,109 @@
       z-index: 2;
       pointer-events: none;
       user-select: none;
+    }
+
+    .notification-preview {
+      margin-top: 32px;
+    }
+
+    .notification-screen {
+      background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.1), transparent 28%),
+        linear-gradient(180deg, #050505 0%, #0d0d0d 38%, #020202 100%);
+    }
+
+    .notification-lockscreen {
+      height: 100%;
+      padding-top: 24px;
+      display: grid;
+      align-content: start;
+      gap: 16px;
+    }
+
+    .notification-clock {
+      text-align: center;
+      display: grid;
+      gap: 2px;
+    }
+
+    .notification-clock .time {
+      font-size: 52px;
+      font-weight: 700;
+      line-height: 0.95;
+      letter-spacing: -2px;
+      color: rgba(255, 255, 255, 0.92);
+    }
+
+    .notification-clock .date {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.5);
+      letter-spacing: 0.3px;
+    }
+
+    .notification-stack {
+      display: grid;
+      gap: 12px;
+      padding: 0 2px;
+    }
+
+    .notification-card {
+      padding: 12px 14px;
+      border-radius: 22px;
+      background: rgba(44, 44, 46, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.36);
+      backdrop-filter: blur(18px);
+      display: grid;
+      gap: 8px;
+    }
+
+    .notification-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .notification-app {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .notification-app img {
+      width: 18px;
+      height: 18px;
+      border-radius: 5px;
+      flex: 0 0 auto;
+    }
+
+    .notification-app span,
+    .notification-time {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.62);
+      letter-spacing: 0.2px;
+    }
+
+    .notification-time {
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+
+    .notification-title {
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.25;
+      color: rgba(255, 255, 255, 0.96);
+    }
+
+    .notification-body {
+      font-size: 14px;
+      line-height: 1.45;
+      color: rgba(255, 255, 255, 0.74);
     }
 
     .watch-preview {
@@ -517,6 +678,136 @@
       height: auto;
     }
 
+    .buddy-zone {
+      margin-top: 54px;
+    }
+
+    .buddy-layout {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+    }
+
+    .buddy-card,
+    .buddy-gallery {
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius-lg);
+      background: var(--panel-soft);
+      backdrop-filter: blur(7px);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .buddy-title {
+      margin: 0 0 12px;
+      color: var(--body);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      border-bottom: 1px solid var(--stroke-soft);
+      padding-bottom: 10px;
+      text-transform: uppercase;
+    }
+
+    .sprite-box {
+      padding: 12px;
+      text-align: center;
+      min-height: 130px;
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+      transition: border-color 0.25s ease, background 0.25s ease, transform 0.2s ease;
+    }
+
+    .sprite-box:hover {
+      border-color: var(--body);
+      background: rgba(202, 124, 94, 0.06);
+    }
+
+    .sprite-box pre {
+      margin: 0;
+      white-space: pre;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--body);
+      font-family: inherit;
+    }
+
+    .hearts {
+      position: absolute;
+      top: -8px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: #f778ba;
+      font-size: 16px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+
+    .hearts.show {
+      opacity: 1;
+      animation: buddy-float-up 2.5s ease-out forwards;
+    }
+
+    @keyframes buddy-float-up {
+      0% { transform: translateY(0); opacity: 1; }
+      100% { transform: translateY(-30px); opacity: 0; }
+    }
+
+    .sprite-name {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.3px;
+    }
+
+    .gallery-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .gallery-item {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--stroke-soft);
+      border-radius: 8px;
+      padding: 6px;
+      cursor: pointer;
+      text-align: center;
+      transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+      width: 128px;
+    }
+
+    .gallery-item:hover,
+    .gallery-item.active {
+      border-color: var(--buddy-item-color, var(--body));
+      background: rgba(255, 255, 255, 0.05);
+      transform: translateY(-1px);
+    }
+
+    .gallery-item pre {
+      font-size: 7px;
+      line-height: 1.1;
+      margin: 0 0 2px;
+      white-space: pre;
+      pointer-events: none;
+      color: var(--buddy-item-color, var(--text));
+    }
+
+    .gallery-item .name {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    .gallery-item.active .name {
+      color: var(--text);
+    }
+
     .feature-grid {
       margin-top: 18px;
       display: grid;
@@ -535,7 +826,7 @@
       align-content: center;
       justify-items: center;
     }
-    
+
     .feature-card-more {
       min-height: 92px;
       padding: 24px;
@@ -544,127 +835,128 @@
       align-content: center;
       justify-items: center;
     }
-      .feature-card {
-        cursor: pointer;
-        transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
-      }
 
-      .feature-card:hover {
-        transform: translateY(-2px);
-        border-color: rgba(202, 124, 94, 0.75);
-        background: rgba(202, 124, 94, 0.08);
-      }
+    .feature-card {
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
 
-      .feature-card:focus-visible {
-        outline: 2px solid var(--body);
-        outline-offset: 3px;
-      }
+    .feature-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(202, 124, 94, 0.75);
+      background: rgba(202, 124, 94, 0.08);
+    }
 
-      .agent-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 10;
-        display: grid;
-        place-items: center;
-        padding: 20px;
-        background: rgba(0, 0, 0, 0.72);
-        backdrop-filter: blur(5px);
-      }
+    .feature-card:focus-visible {
+      outline: 2px solid var(--body);
+      outline-offset: 3px;
+    }
 
-      .agent-modal[hidden] {
-        display: none;
-      }
+    .agent-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.72);
+      backdrop-filter: blur(5px);
+    }
 
-      .agent-modal-card {
-        width: min(520px, 100%);
-        max-height: min(680px, 100%);
-        overflow: auto;
-        padding: 24px;
-        border: 1px solid var(--stroke);
-        border-radius: var(--radius-xl);
-        background: #111;
-        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
-      }
+    .agent-modal[hidden] {
+      display: none;
+    }
 
-      .agent-modal-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-      }
+    .agent-modal-card {
+      width: min(520px, 100%);
+      max-height: min(680px, 100%);
+      overflow: auto;
+      padding: 24px;
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius-xl);
+      background: #111;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+    }
 
-      .agent-modal-title {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        min-width: 0;
-      }
+    .agent-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
 
-      .agent-modal-title .feature-icon {
-        flex: 0 0 auto;
-        width: 48px;
-        height: 48px;
-        font-size: 42px;
-      }
+    .agent-modal-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
 
-      .agent-modal-title h2 {
-        margin: 0;
-        font-size: 20px;
-        overflow-wrap: anywhere;
-      }
+    .agent-modal-title .feature-icon {
+      flex: 0 0 auto;
+      width: 48px;
+      height: 48px;
+      font-size: 42px;
+    }
 
-      .modal-close {
-        min-height: 34px;
-        padding: 4px 10px;
-        color: var(--text-dim);
-        font-size: 20px;
-        line-height: 1;
-      }
+    .agent-modal-title h2 {
+      margin: 0;
+      font-size: 20px;
+      overflow-wrap: anywhere;
+    }
 
-      .command-tabs {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        margin-top: 24px;
-      }
+    .modal-close {
+      min-height: 34px;
+      padding: 4px 10px;
+      color: var(--text-dim);
+      font-size: 20px;
+      line-height: 1;
+    }
 
-      .command-tab.active {
-        color: var(--body);
-        border-color: rgba(202, 124, 94, 0.75);
-        background: rgba(202, 124, 94, 0.1);
-      }
+    .command-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 24px;
+    }
 
-      .command-list {
-        display: grid;
-        gap: 10px;
-        margin-top: 16px;
-      }
+    .command-tab.active {
+      color: var(--body);
+      border-color: rgba(202, 124, 94, 0.75);
+      background: rgba(202, 124, 94, 0.1);
+    }
 
-      .command-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 8px;
-        padding: 10px;
-        border: 1px solid var(--stroke-soft);
-        border-radius: var(--radius-md);
-        background: rgba(0, 0, 0, 0.34);
-      }
+    .command-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
 
-      .command-row code {
-        color: var(--text);
-        font-family: inherit;
-        font-size: 13px;
-        overflow-wrap: anywhere;
-        white-space: pre-wrap;
-      }
+    .command-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--stroke-soft);
+      border-radius: var(--radius-md);
+      background: rgba(0, 0, 0, 0.34);
+    }
 
-      .copy-command {
-        min-height: 32px;
-        padding: 5px 9px;
-        color: var(--body);
-        font-size: 11px;
-      }
+    .command-row code {
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+
+    .copy-command {
+      min-height: 32px;
+      padding: 5px 9px;
+      color: var(--body);
+      font-size: 11px;
+    }
 
     .site-footer {
       margin-top: 64px;
@@ -713,6 +1005,10 @@
       height: auto;
       object-fit: contain;
       display: block;
+    }
+
+    .feature-icon-monochrome {
+      filter: brightness(0) invert(1);
     }
 
     .feature-icon svg {
@@ -786,7 +1082,7 @@
 
     .watch-stage {
       position: relative;
-      margin: 0 auto;
+      margin: auto;
       display: grid;
       justify-items: center;
       height: min(400px, 100%);
@@ -807,6 +1103,13 @@
       left: 50%;
       top: 50%;
       transform: translate(-50%, -50%);
+      z-index: 2;
+    }
+
+    .watch-stage-buddy {
+      width: min(240px, 100%);
+      margin: 10px auto 0;
+      position: relative;
       z-index: 2;
     }
 
@@ -850,9 +1153,17 @@
       display: inline-block;
     }
 
-    .terminal-dots span:nth-child(1) { background: #ff5f57; }
-    .terminal-dots span:nth-child(2) { background: #febc2e; }
-    .terminal-dots span:nth-child(3) { background: #28c840; }
+    .terminal-dots span:nth-child(1) {
+      background: #ff5f57;
+    }
+
+    .terminal-dots span:nth-child(2) {
+      background: #febc2e;
+    }
+
+    .terminal-dots span:nth-child(3) {
+      background: #28c840;
+    }
 
     .terminal-content {
       margin: 0;
@@ -921,18 +1232,96 @@
         opacity: 0;
         transform: translateY(5px);
       }
+
       to {
         opacity: 1;
         transform: translateY(0);
       }
     }
 
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .dashboard-grid > div {
+      min-width: 0;
+    }
+
+    .iphone-tool-calls-title {
+      margin-top: 0;
+      font-size: 14px;
+    }
+
+    .iphone-content .tool-card {
+      padding: 8px;
+      gap: 5px;
+      border-radius: 9px;
+      box-shadow: none;
+    }
+
+    .iphone-content .tool-card strong {
+      font-size: 11px !important;
+    }
+
+    .iphone-content .tool-card .muted {
+      font-size: 9px !important;
+    }
+
+    .iphone-content .tool-card .tag {
+      padding: 2px 5px;
+      font-size: 8px;
+    }
+
+    .iphone-content .tool-card .cmd {
+      padding: 6px;
+      font-size: 9px;
+      line-height: 1.35;
+    }
+
+    .iphone-content .tool-card > .row > div {
+      gap: 5px !important;
+    }
+
+    .iphone-content .stack {
+      gap: 8px;
+    }
+
+    .iphone-content .section-title {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+
+    .iphone-content .approval-card {
+      padding: 8px;
+      gap: 6px;
+      box-shadow: none;
+    }
+
+    .iphone-content .approval-card .approval-tool {
+      font-size: 11px;
+    }
+
+    .iphone-content .approval-card .approval-hint {
+      font-size: 9px;
+    }
+
+    .iphone-content .approval-card button {
+      min-height: 27px;
+      padding: 4px 6px;
+      font-size: 9px;
+    }
+
+    /* Keep the iPhone preview close to the native DashboardView hierarchy. */
+    .iphone-content .dashboard-grid {
+      grid-template-columns: 1fr;
+    }
+
     @media (min-width: 940px) {
-      .dashboard-grid {
-        display: table-columns;
-        grid-template-columns: 1.05fr 1fr;
-        gap: 16px;
-        align-items: start;
+
+      .buddy-layout {
+        grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
       }
 
       .watch-preview {
@@ -997,6 +1386,7 @@
     }
   </style>
 </head>
+
 <body>
   <div class="app">
     <nav class="site-nav" aria-label="主导航">
@@ -1006,8 +1396,12 @@
       </a>
       <div class="site-nav-actions">
         <button id="language-toggle" class="site-nav-button" type="button" aria-label="切换语言">English</button>
-        <a class="site-nav-button github-button" href="https://github.com/ganyuchuan/alimbo" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 上收藏 Agent Limbo">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.74.08-.74 1.2.08 1.83 1.23 1.83 1.23 1.07 1.83 2.8 1.3 3.48.99.11-.77.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.23-3.22-.12-.3-.53-1.52.12-3.17 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6.01 0c2.29-1.55 3.29-1.23 3.29-1.23.65 1.65.24 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.6-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z" /></svg>
+        <a class="site-nav-button github-button" href="https://github.com/ganyuchuan/alimbo" target="_blank"
+          rel="noopener noreferrer" aria-label="在 GitHub 上收藏 Agent Limbo">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.74.08-.74 1.2.08 1.83 1.23 1.83 1.23 1.07 1.83 2.8 1.3 3.48.99.11-.77.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.23-3.22-.12-.3-.53-1.52.12-3.17 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6.01 0c2.29-1.55 3.29-1.23 3.29-1.23.65 1.65.24 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.6-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z" />
+          </svg>
           <span data-nav-github>Github Star</span>
         </a>
         <a class="site-nav-button btn-accent" href="/auth/login">登录</a>
@@ -1016,7 +1410,7 @@
 
     <header class="page-header" aria-label="页面标题">
       <h1>你手腕上的 AI 审批官</h1>
-      <p>把本地 Agent 的「关键操作」审批和「运行状态」提醒搬到 iPhone 和 Apple Watch 等移动设备上，让你离开电脑也能随时随地掌控AI 编程任务进展。</p>
+      <p>把本地 Agent 的「关键操作」审批和「运行状态」提醒搬到 Apple Watch 和 iPhone 等移动设备上，让你离开电脑也能随时随地掌控 AI 编程任务进展。</p>
     </header>
 
     <section id="screen-dashboard" class="screen active" aria-label="Dashboard 页面">
@@ -1036,20 +1430,20 @@
           <div class="watch-stage">
             <img class="watch-stage-image" src="./aw-ultra-3.png" alt="Apple Watch Ultra 3" />
             <div class="watch-stage-center">
-                <div class="watch-screen">
-                  <article class="watch-approve-card">
-                    <div class="row">
-                      <span class="muted">1/1</span>
-                      <strong style="font-size: 13px; color: var(--body);">删除 notepad...</strong>
-                    </div>
-                    <div class="approval-tool">Bash</div>
-                    <div class="approval-hint">rm /Users/admin/Desktop/notepad.txt</div>
-                    <div class="actions-2">
-                      <button class="btn-danger" type="button">No</button>
-                      <button class="btn-accent" type="button">Yes</button>
-                    </div>
-                  </article>
-                </div>
+              <div class="watch-screen">
+                <article class="watch-approve-card">
+                  <div class="row">
+                    <span class="muted">1/1</span>
+                    <strong style="font-size: 13px; color: var(--body);">删除 notepad...</strong>
+                  </div>
+                  <div class="approval-tool">Bash</div>
+                  <div class="approval-hint">rm /Users/admin/Desktop/notepad.txt</div>
+                  <div class="actions-2">
+                    <button class="btn-danger" type="button">No</button>
+                    <button class="btn-accent" type="button">Yes</button>
+                  </div>
+                </article>
+              </div>
             </div>
           </div>
         </div>
@@ -1058,24 +1452,60 @@
       <section class="feature-zone" aria-label="能力展示区">
         <h2>「两步」将 Agent 装进你的手表</h2>
         <p>1. 前往 App Store 下载安装 App</p>
-        <a class="app-store-button" href="https://apps.apple.com/cn/search?term=AI%20%E5%AE%A1%E5%88%A4%E5%AE%98" target="_blank" rel="noopener noreferrer" aria-label="在 App Store 搜索并下载 AI 审判官">
+        <a class="app-store-button" href="https://apps.apple.com/cn/search?term=AI%20%E5%AE%A1%E5%88%A4%E5%AE%98"
+          target="_blank" rel="noopener noreferrer" aria-label="在 App Store 搜索并下载 AI 审判官">
           <img src="./Download_on_the_App_Store_Badge_CNSC_RGB_wht_092917.svg" alt="在 App Store 下载" />
         </a>
         <p>2. 选择你的 Agent 并运行指令与 iOS/watchOS App 配对</p>
         <div class="feature-grid">
-          <article class="feature-card" tabindex="0" role="button" data-agent="trae"><span class="feature-icon"><svg viewBox="0 0 59 42" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="cardIcon-iRitjS"><path d="M58.1575 8.30769V0H0.00367956H0V33.2344H8.30769V41.5385H49.8498H58.1575V33.2308V8.30402V8.30769ZM49.8498 33.2344H8.30769V8.30769H49.8498V33.2344Z" fill="currentColor"></path><path d="M23.2062 14.7695L17.332 20.6437L23.2062 26.5179L29.0804 20.6437L23.2062 14.7695Z" fill="currentColor"></path><path d="M39.8215 14.7664L33.9473 20.6406L39.8215 26.5148L45.6957 20.6406Z" fill="currentColor"></path></svg></span><div class="feature-title">TRAE IDE</div></article>
-          <article class="feature-card" tabindex="0" role="button" data-agent="claude"><span class="feature-icon"><img src="https://www.agentapprove.com/claude-logo.svg" alt="Claude logo" /></span><div class="feature-title">Claude Code</div></article>
-          <article class="feature-card" tabindex="0" role="button" data-agent="codex"><span class="feature-icon"><img src="https://www.agentapprove.com/_next/image?url=%2Fcodex-logo.png&w=96&q=75" alt="Codex logo" /></span><div class="feature-title">Codex</div></article>
-          <article class="feature-card" tabindex="0" role="button" data-agent="copilot"><span class="feature-icon"><img src="https://www.agentapprove.com/github-logo-dark.svg" alt="Copilot CLI logo" /></span><div class="feature-title">Copilot CLI</div></article>
-          <article class="feature-card" tabindex="0" role="button" data-agent="openclaw"><span class="feature-icon">🦞</span><div class="feature-title">OpenClaw</div></article>
-          <article class="feature-card" tabindex="0" role="button" data-agent="hermes"><span class="feature-icon"><img src="https://www.agentapprove.com/_next/image?url=%2Fhermesagent-dark.png&w=96&q=75" alt="Hermes logo" /></span><div class="feature-title">Hermes</div></article>
-          <article class="feature-card" tabindex="0" role="button" data-agent="cursor"><span class="feature-icon"><img src="https://www.agentapprove.com/cursor-logo-dark.svg" alt="Cursor logo" /></span><div class="feature-title">Cursor</div></article>
-          <article class="feature-card" tabindex="0" role="button" data-agent="opencode"><span class="feature-icon"><img src="https://www.agentapprove.com/opencode-logo-dark.svg" alt="OpenCode logo" /></span><div class="feature-title">OpenCode</div></article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="claude"><span class="feature-icon"><img
+                src="./claudecode-color.svg" alt="Claude Code" /></span>
+            <div class="feature-title">Claude Code</div>
+          </article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="codex"><span class="feature-icon"><img
+                src="./codex-color.svg" alt="Codex" /></span>
+            <div class="feature-title">Codex</div>
+          </article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="copilot"><span class="feature-icon"><img
+                src="./githubcopilot.svg" alt="Github Copilot" /></span>
+            <div class="feature-title">Github Copilot</div>
+          </article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="openclaw"><span
+              class="feature-icon"><img
+                src="./openclaw-color.svg" alt="OpenClaw" /></span>
+            <div class="feature-title">OpenClaw</div>
+          </article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="hermes"><span class="feature-icon"><img
+                class="feature-icon-monochrome" src="./hermesagent.svg"
+                alt="Hermes Agent" /></span>
+            <div class="feature-title">Hermes Agent</div>
+          </article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="opencode"><span class="feature-icon"><img
+                class="feature-icon-monochrome" src="./opencode.svg" alt="OpenCode" /></span>
+            <div class="feature-title">OpenCode</div>
+          </article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="cursor"><span class="feature-icon"><img
+                class="feature-icon-monochrome" src="./cursor.svg" alt="Cursor" /></span>
+            <div class="feature-title">Cursor</div>
+          </article>
+          <article class="feature-card" tabindex="0" role="button" data-agent="trae"><span class="feature-icon"><svg
+                viewBox="0 0 59 42" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"
+                class="cardIcon-iRitjS">
+                <path
+                  d="M58.1575 8.30769V0H0.00367956H0V33.2344H8.30769V41.5385H49.8498H58.1575V33.2308V8.30402V8.30769ZM49.8498 33.2344H8.30769V8.30769H49.8498V33.2344Z"
+                  fill="currentColor"></path>
+                <path d="M23.2062 14.7695L17.332 20.6437L23.2062 26.5179L29.0804 20.6437L23.2062 14.7695Z"
+                  fill="currentColor"></path>
+                <path d="M39.8215 14.7664L33.9473 20.6406L39.8215 26.5148L45.6957 20.6406Z" fill="currentColor"></path>
+              </svg></span>
+            <div class="feature-title">TRAE IDE</div>
+          </article>
           <article class="feature-card-more"><span class="feature-icon">•••</span></article>
         </div>
       </section>
 
-      <div id="agent-modal" class="agent-modal" hidden role="dialog" aria-modal="true" aria-labelledby="agent-modal-title">
+      <div id="agent-modal" class="agent-modal" hidden role="dialog" aria-modal="true"
+        aria-labelledby="agent-modal-title">
         <div class="agent-modal-card">
           <div class="agent-modal-header">
             <div class="agent-modal-title">
@@ -1085,15 +1515,17 @@
             <button id="agent-modal-close" class="modal-close" type="button" aria-label="关闭">×</button>
           </div>
           <div class="command-tabs" role="tablist" aria-label="安装方式">
-            <button class="command-tab active" type="button" role="tab" aria-selected="true" data-package-manager="npx">npx</button>
-            <button class="command-tab" type="button" role="tab" aria-selected="false" data-package-manager="npm">npm</button>
+            <button class="command-tab active" type="button" role="tab" aria-selected="true"
+              data-package-manager="npx">npx</button>
+            <button class="command-tab" type="button" role="tab" aria-selected="false"
+              data-package-manager="npm">npm</button>
           </div>
           <div id="command-list" class="command-list" aria-live="polite"></div>
         </div>
       </div>
 
       <section class="feature-zone" aria-label="副标题区">
-        <h2>如何快速使用</h2>
+        <h2>在控制台掌握 Agent 工作状态</h2>
       </section>
 
       <div class="iphone-preview" aria-label="iPhone Dashboard 预览">
@@ -1101,27 +1533,25 @@
           <div class="iphone-stage">
             <div class="iphone-screen">
               <div class="iphone-content">
-                <header class="nav">
-                  <div class="nav-top">
+                <header class="iphone-dashboard-nav">
+                  <div class="iphone-dashboard-nav-top">
                     <div class="title-block">
-                      <h1>Claude Code</h1>
-                      <div class="subtitle">/Users/demo/Desktop/tmp/alimbo-v0.2.8</div>
+                      <h1 class="iphone-dashboard-title">控制台</h1>
+                      <div class="iphone-dashboard-subtitle">你的工作目录</div>
                     </div>
-                    <div class="presence">
-                      <span class="dot" aria-hidden="true"></span>
-                      <span>在线中</span>
+                    <div class="iphone-toolbar" aria-label="Dashboard 工具栏">
+                      <button class="iphone-toolbar-button" type="button" aria-label="查看配对状态"><img
+                src="./claudecode-color.svg" alt="Claude Code" /></button>
+                      <button class="iphone-toolbar-button" type="button" aria-label="查看审批" title="查看审批">
+                        1
+                      </button>
                     </div>
                   </div>
                 </header>
 
                 <div class="dashboard-grid">
                   <div>
-                    <div class="section-title">申请执行</div>
-                    <div id="approval-list" class="stack"></div>
-                  </div>
-
-                  <div>
-                    <div class="section-title">审批记录</div>
+                    <div class="section-title iphone-tool-calls-title">工具调用</div>
                     <div id="tool-call-list" class="stack"></div>
                   </div>
                 </div>
@@ -1131,47 +1561,99 @@
           </div>
 
           <aside class="iphone-copy" aria-label="iPhone 文案区">
-            <h2>1. 下载 iOS App</h2>
-            <p>打开你的 iPhone 或 Apple Watch 的 App Store，搜索并下载 「AI 审判官」。</p>
-            <h2>2. 安装与配对</h2>
-            <p>打开 App 进行登录，登录完成后获得1个配对码，在你的电脑通过 npm 安装网关，输入该配对码完成手表与电脑 Agent 的配对。</p>
-            <h2>3. 离开电脑，开始审批</h2>
-            <p>完成配对后，你可以打开常用的 Agent 工具开始工作，即使离开电脑也能在 iPhone 或 Apple Watch 上进行审批操作。</p>
+            <h2>1. 工作目录</h2>
+            <p>查看当前 Agent 正在操作的本地项目目录，确认它正在正确的工作空间中执行任务。</p>
+            <h2>2. 当前状态</h2>
+            <p>实时了解 Agent 是否在线、当前使用的 Agent 及版本，以及它与智能设备的配对状态。</p>
+            <h2>3. 待审批队列</h2>
+            <p>当 Agent 需要执行重要操作时，审批请求会进入队列。你可以在 iPhone 或 Apple Watch 上查看详情并选择允许或拒绝。</p>
+            <h2>4. 工具调用记录</h2>
+            <p>按时间查看 Agent 的工具调用记录，包括工具名称、执行时间、操作说明、命令内容和最终审批结果。</p>
           </aside>
         </div>
       </div>
 
-      <section class="feature-zone" aria-label="副标题区">
-        <h2>更多功能</h2>
-        <p></p>
-      </section>
-
-      <section class="iphone-followup" aria-label="iPhone 扩展信息区">
-        <div class="iphone-followup-grid">
-          <article class="iphone-followup-card">
-            <span class="iphone-followup-icon">🐈‍⬛</span>
-            <div class="iphone-followup-title">电子宠物</div>
-            <p class="iphone-followup-desc">为你的 Apple Watch 带来18只独特的像素小伙伴，它们会随着你的 AI 工作状态喜怒哀乐、一起打拼。简单介绍下：</p>
-            <p class="iphone-followup-desc">🌵 仙人掌 Cactus 明亮绿色的刺球，慵懒时会微微下垂，偶尔低声哼唱。</p>
-            <p class="iphone-followup-desc">🐱 猫咪 Cat 同款棕色的懒散喵星人。</p>
-            <p class="iphone-followup-desc">👻 幽灵 Ghost 纯白半透明的小鬼，会悄悄隐身、穿墙、再微笑着出现。</p>
-            <p class="iphone-followup-desc">...</p>
-          </article>
-          <article class="iphone-followup-card">
-            <span class="iphone-followup-icon">💬</span>
-            <div class="iphone-followup-title">在飞书上对话</div>
-            <p class="iphone-followup-desc">你也可以在飞书 App 上与 Agent 聊天，给它发送指令，或审批它的操作。</p>
-            <p class="iphone-followup-desc">聊天同时支持「文字」、「图片」和「文件」三类消息。</p>
-            <p class="iphone-followup-desc">支持 8+ 命令，你可以在飞书里远程调用常见的 SKILL、MCP、Git 等工具。</p>
-            <p class="iphone-followup-desc">当 Agent 需要审批时，你也可以在飞书 App 上收到一张交互卡片去 Yes or No。</p>
-          </article>
-          <article class="iphone-followup-card">
-            <span class="iphone-followup-icon">📢</span>
-            <div class="iphone-followup-title">Push 通知</div>
-            <p class="iphone-followup-desc">即使关掉 App 退到后台也不会让你错过 Agent 的任何审批请求，在它完成任务后也会及时通知到你！</p>
+      <section class="feature-zone buddy-zone" aria-label="电子宠物展示区">
+        <h2>将 Agent 变成一只可爱的电子宠物</h2>
+        <p>内置18只个性独特的 ASCII 电子宠物，随机分配到你的 Apple Watch。当你积极回应 Agent，它们会变得高兴，当你让 Agent 工作它们会变得忙碌，当你不再理会它们会去睡觉...</p>
+        <div class="buddy-layout">
+          <div class="watch-stage">
+            <img class="watch-stage-image" src="./aw-ultra-3.png" alt="Apple Watch Ultra 3" />
+            <div class="watch-stage-center">
+              <div class="watch-stage-buddy">
+                <div class="sprite-box" id="spriteBox" onclick="petCompanion()" aria-label="电子宠物互动区" role="button" tabindex="0">
+                  <div class="hearts" id="hearts">♥ ♥ ♥</div>
+                  <pre id="spriteDisplay"></pre>
+                </div>
+                <div class="sprite-name">
+                  <span id="speciesName"></span>
+                </div>
+                </div>
+            </div>
+          </div>
+          <article class="buddy-gallery">
+            <h3 class="buddy-title">看看有没有你喜爱的小伙伴？</h3>
+            <div class="gallery-grid" id="galleryGrid"></div>
           </article>
         </div>
       </section>
+
+      <section class="feature-zone" aria-label="副标题区">
+        <h2>不用盯着屏幕也能收到 Agent 审批和工作汇报</h2>
+      </section>
+
+      <div class="iphone-preview notification-preview" aria-label="iPhone 推送通知预览">
+        <div class="iphone-preview-layout">
+          <aside class="iphone-copy" aria-label="iPhone 推送通知文案区">
+            <h2>可操作的审批通知</h2>
+            <p>当 Agent 正在等待关键审批时，你会第一时间收到提醒，立刻知道哪个工具、哪条命令卡住了进度，然后长按通知条即可放行让它继续操作。</p>
+            <h2>任务完成通知</h2>
+            <p>任务结束、Agent 下线或阶段性完成时，系统会给出结果通知，方便你及时决定是否重新安排下一段工作。</p>
+            <h2>如何打开通知</h2>
+            <p>首次安装后允许推送权限；如果此前关掉过，也可以在 iPhone 的“设置 - 通知 - Agent Limbo”里重新开启锁屏、横幅和声音提醒。</p>
+            <h2>如何关闭通知</h2>
+            <p>如果你只想在特定时段保持安静，可以在系统通知设置里关闭横幅或锁屏提醒，也可以直接彻底关闭该应用通知。</p>
+          </aside>
+
+          <div class="iphone-stage" aria-label="iPhone 锁屏通知预览">
+            <div class="iphone-screen notification-screen">
+              <div class="notification-lockscreen">
+                <div class="notification-clock" aria-hidden="true">
+                  <div class="time">9:41</div>
+                  <div class="date">星期五 8月22日</div>
+                </div>
+
+                <div class="notification-stack">
+                  <article class="notification-card">
+                    <div class="notification-meta">
+                      <div class="notification-app">
+                        <img src="./logo_128.png" alt="Agent Limbo" />
+                        <span>Agent Limbo</span>
+                      </div>
+                      <span class="notification-time">现在</span>
+                    </div>
+                    <div class="notification-title">Claude Code 已下线</div>
+                    <div class="notification-body">打开终端输入指令以重新安排它的工作</div>
+                  </article>
+
+                  <article class="notification-card">
+                    <div class="notification-meta">
+                      <div class="notification-app">
+                        <img src="./logo_128.png" alt="Agent Limbo" />
+                        <span>Agent Limbo</span>
+                      </div>
+                      <span class="notification-time">1分钟前</span>
+                    </div>
+                    <div class="notification-title">Claude Code 正在等待你的审批</div>
+                    <div class="notification-body">快点让它继续工作：Bash - 删除桌面的 notepad.txt</div>
+                  </article>
+                </div>
+              </div>
+            </div>
+            <img class="iphone-overlay" src="./iphone-17.png" alt="iPhone 17 frame" />
+          </div>
+        </div>
+      </div>
     </section>
 
     <footer class="site-footer" aria-label="页脚">
@@ -1203,29 +1685,30 @@
         tool: "Bash",
         time: "10:28:20",
         decision: "waiting",
-        hint: "删除 test.txt 文件",
-        command: "rm /Users/demo/Desktop/tmp/alimbo-v0.2.8/test.txt"
+        hint: "删除桌面的 notepad.txt 文件",
+        command: "rm /Users/admin/Desktop/notepad.txt"
       },
       {
         id: "tool-1",
         tool: "Git",
         time: "10:23:10",
         decision: "allow",
-        hint: "推送到 feat/watch-approval-retry",
-        command: "git push origin feat/watch-approval-retry"
+        hint: "更改 index.html",
+        command: "{\"description\" : \"Update /User/admin/HelloWorld/src/index.html\"}"
       },
       {
         id: "tool-3",
         tool: "Bash",
         time: "10:18:40",
         decision: "deny",
-        hint: "清除缓存中的批准记录",
-        command: "rm -rf ~/Library/Caches/Agent Limbo/approvals"
+        hint: "提交最近改动到 Git 并推送到远端 origin",
+        command: "git add . && git commit -m 'fix: guard empty shards in prepare_data' && git push origin feature/data-prep'"
       }
     ];
 
     function renderApprovals() {
       const container = document.getElementById("approval-list");
+      if (!container) return;
       container.innerHTML = "";
 
       fakeApprovals.forEach((item, index) => {
@@ -1299,7 +1782,7 @@
       }
     });
 
-    const claudeTxtContent =`
+    const claudeTxtContent = `
 ╭─── Claude Code v2.1.207 ─────────────────────────────────────────────────────╮
 │                                             │ Tips for getting started       │
 │                Welcome back!                │ Run /init to create a CLAUDE.… │
@@ -1430,6 +1913,144 @@
     }
     document.getElementById("terminal-content").innerHTML = styledClaudeTxtContent;
 
+    const BUDDY_SPECIES = ["duck", "goose", "blob", "cat", "dragon", "octopus", "owl", "penguin", "turtle", "snail", "ghost", "axolotl", "capybara", "cactus", "robot", "rabbit", "mushroom", "chonk"];
+    const BUDDY_COLOR565 = {
+      goose: 0xFFFF,
+      rabbit: 0xFFFF,
+      ghost: 0xFFFF,
+      turtle: 0x07E0,
+      cactus: 0x07E0,
+      blob: 0x07F0,
+      penguin: 0x041F,
+      octopus: 0xA01F,
+      owl: 0x8430,
+      capybara: 0xC2A6,
+      cat: 0xC2A6,
+      robot: 0xC618,
+      snail: 0xD8FE,
+      dragon: 0xF800,
+      mushroom: 0xF810,
+      axolotl: 0xFB1E,
+      chonk: 0xFD20,
+      duck: 0xFFE0
+    };
+    const BUDDY_BODIES = {
+      duck: [[" ", "    __      ", "  <(· )___ ", " (  ._>    ", "   `--´     "], [" ", "    __      ", "  <(· )___ ", " (  ._>    ", "   `--´~    "], [" ", "    __      ", " <(· )___ ", " (  .__>   ", "   `--´     "]],
+      goose: [[" ", "    (·>    ", "     ||     ", "   _(__)_   ", "    ^^^^    "], [" ", "    (·>    ", "     ||     ", "   _(__)_   ", "    ^^^^    "], [" ", "    (·>>   ", "     ||     ", "   _(__)_   ", "    ^^^^    "]],
+      blob: [[" ", "   .----.   ", "  ( ·  · ) ", "  (      )  ", "   `----´   "], [" ", "  .------.  ", "  ( ·  · ) ", "  (      )  ", "  `------´  "], [" ", "    .--.    ", "   (· ·)    ", "   (    )   ", "    `--´    "]],
+      cat: [[" ", "   /\\_/\\   ", "  ( ·   ·) ", "  (  ω  )   ", "  (\")_(\")   "], [" ", "   /\\_/\\   ", "  ( ·   ·) ", "  (  ω  )   ", "  (\")_(\")~  "], [" ", "   /\\-/\\   ", "  ( ·   ·) ", "  (  ω  )   ", "  (\")_(\")   "]],
+      dragon: [[" ", "  /^\\  /^\\ ", " <  ·  ·  > ", " (   ~~   ) ", "  `-vvvv-´  "]],
+      octopus: [[" ", "   .----.   ", "  ( ·  · ) ", "  (______) ", "  /\\/\\/\\  "]],
+      owl: [[" ", "   /\\  /\\   ", "  ((·)(·)) ", "  (  ><  )  ", "   `----´   "]],
+      penguin: [[" ", "   .---.    ", "  (·>·)    ", " /(   )\\   ", "   `---´    "]],
+      turtle: [[" ", "   _,--._ ", "  ( ·  · ) ", " /[______]\\ ", "  ``    ``  "]],
+      snail: [[" ", " ·    .--. ", "  \\  ( @ ) ", "   \\_`--´  ", " ~~~~~~~    "]],
+      ghost: [[" ", "   .----.   ", "  / ·  · \\ ", "  |      |  ", "  ~`~``~`~  "]],
+      axolotl: [[" ", "}~(______)~{", "}~(· .. ·)~{", "  ( .--. )  ", "  (_/  \\_)  "]],
+      capybara: [[" ", "  n______n  ", " ( ·    · ) ", "  (  oo  )  ", "  `------´  "]],
+      cactus: [[" ", "  n ____ n  ", " | |·  ·| | ", " |_|    |_| ", "   |    |   "]],
+      robot: [[" ", "   .[||].   ", "  [ ·  · ] ", "  [ ==== ]  ", "  `------´  "]],
+      rabbit: [[" ", "   (\\__/)   ", "  ( ·  · ) ", " =(  ..  )= ", "  (\")__(\")  "]],
+      mushroom: [[" ", " .-o-OO-o-. ", "(__________)", "   |·  ·|   ", "   |____|   "]],
+      chonk: [[" ", "   /\\  /\\   ", "  ( ·  · ) ", "  (  ..  )  ", "  `------´  "]]
+    };
+
+    let buddyState = { species: "capybara" };
+    let buddyTick = 0;
+    let buddyPetting = false;
+    let buddyHeartTimer = null;
+    const HEART_FRAMES = ["♥ ♥ ♥", "♥ ✦ ♥", "♥ ♥ ♥", "✦ ♥ ✦"];
+
+    function rgb565ToHex(value) {
+      const r5 = (value >> 11) & 0x1F;
+      const g6 = (value >> 5) & 0x3F;
+      const b5 = value & 0x1F;
+      const r8 = Math.round((r5 / 31) * 255);
+      const g8 = Math.round((g6 / 63) * 255);
+      const b8 = Math.round((b5 / 31) * 255);
+      const toHex = (channel) => channel.toString(16).padStart(2, "0");
+      return `#${toHex(r8)}${toHex(g8)}${toHex(b8)}`;
+    }
+
+    function speciesColor(species) {
+      const rgb565 = BUDDY_COLOR565[species];
+      if (typeof rgb565 !== "number") return "var(--body)";
+      return rgb565ToHex(rgb565);
+    }
+
+    function renderBuddySprite(species, frame = 0) {
+      const frames = BUDDY_BODIES[species] || BUDDY_BODIES.capybara;
+      return frames[frame % frames.length].join("\n");
+    }
+
+    function updateBuddySprite() {
+      const frame = buddyPetting ? buddyTick % 3 : [0, 0, 0, 0, 1, 0, 0, 0, 2, 0][buddyTick % 10];
+      const el = document.getElementById("spriteDisplay");
+      if (!el) return;
+      el.textContent = renderBuddySprite(buddyState.species, frame);
+      el.style.color = speciesColor(buddyState.species);
+      const nameEl = document.getElementById("speciesName");
+      if (nameEl) {
+        nameEl.textContent = buddyState.species;
+        nameEl.style.color = speciesColor(buddyState.species);
+      }
+      document.querySelectorAll(".gallery-item").forEach((item) => {
+        item.classList.toggle("active", item.dataset.species === buddyState.species);
+      });
+      buddyTick += 1;
+    }
+
+    function petCompanion() {
+      const hearts = document.getElementById("hearts");
+      if (!hearts) return;
+      buddyPetting = true;
+      hearts.className = "hearts show";
+      let idx = 0;
+      hearts.textContent = HEART_FRAMES[idx];
+      clearTimeout(buddyHeartTimer);
+      const heartAnim = setInterval(() => {
+        idx += 1;
+        if (idx >= HEART_FRAMES.length) {
+          clearInterval(heartAnim);
+          hearts.className = "hearts";
+          buddyPetting = false;
+          return;
+        }
+        hearts.textContent = HEART_FRAMES[idx];
+      }, 480);
+      buddyHeartTimer = window.setTimeout(() => { buddyPetting = false; }, 2500);
+    }
+
+    function initBuddyGallery() {
+      const grid = document.getElementById("galleryGrid");
+      if (!grid) return;
+      grid.innerHTML = "";
+      BUDDY_SPECIES.forEach((species) => {
+        const item = document.createElement("div");
+        item.className = "gallery-item";
+        item.dataset.species = species;
+        item.style.setProperty("--buddy-item-color", speciesColor(species));
+        item.innerHTML = `<pre>${renderBuddySprite(species, 0)}</pre><div class="name">${species}</div>`;
+        item.addEventListener("click", () => {
+          buddyState.species = species;
+          updateBuddySprite();
+        });
+        grid.appendChild(item);
+      });
+      updateBuddySprite();
+      window.setInterval(updateBuddySprite, 500);
+    }
+
+    const spriteBox = document.getElementById("spriteBox");
+    if (spriteBox) {
+      spriteBox.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          petCompanion();
+        }
+      });
+    }
+
     const agentModal = document.getElementById("agent-modal");
     const agentModalIcon = document.getElementById("agent-modal-icon");
     const agentModalTitle = document.getElementById("agent-modal-title");
@@ -1525,6 +2146,8 @@
 
     renderApprovals();
     renderToolCalls();
+    initBuddyGallery();
   </script>
 </body>
+
 </html>

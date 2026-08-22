@@ -1,5 +1,39 @@
 # Development Log
 
+## 2026-08-22
+
+### 54) 首页静态展示升级：通知预览区 + 电子宠物区重构 + 图标资源补齐
+
+变更目标：
+- 强化首页演示能力，在现有 iPhone 控制台预览之外，新增“iPhone 熄屏通知”展示区。
+- 将电子宠物展示区与 Apple Watch 视觉结构对齐，并统一到当前站点 UI 风格。
+- 完善首页 Agent 图标静态资源，修复本地缺失并统一部分图标显示风格。
+
+主要改动：
+- `src/cloud/static/index.html`
+  - 新增 iPhone 推送通知展示区（复用 iPhone 机身框架）：
+    - 左侧文案：可操作审批通知、任务完成通知、开启通知方式、关闭通知方式。
+    - 右侧锁屏 UI：两条系统通知卡片（应用图标、标题、内容、时间）。
+  - 电子宠物区重构：
+    - 宠物展示与 watch 视觉区对齐，布局调整为贴近 watch-stage。
+    - buddy 区样式改造为站点统一视觉（边框、阴影、文字、背景语义变量复用）。
+    - 宠物颜色按 RGB565 映射并在精灵与图鉴中联动展示。
+  - Agent 卡片图标调整：`Hermes Agent` 图标改为纯白显示风格。
+- 新增静态图标资源文件（供首页 Agent 卡片使用）：
+  - `src/cloud/static/claudecode-color.svg`
+  - `src/cloud/static/codex-color.svg`
+  - `src/cloud/static/cursor.svg`
+  - `src/cloud/static/githubcopilot.svg`
+  - `src/cloud/static/hermesagent.svg`
+  - `src/cloud/static/openclaw-color.svg`
+  - `src/cloud/static/opencode.svg`
+
+验证记录：
+- `index.html` 语法诊断：无错误
+
+兼容性说明：
+- 本次变更为静态页面与资源层更新，不影响现有 cloud API、鉴权与网关协议。
+
 ## 2026-08-13
 
 ### 53) Cloud 静态资源目录统一 + 图片资源加载修复
