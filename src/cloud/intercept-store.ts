@@ -37,7 +37,6 @@ function makeDefaultInterceptState() {
     agent: null,
     work_dir: "",
     prompt: null,
-    last_token_estimate: null,
     tokens_day: dayKey(),
     last_completed_at_ms: 0,
   };
@@ -91,19 +90,6 @@ function ensureInterceptState(raw) {
           id: String(raw.prompt.id ?? "").trim(),
           tool: String(raw.prompt.tool ?? "").trim(),
           hint: String(raw.prompt.hint ?? "").trim(),
-        }
-      : null,
-    last_token_estimate: raw.last_token_estimate && typeof raw.last_token_estimate === "object"
-      ? {
-          sessionId: String(raw.last_token_estimate.sessionId ?? "").trim(),
-          promptTokens: Number.isFinite(raw.last_token_estimate.promptTokens) ? raw.last_token_estimate.promptTokens : 0,
-          outputTokens: Number.isFinite(raw.last_token_estimate.outputTokens) ? raw.last_token_estimate.outputTokens : 0,
-          totalTokens: Number.isFinite(raw.last_token_estimate.totalTokens) ? raw.last_token_estimate.totalTokens : 0,
-          promptPreview: String(raw.last_token_estimate.promptPreview ?? ""),
-          outputPreview: String(raw.last_token_estimate.outputPreview ?? ""),
-          estimatedAtMs: Number.isFinite(raw.last_token_estimate.estimatedAtMs)
-            ? raw.last_token_estimate.estimatedAtMs
-            : 0,
         }
       : null,
     tokens_day: String(raw.tokens_day ?? fallback.tokens_day),
@@ -286,7 +272,6 @@ function migrateInterceptStateTableIfNeeded(database) {
       agent_json TEXT,
       work_dir TEXT NOT NULL DEFAULT '',
       prompt_json TEXT,
-      last_token_estimate_json TEXT,
       tokens_day TEXT NOT NULL,
       last_completed_at_ms INTEGER NOT NULL DEFAULT 0
     );
@@ -304,7 +289,6 @@ function migrateInterceptStateTableIfNeeded(database) {
       agent_json,
       work_dir,
       prompt_json,
-      last_token_estimate_json,
       tokens_day,
       last_completed_at_ms
     )
@@ -321,7 +305,6 @@ function migrateInterceptStateTableIfNeeded(database) {
       NULL AS agent_json,
       '' AS work_dir,
       prompt_json,
-      last_token_estimate_json,
       tokens_day,
       last_completed_at_ms
     FROM intercept_state;
@@ -377,7 +360,6 @@ function openDatabase(dbFile) {
       agent_json TEXT,
       work_dir TEXT NOT NULL DEFAULT '',
       prompt_json TEXT,
-      last_token_estimate_json TEXT,
       tokens_day TEXT NOT NULL,
       last_completed_at_ms INTEGER NOT NULL DEFAULT 0
     );
@@ -612,7 +594,6 @@ class InterceptStore {
         agent_json,
         work_dir,
         prompt_json,
-        last_token_estimate_json,
         tokens_day,
         last_completed_at_ms
       FROM intercept_state
@@ -635,7 +616,6 @@ class InterceptStore {
       agent: parseJsonText(row.agent_json, null),
       work_dir: row.work_dir,
       prompt: parseJsonText(row.prompt_json, null),
-      last_token_estimate: parseJsonText(row.last_token_estimate_json, null),
       tokens_day: row.tokens_day,
       last_completed_at_ms: row.last_completed_at_ms,
     });
@@ -657,10 +637,9 @@ class InterceptStore {
         agent_json,
         work_dir,
         prompt_json,
-        last_token_estimate_json,
         tokens_day,
         last_completed_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         total = excluded.total,
         running = excluded.running,
@@ -673,7 +652,6 @@ class InterceptStore {
         agent_json = excluded.agent_json,
         work_dir = excluded.work_dir,
         prompt_json = excluded.prompt_json,
-        last_token_estimate_json = excluded.last_token_estimate_json,
         tokens_day = excluded.tokens_day,
         last_completed_at_ms = excluded.last_completed_at_ms
     `).run(
@@ -689,7 +667,6 @@ class InterceptStore {
       stringifyJson(normalized.agent, "null"),
       normalized.work_dir,
       stringifyJson(normalized.prompt, "null"),
-      stringifyJson(normalized.last_token_estimate, "null"),
       normalized.tokens_day,
       normalized.last_completed_at_ms,
     );

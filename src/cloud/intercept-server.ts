@@ -193,15 +193,6 @@ type InterceptEventPayload = {
   };
   toolCall?: Record<string, unknown>;
   tokens?: number | string;
-  tokenEstimate?: {
-    sessionId?: string;
-    promptTokens?: number | string;
-    outputTokens?: number | string;
-    totalTokens?: number | string;
-    promptPreview?: string;
-    outputPreview?: string;
-    estimatedAtMs?: number | string;
-  };
   meta?: {
     requestId?: string;
   };
@@ -737,7 +728,6 @@ function toPublicInterceptState(state) {
     agent: state.agent,
     work_dir: state.work_dir,
     prompt: state.prompt,
-    last_token_estimate: state.last_token_estimate,
   };
 }
 
@@ -1574,13 +1564,12 @@ const server = createServer(async (req, res) => {
         const eventWorkDir = String(event.workDir ?? event.session?.workDir ?? event.toolCall?.workDir ?? "").trim();
         const eventTokens = Number.parseInt(String(event.tokens ?? "0"), 10);
         const hasToolCall = Boolean(event.toolCall && typeof event.toolCall === "object");
-        const hasTokenEstimate = Boolean(event.tokenEstimate && typeof event.tokenEstimate === "object");
         const hasStatePatch = Boolean(event.state && typeof event.state === "object");
         const stateCompleted = typeof event?.state?.completed === "boolean" ? String(event.state.completed) : "unset";
         const directCompleted = typeof event?.completed === "boolean" ? String(event.completed) : "unset";
 
         console.log(
-          `[cloud-server][intercept] event received user=${principalUserId} msg=${eventMsg ? "yes" : "no"} entry=${eventEntry ? "yes" : "no"} promptId=${eventPromptId || "-"} promptTool=${eventPromptTool || "-"} agent=${eventAgentProvider || "-"}${eventAgentVersion ? `@${eventAgentVersion}` : ""} workDir=${eventWorkDir || "-"} tokens=${Number.isFinite(eventTokens) ? eventTokens : 0} toolCall=${hasToolCall ? "yes" : "no"} tokenEstimate=${hasTokenEstimate ? "yes" : "no"} statePatch=${hasStatePatch ? "yes" : "no"} completed=${event.completed === true ? "yes" : "no"} stateCompleted=${stateCompleted} directCompleted=${directCompleted}`,
+          `[cloud-server][intercept] event received user=${principalUserId} msg=${eventMsg ? "yes" : "no"} entry=${eventEntry ? "yes" : "no"} promptId=${eventPromptId || "-"} promptTool=${eventPromptTool || "-"} agent=${eventAgentProvider || "-"}${eventAgentVersion ? `@${eventAgentVersion}` : ""} workDir=${eventWorkDir || "-"} tokens=${Number.isFinite(eventTokens) ? eventTokens : 0} toolCall=${hasToolCall ? "yes" : "no"} statePatch=${hasStatePatch ? "yes" : "no"} completed=${event.completed === true ? "yes" : "no"} stateCompleted=${stateCompleted} directCompleted=${directCompleted}`,
         );
 
         const state = interceptStore.withTransaction(() => {
@@ -1686,18 +1675,6 @@ const server = createServer(async (req, res) => {
           if (Number.isFinite(tokens) && tokens > 0) {
             nextState.tokens += tokens;
             nextState.tokens_today += tokens;
-          }
-
-          if (event.tokenEstimate && typeof event.tokenEstimate === "object") {
-            nextState.last_token_estimate = {
-              sessionId: String(event.tokenEstimate.sessionId ?? "").trim(),
-              promptTokens: Number.parseInt(String(event.tokenEstimate.promptTokens ?? "0"), 10) || 0,
-              outputTokens: Number.parseInt(String(event.tokenEstimate.outputTokens ?? "0"), 10) || 0,
-              totalTokens: Number.parseInt(String(event.tokenEstimate.totalTokens ?? tokens ?? "0"), 10) || 0,
-              promptPreview: String(event.tokenEstimate.promptPreview ?? ""),
-              outputPreview: String(event.tokenEstimate.outputPreview ?? ""),
-              estimatedAtMs: Number.parseInt(String(event.tokenEstimate.estimatedAtMs ?? Date.now()), 10) || Date.now(),
-            };
           }
 
           if (event.completed === true) {

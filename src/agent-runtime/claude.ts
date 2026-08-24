@@ -9,10 +9,6 @@ import {
   buildSessionLifecycleInterceptEvent,
 } from "./activity-event-builder.js";
 import {
-  getErrorMessage,
-  getErrorPartialOutput,
-  getErrorSessionId,
-  mergeEntries,
   normalizeSessionKey,
   normalizeSet,
   safeCloneToolArgs,
@@ -23,16 +19,12 @@ import {
 } from "./common.js";
 import { reportInterceptEventByApi } from "./intercept-event.js";
 import { runPreToolInterceptGate } from "./pretool-gate.js";
-import { createSessionTokenTracker } from "./session-token-tracker.js";
-import { buildTokenEstimateInterceptEvent } from "./token-event-builder.js";
-import { estimateConversationTokenBreakdown } from "./token-estimate.js";
 import { buildPreToolInterceptHint } from "./intercept-hint.js";
 
 const DEFAULT_SHARED_SESSION_KEY = "__global__";
 
 let sharedClaudeSessionIds: Map<string, string> = new Map();
 let sharedSessionQueues: Map<string, Promise<any>> = new Map();
-const sessionTokenTracker = createSessionTokenTracker();
 const sessionLifecycleState = createSessionLifecycleStateTracker();
 
 function collectClaudeSessionEntries(input) {
@@ -92,58 +84,6 @@ async function reportClaudeHookEvent({ config, event, timeoutMs }) {
     interceptServerUrl,
     interceptAuthToken,
     interceptTimeoutMs: timeoutMs,
-    event,
-  });
-}
-
-async function reportClaudeTokenEstimateEvent({
-  sessionId,
-  prompt,
-  output,
-  config,
-  workDir,
-  entries = [],
-  status = "completed",
-  failureReason = "",
-  attempt = 1,
-  retryPlanned = false,
-  toolCallCount = 0,
-  toolArgsTokens = 0,
-  toolResultTokens = 0,
-  contextCarryoverTokens = 0,
-  requestOverheadTokens = 0,
-}) {
-  const interceptServerUrl = trimTrailingSlash(config.interceptServerUrl);
-  if (!config.interceptEnabled || !interceptServerUrl) {
-    return;
-  }
-
-  const event = buildTokenEstimateInterceptEvent({
-    provider: "Claude",
-    sessionId,
-    prompt,
-    output,
-    entries,
-    status,
-    failureReason,
-    attempt,
-    retryPlanned,
-    toolCallCount,
-    toolArgsTokens,
-    toolResultTokens,
-    contextCarryoverTokens,
-    requestOverheadTokens,
-    workDir,
-    promptIdPrefix: "claude_tokens",
-  });
-
-  if (!event) {
-    return;
-  }
-
-  await reportClaudeHookEvent({
-    config,
-    timeoutMs: toPositiveInt(config.interceptTimeoutMs, 5000),
     event,
   });
 }
@@ -212,13 +152,6 @@ function buildClaudeHooks(config) {
     console.log(`[${sessionId}] Tool: ${toolName || "unknown"}`);
     console.log(`  Args: ${safeStringify(safeArgs)}`);
     console.log(`  Result: ${safeStringify(safeResult)}`);
-
-    sessionTokenTracker.recordToolUsageForSession({
-      sessionId,
-      toolName,
-      toolArgs: safeArgs,
-      toolResult: safeResult,
-    });
 
     try {
       const requestId = createInterceptRequestIdFromCandidates([
@@ -524,8 +457,6 @@ export async function runClaudeWithSession({
   onDelta?: ((delta: string) => void) | undefined;
   onDone?: ((result: { output: string; sessionId: string }) => void) | undefined;
 }): Promise<{ output: string; sessionId: string }> {
-  const attempt = 1;
-
   try {
     const result = await runClaudeQuery({
       prompt,
@@ -534,80 +465,9 @@ export async function runClaudeWithSession({
       onDelta,
     });
 
-    const toolStats = sessionTokenTracker.consumeTurnToolStats(result.sessionId);
-    const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(result.sessionId);
-    const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
-      toolCallCount: toolStats.toolCallCount,
-    });
-
-    try {
-      await reportClaudeTokenEstimateEvent({
-        sessionId: result.sessionId,
-        prompt,
-        output: result.output,
-        config,
-        workDir: config.workDir || process.cwd(),
-        entries: mergeEntries([prompt, result.output], toolStats.toolEntries),
-        attempt,
-        retryPlanned: false,
-        toolCallCount: toolStats.toolCallCount,
-        toolArgsTokens: toolStats.toolArgsTokens,
-        toolResultTokens: toolStats.toolResultTokens,
-        contextCarryoverTokens: carryoverTokens,
-        requestOverheadTokens,
-      });
-    } catch (error) {
-      console.warn(
-        `[claude-agent-sdk][hook] token estimate upload failed sessionId=${result.sessionId} reason=${String(error?.message ?? error)}`,
-      );
-    }
-
-    const breakdown = estimateConversationTokenBreakdown({
-      prompt,
-      output: result.output,
-      entries: mergeEntries([prompt, result.output], toolStats.toolEntries),
-    });
-    const turnTokenContribution = breakdown.totalTokens
-      + toolStats.toolArgsTokens
-      + toolStats.toolResultTokens
-      + requestOverheadTokens;
-    sessionTokenTracker.setSessionCarryoverTokens(result.sessionId, carryoverTokens + turnTokenContribution);
-
     onDone?.(result);
     return result;
   } catch (error) {
-    const failedSessionId = getErrorSessionId(error) || resumeSessionId;
-    const toolStats = sessionTokenTracker.consumeTurnToolStats(failedSessionId);
-    const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(failedSessionId);
-    const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
-      toolCallCount: toolStats.toolCallCount,
-    });
-
-    try {
-      await reportClaudeTokenEstimateEvent({
-        sessionId: failedSessionId,
-        prompt,
-        output: getErrorPartialOutput(error),
-        config,
-        workDir: config.workDir || process.cwd(),
-        entries: mergeEntries([prompt, getErrorPartialOutput(error), `error: ${getErrorMessage(error)}`], toolStats.toolEntries),
-        status: "failed",
-        failureReason: getErrorMessage(error),
-        attempt,
-        retryPlanned: false,
-        toolCallCount: toolStats.toolCallCount,
-        toolArgsTokens: toolStats.toolArgsTokens,
-        toolResultTokens: toolStats.toolResultTokens,
-        contextCarryoverTokens: carryoverTokens,
-        requestOverheadTokens,
-      });
-    } catch (reportError) {
-      console.warn(
-        `[claude-agent-sdk][hook] token estimate upload failed sessionId=${failedSessionId || "-"} reason=${String(reportError?.message ?? reportError)}`,
-      );
-    }
-
-    sessionTokenTracker.clearSessionTokenTracking(failedSessionId);
     throw error;
   }
 }
@@ -647,7 +507,6 @@ export async function runClaudeWithSharedSession({
 
   return withSharedSessionLock(sharedSessionQueues, key, async () => {
     const resumeSessionId = sharedClaudeSessionIds.get(key) || "";
-    const attempt = 1;
 
     try {
       const result = await runClaudeQuery({
@@ -657,80 +516,10 @@ export async function runClaudeWithSharedSession({
         onDelta,
       });
 
-      const toolStats = sessionTokenTracker.consumeTurnToolStats(result.sessionId);
-      const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(result.sessionId);
-      const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
-        toolCallCount: toolStats.toolCallCount,
-      });
-
-      try {
-        await reportClaudeTokenEstimateEvent({
-          sessionId: result.sessionId,
-          prompt,
-          output: result.output,
-          config,
-          workDir: config.workDir || process.cwd(),
-          entries: mergeEntries([prompt, result.output], toolStats.toolEntries),
-          attempt,
-          retryPlanned: false,
-          toolCallCount: toolStats.toolCallCount,
-          toolArgsTokens: toolStats.toolArgsTokens,
-          toolResultTokens: toolStats.toolResultTokens,
-          contextCarryoverTokens: carryoverTokens,
-          requestOverheadTokens,
-        });
-      } catch (error) {
-        console.warn(
-          `[claude-agent-sdk][hook] token estimate upload failed sessionId=${result.sessionId} reason=${String(error?.message ?? error)}`,
-        );
-      }
-
-      const breakdown = estimateConversationTokenBreakdown({
-        prompt,
-        output: result.output,
-        entries: mergeEntries([prompt, result.output], toolStats.toolEntries),
-      });
-      const turnTokenContribution = breakdown.totalTokens
-        + toolStats.toolArgsTokens
-        + toolStats.toolResultTokens
-        + requestOverheadTokens;
-      sessionTokenTracker.setSessionCarryoverTokens(result.sessionId, carryoverTokens + turnTokenContribution);
-
       sharedClaudeSessionIds.set(key, result.sessionId);
       onDone?.(result);
       return result;
     } catch (error) {
-      const failedSessionId = getErrorSessionId(error) || resumeSessionId;
-      const toolStats = sessionTokenTracker.consumeTurnToolStats(failedSessionId);
-      const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(failedSessionId);
-      const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
-        toolCallCount: toolStats.toolCallCount,
-      });
-
-      try {
-        await reportClaudeTokenEstimateEvent({
-          sessionId: failedSessionId,
-          prompt,
-          output: getErrorPartialOutput(error),
-          config,
-          workDir: config.workDir || process.cwd(),
-          entries: mergeEntries([prompt, getErrorPartialOutput(error), `error: ${getErrorMessage(error)}`], toolStats.toolEntries),
-          status: "failed",
-          failureReason: getErrorMessage(error),
-          attempt,
-          retryPlanned: false,
-          toolCallCount: toolStats.toolCallCount,
-          toolArgsTokens: toolStats.toolArgsTokens,
-          toolResultTokens: toolStats.toolResultTokens,
-          contextCarryoverTokens: carryoverTokens,
-          requestOverheadTokens,
-        });
-      } catch (reportError) {
-        console.warn(
-          `[claude-agent-sdk][hook] token estimate upload failed sessionId=${failedSessionId || "-"} reason=${String(reportError?.message ?? reportError)}`,
-        );
-      }
-
       throw error;
     }
   });
@@ -739,15 +528,9 @@ export async function runClaudeWithSharedSession({
 export function resetSharedClaudeSession(sessionKey = "") {
   if (sessionKey) {
     const key = normalizeSessionKey(sessionKey);
-    const sessionId = sharedClaudeSessionIds.get(key) || "";
     sharedClaudeSessionIds.delete(key);
     sharedSessionQueues.delete(key);
-    sessionTokenTracker.clearSessionTokenTracking(sessionId);
     return;
-  }
-
-  for (const sessionId of sharedClaudeSessionIds.values()) {
-    sessionTokenTracker.clearSessionTokenTracking(sessionId);
   }
   sharedClaudeSessionIds.clear();
   sharedSessionQueues.clear();

@@ -1,5 +1,44 @@
 # Development Log
 
+## 2026-08-24
+
+### 55) 移除 token 估算链路（agent-runtime + cloud）
+
+变更目标：
+- 从 agent-runtime 彻底移除会话 token 估算、工具调用 token 跟踪与 token estimate 事件上报。
+- 从 cloud 侧清理 token estimate 的接收、持久化与对外返回字段，为后续独立 usage bucket 方案腾出语义空间。
+
+主要改动：
+- `src/agent-runtime/copilot.ts`
+  - 删除 `session-token-tracker`、`token-event-builder`、`token-estimate` 依赖。
+  - 删除 token estimate 上报函数与成功/失败路径中的估算、carryover、overhead 逻辑。
+  - 删除 `onPostToolCaptured` 中的工具 token 统计回调。
+- `src/agent-runtime/claude.ts`
+  - 删除 `session-token-tracker`、`token-event-builder`、`token-estimate` 依赖。
+  - 删除 postTool 的工具 token 记录与会话估算上报链路。
+  - 删除共享会话 reset 时的 token tracking 清理逻辑。
+- 删除文件：
+  - `src/agent-runtime/token-estimate.ts`
+  - `src/agent-runtime/session-token-tracker.ts`
+  - `src/agent-runtime/token-event-builder.ts`
+- `src/cloud/intercept-server.ts`
+  - 删除 `InterceptEventPayload.tokenEstimate` 类型定义。
+  - 删除事件接收日志中的 `tokenEstimate` 标记。
+  - 删除 `event.tokenEstimate -> state.last_token_estimate` 写入逻辑。
+  - 删除状态返回中的 `last_token_estimate` 字段。
+- `src/cloud/intercept-store.ts`
+  - 删除内存状态中的 `last_token_estimate`。
+  - 删除 `ensureInterceptState` 中对应归一化逻辑。
+  - 删除 `intercept_state` 与迁移 SQL 中 `last_token_estimate_json` 列。
+  - 删除 `loadState/saveState` 对该列的读写。
+
+兼容性说明：
+- 拦截审批主链路（pretool/decision/posttool/session lifecycle）不受影响。
+- cloud 侧不再接收和展示 token estimate；后续 token 统计将走独立 usage 数据模型。
+
+验证记录：
+- `npm run build`：通过
+
 ## 2026-08-22
 
 ### 54) 首页静态展示升级：通知预览区 + 电子宠物区重构 + 图标资源补齐

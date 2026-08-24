@@ -4,21 +4,12 @@ import { getSkillDirectoriesForSession } from "../tool/skills.js";
 import { loadMcpServersForCopilot } from "../tool/mcp.js";
 import { reportInterceptEventByApi } from "./intercept-event.js";
 import {
-  getErrorMessage,
-  getErrorPartialOutput,
-  getErrorSessionId,
-  mergeEntries,
-  normalizeSessionId,
   normalizeSessionKey,
   normalizeSet,
-  toPositiveInt,
   trimTrailingSlash,
   truncateString,
   withSharedSessionLock,
 } from "./common.js";
-import { createSessionTokenTracker } from "./session-token-tracker.js";
-import { buildTokenEstimateInterceptEvent } from "./token-event-builder.js";
-import { estimateConversationTokenBreakdown } from "./token-estimate.js";
 import {
   createCopilotHookRuntime,
   handleCopilotOnPostToolUse,
@@ -35,7 +26,6 @@ let sdkClientCwd = "";
 let sharedSessions = new Map();
 let sharedCopilotSessionIds = new Map();
 let sharedSkillSignatures = new Map();
-const sessionTokenTracker = createSessionTokenTracker();
 
 function getSharedSessionIdForKey(sessionKey) {
   return sharedCopilotSessionIds.get(normalizeSessionKey(sessionKey, DEFAULT_SHARED_SESSION_KEY)) || "";
@@ -54,11 +44,9 @@ function setSharedSessionIdForKey(sessionKey, sessionId) {
 async function disconnectSharedSessionForKey(sessionKey) {
   const key = normalizeSessionKey(sessionKey, DEFAULT_SHARED_SESSION_KEY);
   const existing = sharedSessions.get(key);
-  const trackedSessionId = normalizeSessionId(existing?.sessionId) || getSharedSessionIdForKey(key);
   if (existing) {
     await existing.disconnect().catch(() => {});
   }
-  sessionTokenTracker.clearSessionTokenTracking(trackedSessionId);
   sharedSessions.delete(key);
   sharedSkillSignatures.delete(key);
   sharedSessionQueues.delete(key);
@@ -83,60 +71,6 @@ async function resetAllSharedSessions() {
   sharedSessionQueues = new Map();
 }
 
-async function reportSessionTokenEstimateEvent({
-  sessionId,
-  prompt,
-  output,
-  config,
-  workDir,
-  entries = [],
-  status = "completed",
-  failureReason = "",
-  attempt = 1,
-  retryPlanned = false,
-  toolCallCount = 0,
-  toolArgsTokens = 0,
-  toolResultTokens = 0,
-  contextCarryoverTokens = 0,
-  requestOverheadTokens = 0,
-}) {
-  const interceptServerUrl = trimTrailingSlash(config.interceptServerUrl);
-  if (!config.interceptEnabled || !interceptServerUrl) {
-    return;
-  }
-
-  const event = buildTokenEstimateInterceptEvent({
-    provider: "Copilot",
-    sessionId,
-    prompt,
-    output,
-    entries,
-    status,
-    failureReason,
-    attempt,
-    retryPlanned,
-    toolCallCount,
-    toolArgsTokens,
-    toolResultTokens,
-    contextCarryoverTokens,
-    requestOverheadTokens,
-    workDir,
-    promptIdPrefix: "tokens",
-  });
-  if (!event) {
-    return;
-  }
-
-  const interceptAuthToken = String(config.interceptAuthToken ?? "").trim();
-  const interceptTimeoutMs = toPositiveInt(config.interceptTimeoutMs, 5000);
-  await reportInterceptEventByApi({
-    interceptServerUrl,
-    interceptAuthToken,
-    interceptTimeoutMs,
-    event,
-  });
-}
-
 function buildCopilotHooks(config) {
   if (!config?.hookEnabled) {
     return undefined;
@@ -153,14 +87,6 @@ function buildCopilotHooks(config) {
     interceptEnabled,
     logPrefix: "[copilot-sdk][intercept]",
     sessionLogPrefix: "[copilot-sdk][session]",
-    onPostToolCaptured: ({ sessionId, toolName, safeArgs, safeResult }) => {
-      sessionTokenTracker.recordToolUsageForSession({
-        sessionId,
-        toolName,
-        toolArgs: safeArgs,
-        toolResult: safeResult,
-      });
-    },
   });
 
   return {
@@ -347,80 +273,9 @@ export async function runCopilotWithSession({
         onDone,
       });
 
-      const toolStats = sessionTokenTracker.consumeTurnToolStats(result.sessionId);
-      const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(result.sessionId);
-      const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
-        toolCallCount: toolStats.toolCallCount,
-      });
-
-      try {
-        await reportSessionTokenEstimateEvent({
-          sessionId: result.sessionId,
-          prompt,
-          output: result.output,
-          config,
-          workDir: config.workDir || process.cwd(),
-          entries: mergeEntries([prompt, result.output], toolStats.toolEntries),
-          toolCallCount: toolStats.toolCallCount,
-          toolArgsTokens: toolStats.toolArgsTokens,
-          toolResultTokens: toolStats.toolResultTokens,
-          contextCarryoverTokens: carryoverTokens,
-          requestOverheadTokens,
-        });
-      } catch (error) {
-        console.warn(
-          `[copilot-sdk][intercept] token estimate upload failed sessionId=${result.sessionId} reason=${String(error?.message ?? error)}`,
-        );
-      }
-
-      const breakdown = estimateConversationTokenBreakdown({
-        prompt,
-        output: result.output,
-        entries: mergeEntries([prompt, result.output], toolStats.toolEntries),
-      });
-      const turnTokenContribution = breakdown.totalTokens
-        + toolStats.toolArgsTokens
-        + toolStats.toolResultTokens
-        + requestOverheadTokens;
-      sessionTokenTracker.setSessionCarryoverTokens(result.sessionId, carryoverTokens + turnTokenContribution);
-
       return result;
     } catch (error) {
       const shouldRetry = !retried && isSessionNotFoundError(error);
-      const failedSessionId = getErrorSessionId(error) || effectiveResumeSessionId;
-      const toolStats = sessionTokenTracker.consumeTurnToolStats(failedSessionId);
-      const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(failedSessionId);
-      const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
-        toolCallCount: toolStats.toolCallCount,
-      });
-
-      try {
-        await reportSessionTokenEstimateEvent({
-          sessionId: failedSessionId,
-          prompt,
-          output: getErrorPartialOutput(error),
-          config,
-          workDir: config.workDir || process.cwd(),
-          entries: mergeEntries([prompt, getErrorPartialOutput(error), `error: ${getErrorMessage(error)}`], toolStats.toolEntries),
-          status: "failed",
-          failureReason: getErrorMessage(error),
-          attempt,
-          retryPlanned: shouldRetry,
-          toolCallCount: toolStats.toolCallCount,
-          toolArgsTokens: toolStats.toolArgsTokens,
-          toolResultTokens: toolStats.toolResultTokens,
-          contextCarryoverTokens: carryoverTokens,
-          requestOverheadTokens,
-        });
-      } catch (reportError) {
-        console.warn(
-          `[copilot-sdk][intercept] token estimate upload failed sessionId=${getErrorSessionId(error) || "-"} reason=${String(reportError?.message ?? reportError)}`,
-        );
-      }
-
-      if (!shouldRetry) {
-        sessionTokenTracker.clearSessionTokenTracking(failedSessionId);
-      }
 
       if (shouldRetry) {
         retried = true;
@@ -512,10 +367,8 @@ export async function runCopilotWithSharedSession({
 
   return withSharedSessionLock(sharedSessionQueues, key, async () => {
     let retried = false;
-    let attempt = 0;
 
     while (true) {
-      attempt += 1;
       try {
         const session = await getOrCreateSharedSession(config, key);
         const result = await runSessionPrompt({
@@ -526,78 +379,10 @@ export async function runCopilotWithSharedSession({
           onDone,
         });
 
-        const toolStats = sessionTokenTracker.consumeTurnToolStats(result.sessionId);
-        const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(result.sessionId);
-        const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
-          toolCallCount: toolStats.toolCallCount,
-        });
-
-        try {
-          await reportSessionTokenEstimateEvent({
-            sessionId: result.sessionId,
-            prompt,
-            output: result.output,
-            config,
-            workDir: config.workDir || process.cwd(),
-            entries: mergeEntries([prompt, result.output], toolStats.toolEntries),
-            toolCallCount: toolStats.toolCallCount,
-            toolArgsTokens: toolStats.toolArgsTokens,
-            toolResultTokens: toolStats.toolResultTokens,
-            contextCarryoverTokens: carryoverTokens,
-            requestOverheadTokens,
-          });
-        } catch (error) {
-          console.warn(
-            `[copilot-sdk][intercept] token estimate upload failed sessionId=${result.sessionId} reason=${String(error?.message ?? error)}`,
-          );
-        }
-
-        const breakdown = estimateConversationTokenBreakdown({
-          prompt,
-          output: result.output,
-          entries: mergeEntries([prompt, result.output], toolStats.toolEntries),
-        });
-        const turnTokenContribution = breakdown.totalTokens
-          + toolStats.toolArgsTokens
-          + toolStats.toolResultTokens
-          + requestOverheadTokens;
-        sessionTokenTracker.setSessionCarryoverTokens(result.sessionId, carryoverTokens + turnTokenContribution);
-
         setSharedSessionIdForKey(key, result.sessionId);
         return result;
       } catch (error) {
         const shouldRetry = !retried && isSessionNotFoundError(error);
-        const failedSessionId = getErrorSessionId(error) || getSharedSessionIdForKey(key);
-        const toolStats = sessionTokenTracker.consumeTurnToolStats(failedSessionId);
-        const carryoverTokens = sessionTokenTracker.getSessionCarryoverTokens(failedSessionId);
-        const requestOverheadTokens = sessionTokenTracker.estimateRequestOverheadTokens({
-          toolCallCount: toolStats.toolCallCount,
-        });
-
-        try {
-          await reportSessionTokenEstimateEvent({
-            sessionId: failedSessionId,
-            prompt,
-            output: getErrorPartialOutput(error),
-            config,
-            workDir: config.workDir || process.cwd(),
-            entries: mergeEntries([prompt, getErrorPartialOutput(error), `error: ${getErrorMessage(error)}`], toolStats.toolEntries),
-            status: "failed",
-            failureReason: getErrorMessage(error),
-            attempt,
-            retryPlanned: shouldRetry,
-            toolCallCount: toolStats.toolCallCount,
-            toolArgsTokens: toolStats.toolArgsTokens,
-            toolResultTokens: toolStats.toolResultTokens,
-            contextCarryoverTokens: carryoverTokens,
-            requestOverheadTokens,
-          });
-        } catch (reportError) {
-          console.warn(
-            `[copilot-sdk][intercept] token estimate upload failed sessionId=${getErrorSessionId(error) || getSharedSessionIdForKey(key) || "-"} reason=${String(reportError?.message ?? reportError)}`,
-          );
-        }
-
         await disconnectSharedSessionForKey(key);
 
         if (shouldRetry) {
