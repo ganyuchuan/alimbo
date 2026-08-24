@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alimbo Usage Dashboard</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #050806;
+        --surface: rgba(12, 20, 16, 0.9);
+        --surface-2: rgba(17, 31, 24, 0.76);
+        --line: rgba(145, 198, 168, 0.18);
+        --line-strong: rgba(145, 220, 177, 0.42);
+        --ink: #edfff4;
+        --muted: #86a996;
+        --accent: #42d986;
+        --accent-2: #159a59;
+        --blue: #68a9ff;
+        --purple: #ad8cff;
+        --amber: #f4ba62;
+        --danger: #ff7c8b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at 12% -6%, rgba(44, 179, 105, 0.25), transparent 33%),
+          radial-gradient(circle at 92% 2%, rgba(81, 120, 224, 0.16), transparent 29%),
+          linear-gradient(155deg, #030504, #07100b 52%, #030504);
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image: linear-gradient(rgba(117, 190, 151, .025) 1px, transparent 1px), linear-gradient(90deg, rgba(117, 190, 151, .025) 1px, transparent 1px);
+        background-size: 28px 28px;
+      }
+      button, input, select { font: inherit; }
+      .wrap { position: relative; z-index: 1; width: min(1420px, calc(100% - 28px)); margin: 0 auto; padding: 26px 0 42px; }
+      .hero {
+        display: flex; justify-content: space-between; gap: 24px; align-items: flex-start;
+        padding: 24px; border: 1px solid var(--line-strong); border-radius: 20px;
+        background: linear-gradient(130deg, rgba(16, 35, 25, .94), rgba(7, 13, 10, .92));
+        box-shadow: 0 22px 70px rgba(0,0,0,.38);
+      }
+      .eyebrow { color: var(--accent); font: 700 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .18em; text-transform: uppercase; }
+      h1 { margin: 9px 0 8px; font-size: clamp(27px, 4vw, 48px); line-height: 1.04; letter-spacing: -.045em; }
+      .hero p { margin: 0; max-width: 690px; color: var(--muted); line-height: 1.65; font-size: 14px; }
+      .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+      .nav a { color: var(--ink); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 9px 13px; font-size: 12px; background: rgba(2,7,4,.58); }
+      .panel { margin-top: 12px; padding: 17px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 14px 38px rgba(0,0,0,.22); }
+      .controls { display: grid; grid-template-columns: minmax(280px, 2fr) repeat(3, minmax(135px, .65fr)) auto; gap: 10px; align-items: end; }
+      label { display: grid; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+      input, select { width: 100%; min-width: 0; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; background: rgba(2, 8, 5, .78); outline: none; }
+      input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66,217,134,.11); }
+      .token-wrap { display: grid; grid-template-columns: 1fr auto; }
+      .token-wrap input { border-radius: 10px 0 0 10px; }
+      .token-wrap button { border-radius: 0 10px 10px 0; border-left: 0; }
+      button { color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; cursor: pointer; background: rgba(10,22,15,.9); }
+      button:hover { border-color: var(--line-strong); }
+      button.primary { border-color: rgba(108,237,167,.42); background: linear-gradient(125deg, var(--accent-2), #087641); font-weight: 750; min-width: 112px; }
+      button:disabled { opacity: .55; cursor: wait; }
+      .subcontrols { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 11px; }
+      .check { display: flex; gap: 7px; align-items: center; color: var(--muted); font-size: 12px; text-transform: none; letter-spacing: 0; }
+      .check input { width: auto; }
+      .status { margin-left: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+      .status.ok { color: #8be7b2; } .status.err { color: var(--danger); }
+      .metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 12px; }
+      .metric { min-height: 126px; padding: 16px; border: 1px solid var(--line); border-radius: 15px; background: linear-gradient(145deg, var(--surface-2), rgba(5,12,8,.76)); position: relative; overflow: hidden; }
+      .metric::after { content: ""; position: absolute; width: 100px; height: 100px; border-radius: 50%; top: -62px; right: -38px; background: var(--metric-color, var(--accent)); filter: blur(28px); opacity: .24; }
+      .metric .name { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+      .metric .value { margin-top: 18px; font: 750 clamp(23px, 3vw, 34px)/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: -.045em; }
+      .metric .note { margin-top: 10px; color: var(--muted); font-size: 11px; }
+      .section-head { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+      h2 { margin: 0; font-size: 16px; letter-spacing: -.015em; }
+      .section-head span { color: var(--muted); font-size: 11px; }
+      .agents { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+      .agent { padding: 15px; border: 1px solid var(--line); border-radius: 13px; background: rgba(5,13,8,.72); }
+      .agent-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+      .agent-name { display: flex; gap: 9px; align-items: center; font-weight: 750; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--agent-color); box-shadow: 0 0 14px var(--agent-color); }
+      .agent-total { margin-top: 18px; font: 700 23px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .agent-meta { margin-top: 9px; display: flex; gap: 10px; color: var(--muted); font-size: 11px; }
+      .bar-track { margin-top: 14px; height: 5px; border-radius: 5px; background: rgba(255,255,255,.06); overflow: hidden; }
+      .bar { height: 100%; width: 0; border-radius: inherit; background: var(--agent-color); transition: width .35s ease; }
+      .split { display: grid; grid-template-columns: 1.15fr .85fr; gap: 12px; }
+      .chart { min-height: 250px; display: flex; align-items: end; gap: 8px; padding: 16px 2px 2px; overflow-x: auto; }
+      .day { flex: 1 0 42px; min-width: 42px; display: grid; grid-template-rows: 1fr auto; gap: 9px; height: 210px; text-align: center; }
+      .day-bar-wrap { display: flex; align-items: end; justify-content: center; height: 100%; }
+      .day-bar { width: min(30px, 72%); min-height: 2px; border-radius: 7px 7px 2px 2px; background: linear-gradient(180deg, var(--accent), var(--accent-2)); position: relative; }
+      .day-bar:hover::after { content: attr(data-value); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 5px 7px; border-radius: 6px; background: #14251b; font-size: 10px; }
+      .day-label { color: var(--muted); font-size: 9px; }
+      .model-list { display: grid; gap: 12px; }
+      .model-row { display: grid; grid-template-columns: minmax(100px, 1fr) auto; gap: 8px; align-items: center; }
+      .model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+      .model-value { color: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .model-row .bar-track { grid-column: 1 / -1; margin-top: 0; }
+      .table-scroll { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+      table { width: 100%; min-width: 990px; border-collapse: collapse; font-size: 11px; }
+      th, td { padding: 10px 11px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+      th { position: sticky; top: 0; color: #b6d9c5; background: #0e1913; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+      tbody tr:hover { background: rgba(77,174,120,.07); }
+      td.num { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .empty { display: grid; place-items: center; min-height: 150px; color: var(--muted); font-size: 13px; text-align: center; }
+      @media (max-width: 1100px) { .controls { grid-template-columns: 1fr 1fr 1fr; } .token-field { grid-column: 1 / -1; } .metrics { grid-template-columns: repeat(3, 1fr); } .agents { grid-template-columns: repeat(2, 1fr); } }
+      @media (max-width: 720px) { .wrap { width: min(100% - 18px, 1420px); padding-top: 10px; } .hero { padding: 18px; flex-direction: column; } .controls { grid-template-columns: 1fr 1fr; } .token-field, .load { grid-column: 1 / -1; } .metrics { grid-template-columns: 1fr 1fr; } .metrics .metric:first-child { grid-column: 1 / -1; } .agents, .split { grid-template-columns: 1fr; } .status { width: 100%; margin-left: 0; } }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="hero">
+        <div>
+          <div class="eyebrow">Alimbo Cloud · Usage Intelligence</div>
+          <h1>Agent Token 消耗</h1>
+          <p>使用有效用户 Token 查看该账号下各个 Agent、模型和日期维度的真实日志统计。缓存读取保持独立口径，不会混入模型 Token。</p>
+        </div>
+        <nav class="nav"><a href="/">首页</a><a href="/usage.html">静态文件</a></nav>
+      </header>
+
+      <section class="panel">
+        <div class="controls">
+          <label class="token-field">用户 Token
+            <span class="token-wrap"><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴有效的用户 Bearer Token" /><button id="toggleToken" type="button" aria-label="显示或隐藏 Token">显示</button></span>
+          </label>
+          <label>开始日期<input id="from" type="date" /></label>
+          <label>结束日期<input id="to" type="date" /></label>
+          <label>Agent<select id="source"><option value="">全部 Agent</option><option value="copilot-cli">Copilot CLI</option><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="kimi-code">Kimi Code</option></select></label>
+          <button id="load" class="primary load" type="button">加载统计</button>
+        </div>
+        <div class="subcontrols">
+          <label class="check"><input id="remember" type="checkbox" checked />仅在当前标签页记住 Token</label>
+          <button id="clear" type="button">清除 Token</button>
+          <span id="status" class="status">等待输入有效用户 Token</span>
+        </div>
+      </section>
+
+      <section class="metrics" aria-label="总体统计">
+        <article class="metric" style="--metric-color:var(--accent)"><div class="name">模型 Token</div><div id="modelTokens" class="value">—</div><div class="note">输入 + 输出 + 推理</div></article>
+        <article class="metric" style="--metric-color:var(--blue)"><div class="name">上下文 Token</div><div id="contextTokens" class="value">—</div><div class="note">模型 Token + 缓存读取</div></article>
+        <article class="metric" style="--metric-color:var(--purple)"><div class="name">输入 Token</div><div id="inputTokens" class="value">—</div><div class="note">不含缓存读取</div></article>
+        <article class="metric" style="--metric-color:var(--amber)"><div class="name">输出 Token</div><div id="outputTokens" class="value">—</div><div class="note">模型生成输出</div></article>
+        <article class="metric" style="--metric-color:#5ac8c8"><div class="name">缓存读取</div><div id="cachedTokens" class="value">—</div><div class="note">单独统计，不计入模型 Token</div></article>
+      </section>
+
+      <section class="panel">
+        <div class="section-head"><h2>Agent 分布</h2><span id="agentCaption">等待加载</span></div>
+        <div id="agents" class="agents"><div class="empty" style="grid-column:1/-1">输入 Token 后加载统计</div></div>
+      </section>
+
+      <div class="split">
+        <section class="panel">
+          <div class="section-head"><h2>每日趋势</h2><span>按 UTC 日期 · 模型 Token</span></div>
+          <div id="days" class="chart"><div class="empty" style="width:100%">暂无数据</div></div>
+        </section>
+        <section class="panel">
+          <div class="section-head"><h2>模型排行</h2><span>Top 8</span></div>
+          <div id="models" class="model-list"><div class="empty">暂无数据</div></div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="section-head"><h2>最近 Usage Buckets</h2><span>最多显示 100 条 · 30 分钟聚合</span></div>
+        <div id="buckets" class="table-scroll"><div class="empty">暂无数据</div></div>
+      </section>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const agentNames = { "copilot-cli": "Copilot CLI", "claude-code": "Claude Code", codex: "Codex", "kimi-code": "Kimi Code" };
+      const agentColors = { "copilot-cli": "#68a9ff", "claude-code": "#d59cff", codex: "#42d986", "kimi-code": "#f4ba62" };
+      const nf = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 });
+      const fullNf = new Intl.NumberFormat("zh-CN");
+
+      function count(value) { return Number.isFinite(Number(value)) ? Number(value) : 0; }
+      function compact(value) { return nf.format(count(value)); }
+      function full(value) { return fullNf.format(count(value)); }
+      function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])); }
+      function setStatus(text, kind = "") { $("status").textContent = text; $("status").className = `status ${kind}`; }
+      function query() {
+        const params = new URLSearchParams();
+        if ($("from").value) params.set("from", new Date(`${$("from").value}T00:00:00.000Z`).toISOString());
+        if ($("to").value) { const end = new Date(`${$("to").value}T00:00:00.000Z`); end.setUTCDate(end.getUTCDate() + 1); params.set("to", end.toISOString()); }
+        if ($("source").value) params.set("source", $("source").value);
+        return params;
+      }
+      async function api(path, token) {
+        const response = await fetch(path, { headers: { Accept: "application/json", Authorization: `Bearer ${token}` } });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(response.status === 401 ? "Token 无效或已失效" : (payload.error || `请求失败（${response.status}）`));
+        return payload;
+      }
+      function renderTotals(t = {}) {
+        $("modelTokens").textContent = compact(t.modelTokens); $("modelTokens").title = full(t.modelTokens);
+        $("contextTokens").textContent = compact(t.contextTokens); $("contextTokens").title = full(t.contextTokens);
+        $("inputTokens").textContent = compact(t.inputTokens); $("inputTokens").title = full(t.inputTokens);
+        $("outputTokens").textContent = compact(t.outputTokens); $("outputTokens").title = full(t.outputTokens);
+        $("cachedTokens").textContent = compact(t.cachedInputTokens); $("cachedTokens").title = full(t.cachedInputTokens);
+      }
+      function renderAgents(items = []) {
+        const max = Math.max(1, ...items.map((x) => count(x.modelTokens)));
+        $("agentCaption").textContent = `${items.length} 个有数据的 Agent`;
+        $("agents").innerHTML = items.length ? items.map((item) => {
+          const color = agentColors[item.source] || "#8eb29d";
+          const percentage = Math.max(2, count(item.modelTokens) / max * 100);
+          return `<article class="agent" style="--agent-color:${color}"><div class="agent-top"><div class="agent-name"><span class="dot"></span>${escapeHtml(agentNames[item.source] || item.source)}</div><span class="eyebrow">${escapeHtml(item.source)}</span></div><div class="agent-total" title="${full(item.modelTokens)}">${compact(item.modelTokens)}</div><div class="agent-meta"><span>输入 ${compact(item.inputTokens)}</span><span>输出 ${compact(item.outputTokens)}</span><span>缓存 ${compact(item.cachedInputTokens)}</span></div><div class="bar-track"><div class="bar" style="width:${percentage}%"></div></div></article>`;
+        }).join("") : '<div class="empty" style="grid-column:1/-1">当前筛选范围内没有 Agent 用量</div>';
+      }
+      function renderDays(items = []) {
+        const max = Math.max(1, ...items.map((x) => count(x.modelTokens)));
+        $("days").innerHTML = items.length ? items.map((item) => `<div class="day"><div class="day-bar-wrap"><div class="day-bar" data-value="${full(item.modelTokens)}" style="height:${Math.max(2, count(item.modelTokens) / max * 100)}%"></div></div><div class="day-label">${escapeHtml(String(item.day).slice(5))}</div></div>`).join("") : '<div class="empty" style="width:100%">暂无每日数据</div>';
+      }
+      function renderModels(items = []) {
+        const top = items.slice(0, 8); const max = Math.max(1, ...top.map((x) => count(x.modelTokens)));
+        $("models").innerHTML = top.length ? top.map((item) => `<div class="model-row"><div class="model-name" title="${escapeHtml(item.model)}">${escapeHtml(item.model)}</div><div class="model-value">${compact(item.modelTokens)}</div><div class="bar-track"><div class="bar" style="--agent-color:var(--blue);width:${Math.max(2, count(item.modelTokens) / max * 100)}%"></div></div></div>`).join("") : '<div class="empty">暂无模型数据</div>';
+      }
+      function renderBuckets(items = []) {
+        if (!items.length) { $("buckets").innerHTML = '<div class="empty">暂无 bucket 数据。请先完成一次 Agent 会话并等待同步。</div>'; return; }
+        const rows = items.map((x) => `<tr><td>${new Date(x.bucketStart).toLocaleString()}</td><td>${escapeHtml(agentNames[x.source] || x.source)}</td><td title="${escapeHtml(x.model)}">${escapeHtml(x.model)}</td><td>${escapeHtml(x.hostname)}</td><td>${escapeHtml(x.project)}</td><td class="num">${full(x.inputTokens)}</td><td class="num">${full(x.outputTokens)}</td><td class="num">${full(x.cachedInputTokens)}</td><td class="num">${full(x.reasoningOutputTokens)}</td><td class="num"><strong>${full(x.totalTokens)}</strong></td></tr>`).join("");
+        $("buckets").innerHTML = `<table><thead><tr><th>时间</th><th>Agent</th><th>模型</th><th>主机</th><th>项目</th><th>输入</th><th>输出</th><th>缓存</th><th>推理</th><th>模型 Token</th></tr></thead><tbody>${rows}</tbody></table>`;
+      }
+      async function load() {
+        const token = $("token").value.trim();
+        if (!token) { setStatus("请先输入有效用户 Token", "err"); $("token").focus(); return; }
+        if ($("remember").checked) sessionStorage.setItem("alimbo.usage.token", token); else sessionStorage.removeItem("alimbo.usage.token");
+        $("load").disabled = true; setStatus("正在读取 Usage 数据…");
+        try {
+          const params = query(); const bucketParams = new URLSearchParams(params); bucketParams.set("limit", "100");
+          const [summary, buckets] = await Promise.all([api(`/api/copilot/usage/summary?${params}`, token), api(`/api/copilot/usage/buckets?${bucketParams}`, token)]);
+          renderTotals(summary.totals); renderAgents(summary.bySource); renderDays(summary.byDay); renderModels(summary.byModel); renderBuckets(buckets.items);
+          setStatus(`加载成功 · ${buckets.items?.length || 0} 个最近 bucket`, "ok");
+        } catch (error) { setStatus(String(error.message || error), "err"); }
+        finally { $("load").disabled = false; }
+      }
+      $("load").addEventListener("click", load);
+      $("token").addEventListener("keydown", (event) => { if (event.key === "Enter") load(); });
+      $("source").addEventListener("change", () => { if ($("token").value.trim()) load(); });
+      $("toggleToken").addEventListener("click", () => { const visible = $("token").type === "text"; $("token").type = visible ? "password" : "text"; $("toggleToken").textContent = visible ? "显示" : "隐藏"; });
+      $("clear").addEventListener("click", () => { sessionStorage.removeItem("alimbo.usage.token"); $("token").value = ""; setStatus("Token 已从当前标签页清除"); });
+      const saved = sessionStorage.getItem("alimbo.usage.token") || ""; if (saved) { $("token").value = saved; load(); }
+    </script>
+  </body>
+</html>

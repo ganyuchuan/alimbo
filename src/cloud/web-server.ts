@@ -13,6 +13,8 @@ const watchAlphaSurveyPagePath = new URL("./watch-alpha-survey.html", staticRoot
 let watchAlphaSurveyPageCache = "";
 const watchAlphaSurveyAdminPagePath = new URL("./watch-alpha-survey-admin.html", staticRoot);
 let watchAlphaSurveyAdminPageCache = "";
+const usagePagePath = new URL("./usage.html", staticRoot);
+let usagePageCache = "";
 const onboardingMarkdownPath = new URL("./SKILL.md", staticRoot);
 let onboardingMarkdownCache = "";
 const termsOfServiceZhPath = new URL("./terms-of-service.zh-CN.md", staticRoot);
@@ -123,6 +125,17 @@ function renderWatchAlphaSurveyAdminPage() {
 	return watchAlphaSurveyAdminPageCache;
 }
 
+function renderUsagePage() {
+	if (!usagePageCache) {
+		usagePageCache = readStaticPage(
+			usagePagePath,
+			"<!doctype html><html><body><h1>Usage page unavailable</h1></body></html>",
+			"usage page",
+		);
+	}
+	return usagePageCache;
+}
+
 function renderOnboardingMarkdown() {
 	if (!onboardingMarkdownCache) {
 		onboardingMarkdownCache = readStaticPage(onboardingMarkdownPath, "# Onboarding\n\nUnavailable.", "SKILL.md");
@@ -222,6 +235,12 @@ export function handleWebServerRoute(context: WebServerRouteContext) {
 	if (req.method === "GET" && (pathname === "/" || pathname === "/index.html")) {
 		logApi(req, pathname, "serve index page");
 		html(res, 200, renderIndexPage());
+		return true;
+	}
+
+	if (req.method === "GET" && pathname === "/usage") {
+		logApi(req, pathname, "serve usage page");
+		html(res, 200, renderUsagePage());
 		return true;
 	}
 

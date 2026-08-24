@@ -2,6 +2,22 @@
 
 ## 2026-08-24
 
+### 57) 新增用户 Token Usage Dashboard
+
+变更目标：
+- 提供简单的同源静态网页，通过有效用户 Bearer Token 查看该账号各 Agent 的 token 消耗。
+
+主要改动：
+- `src/cloud/static/usage.html`
+  - 新增总体模型/上下文/输入/输出/缓存指标卡。
+  - 新增 Agent 分布、每日趋势、模型排行和最近 30 分钟 bucket 明细。
+  - 支持日期与 Agent 筛选，调用现有 summary/buckets API。
+  - 用户 Token 使用密码输入框，仅可选保存在当前标签页 `sessionStorage`，不进入 URL。
+- `src/cloud/web-server.ts`
+  - 新增公开页面路由 `GET /usage`；数据 API 继续由 Bearer Token 鉴权保护。
+
+## 2026-08-24
+
 ### 56) 接入 vibe-usage parser 与独立 usage 同步链路
 
 变更目标：
