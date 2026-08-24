@@ -67,6 +67,9 @@ const interceptAutoDenyTools = new Set(toList(process.env.CLOUD_INTERCEPT_AUTO_D
 const interceptWaitTimeoutMs = toInt(process.env.CLOUD_INTERCEPT_WAIT_TIMEOUT_MS, 60000);
 const interceptPollAfterMs = toInt(process.env.CLOUD_INTERCEPT_POLL_AFTER_MS, 1000);
 const maxStateEntries = 50;
+const usageSources = new Set(["claude-code", "copilot-cli", "codex", "kimi-code"]);
+const maxUsageBucketsPerRequest = 100;
+const maxUsageSessionsPerRequest = 500;
 const pairingCodeTtlMs = 30 * 60 * 1000;
 const pairingCodeRegistry = createPairingCodeRegistry({ ttlMs: pairingCodeTtlMs });
 const apnsEnabled = toBool(process.env.APNS_ENABLED, false);
@@ -715,6 +718,76 @@ function requireInterceptAuth(req, res) {
   return null;
 }
 
+function usageString(value, maxLength, fallback = "unknown") {
+  const normalized = String(value ?? "").trim();
+  return (normalized || fallback).slice(0, maxLength);
+}
+
+function usageCount(value) {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < 0) return null;
+  return number;
+}
+
+function usageIso(value, { allowFuture = false } = {}) {
+  const date = new Date(String(value ?? ""));
+  const time = date.getTime();
+  if (!Number.isFinite(time)) return "";
+  if (!allowFuture && time > Date.now() + 24 * 60 * 60 * 1000) return "";
+  return date.toISOString();
+}
+
+function normalizeUsageBucket(raw, defaultHostname) {
+  if (!raw || typeof raw !== "object") return null;
+  const source = usageString(raw.source, 50, "").toLowerCase();
+  if (!usageSources.has(source)) return null;
+  const bucketStart = usageIso(raw.bucketStart);
+  const inputTokens = usageCount(raw.inputTokens);
+  const outputTokens = usageCount(raw.outputTokens);
+  const cachedInputTokens = usageCount(raw.cachedInputTokens);
+  const reasoningOutputTokens = usageCount(raw.reasoningOutputTokens);
+  const totalTokens = usageCount(raw.totalTokens);
+  if (!bucketStart || [inputTokens, outputTokens, cachedInputTokens, reasoningOutputTokens, totalTokens].includes(null)) return null;
+  if (totalTokens !== inputTokens + outputTokens + reasoningOutputTokens) return null;
+  return {
+    hostname: usageString(raw.hostname, 200, defaultHostname),
+    source,
+    model: usageString(raw.model, 100),
+    project: usageString(raw.project, 200),
+    bucketStart,
+    inputTokens,
+    outputTokens,
+    cachedInputTokens,
+    reasoningOutputTokens,
+    totalTokens,
+  };
+}
+
+function normalizeUsageSession(raw, defaultHostname) {
+  if (!raw || typeof raw !== "object") return null;
+  const source = usageString(raw.source, 50, "").toLowerCase();
+  if (!usageSources.has(source)) return null;
+  const firstMessageAt = usageIso(raw.firstMessageAt, { allowFuture: true });
+  const lastMessageAt = usageIso(raw.lastMessageAt, { allowFuture: true });
+  const sessionHash = usageString(raw.sessionHash, 64, "");
+  const counts = ["durationSeconds", "activeSeconds", "messageCount", "userMessageCount"].map((key) => usageCount(raw[key]));
+  const hours = Array.isArray(raw.userPromptHours) ? raw.userPromptHours.map(usageCount) : [];
+  if (!sessionHash || !firstMessageAt || !lastMessageAt || counts.includes(null) || hours.length !== 24 || hours.includes(null)) return null;
+  return {
+    hostname: usageString(raw.hostname, 200, defaultHostname),
+    source,
+    project: usageString(raw.project, 200),
+    sessionHash,
+    firstMessageAt,
+    lastMessageAt,
+    durationSeconds: counts[0],
+    activeSeconds: counts[1],
+    messageCount: counts[2],
+    userMessageCount: counts[3],
+    userPromptHours: hours,
+  };
+}
+
 function toPublicInterceptState(state) {
   return {
     total: state.total,
@@ -1155,6 +1228,53 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+
+    if (pathname.startsWith("/api/copilot/usage/")) {
+      const principal = requireInterceptAuth(req, res);
+      if (!principal) return;
+      const userId = principal.userId;
+
+      if (req.method === "POST" && pathname === "/api/copilot/usage/ingest") {
+        const body = await parseBody<Record<string, any>>(req);
+        if (body?.schemaVersion !== 1) return json(res, 400, { error: "unsupported schemaVersion" });
+        const hostname = usageString(body?.hostname, 200, "unknown");
+        const inputBuckets = Array.isArray(body?.buckets) ? body.buckets : [];
+        const inputSessions = Array.isArray(body?.sessions) ? body.sessions : [];
+        if (inputBuckets.length > maxUsageBucketsPerRequest || inputSessions.length > maxUsageSessionsPerRequest) {
+          return json(res, 413, { error: "usage batch too large" });
+        }
+        const buckets = inputBuckets.map((item) => normalizeUsageBucket(item, hostname));
+        const sessions = inputSessions.map((item) => normalizeUsageSession(item, hostname));
+        if (buckets.includes(null) || sessions.includes(null)) {
+          return json(res, 400, { error: "invalid usage payload" });
+        }
+        const result = interceptStore.withTransaction(() => ({
+          buckets: interceptStore.upsertUsageBuckets(userId, buckets),
+          sessions: interceptStore.upsertUsageSessions(userId, sessions),
+        }));
+        logApi(req, pathname, `ingest userId=${userId} syncId=${usageString(body?.syncId, 100, "-")} buckets=${result.buckets} sessions=${result.sessions}`);
+        return json(res, 200, { ok: true, accepted: result.buckets, sessions: result.sessions, dropped: 0 });
+      }
+
+      const filters = {
+        from: usageIso(url.searchParams.get("from"), { allowFuture: true }),
+        to: usageIso(url.searchParams.get("to"), { allowFuture: true }),
+        source: usageString(url.searchParams.get("source"), 50, "").toLowerCase(),
+        model: usageString(url.searchParams.get("model"), 100, ""),
+        hostname: usageString(url.searchParams.get("hostname"), 200, ""),
+      };
+      if (filters.source && !usageSources.has(filters.source)) return json(res, 400, { error: "invalid source" });
+
+      if (req.method === "GET" && pathname === "/api/copilot/usage/summary") {
+        return json(res, 200, { ok: true, ...interceptStore.getUsageSummary(userId, filters), filters });
+      }
+      if (req.method === "GET" && pathname === "/api/copilot/usage/buckets") {
+        const limit = Math.min(toInt(url.searchParams.get("limit"), 200), 1000);
+        const items = interceptStore.listUsageBuckets(userId, { ...filters, limit });
+        return json(res, 200, { ok: true, items, limit, filters });
+      }
+      return notFound(res);
+    }
 
     if (pathname.startsWith("/api/copilot/intercepts/")) {
       const principal = requireInterceptAuth(req, res);

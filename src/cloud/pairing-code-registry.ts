@@ -103,10 +103,28 @@ export function createPairingCodeRegistry({ ttlMs }: { ttlMs: number }) {
     };
   };
 
+  const revokeAuthToken = (authToken: string) => {
+    cleanup();
+    const normalizedAuthToken = String(authToken ?? "").trim();
+    if (!normalizedAuthToken) {
+      return false;
+    }
+
+    const code = codeByToken.get(normalizedAuthToken);
+    if (!code) {
+      return false;
+    }
+
+    codeByToken.delete(normalizedAuthToken);
+    byCode.delete(code);
+    return true;
+  };
+
   return {
     ttlMs,
     cleanup,
     issue,
     resolve,
+    revokeAuthToken,
   };
 }

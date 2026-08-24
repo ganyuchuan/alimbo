@@ -300,6 +300,28 @@ class ApnsStore {
 
     return Number(result?.changes ?? 0) > 0;
   }
+
+  deleteUserData(userId: string) {
+    const normalizedUserId = String(userId ?? "").trim();
+    if (!normalizedUserId) {
+      throw new Error("userId is required");
+    }
+
+    const bindingsResult = this.db.prepare(`
+      DELETE FROM apns_device_bindings
+      WHERE user_id = ?
+    `).run(normalizedUserId);
+
+    const pushEventsResult = this.db.prepare(`
+      DELETE FROM apns_push_events
+      WHERE user_id = ?
+    `).run(normalizedUserId);
+
+    return {
+      deletedDeviceBindings: Number(bindingsResult?.changes ?? 0),
+      deletedPushEvents: Number(pushEventsResult?.changes ?? 0),
+    };
+  }
 }
 
 export const apnsStore = new ApnsStore();

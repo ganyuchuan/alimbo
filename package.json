@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json --noCheck",
-    "postbuild": "mkdir -p dist/cloud && rm -rf dist/cloud/static && cp -R src/cloud/static dist/cloud/static && rm -rf dist/hooks && cp -R hooks dist/hooks",
+    "postbuild": "mkdir -p dist/cloud && rm -rf dist/cloud/static && cp -R src/cloud/static dist/cloud/static && rm -rf dist/hooks && cp -R hooks dist/hooks && mkdir -p dist/usage && rm -rf dist/usage/vendor && cp -R src/usage/vendor dist/usage/vendor",
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "npm run build && node --title=alimbo-gateway dist/index.js",

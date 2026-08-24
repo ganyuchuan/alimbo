@@ -30,10 +30,21 @@ type AuthServerRouteContext = {
     getUserByAuthToken: (authToken: string) => any;
     listUsers: (limit: number) => any[];
     getUserById: (userId: string) => any;
+    deleteUserAccountData: (params: { userId: string }) => {
+      userRemoved: boolean;
+      deletedUserRows: number;
+      deletedRequests: number;
+      deletedToolCalls: number;
+      deletedToolEvents: number;
+      deletedStateRows: number;
+      deletedSurveys: number;
+      deletedAuthSessions: number;
+    };
   };
   pairingCodeRegistry: {
     issue: (params: { authToken: string; userId: string; username: string }) => { pairingCode: string; expiresAtMs: number };
     resolve: (pairingCode: string) => { pairingCode: string; userId: string; username: string; authToken: string; expiresAtMs: number } | null;
+    revokeAuthToken: (authToken: string) => boolean;
   };
   pairingCodeTtlMs: number;
   authTokenAllowPasswordGrant: boolean;
@@ -51,6 +62,7 @@ type AuthServerRouteContext = {
     listDeviceBindingsByUserId: (userId: string) => Array<{ deviceToken: string }>;
     listAllDeviceBindings: (limit: number) => Array<{ userId: string; deviceToken: string; platform: string; updatedAtMs: number }>;
     unbindDeviceTokens: (bindings: Array<{ userId: string; deviceToken: string }>) => number;
+    deleteUserData: (userId: string) => { deletedDeviceBindings: number; deletedPushEvents: number };
   };
   isLikelyDeviceToken: (value: unknown) => boolean;
   toInt: (value: unknown, fallback: number) => number;
@@ -401,6 +413,47 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
       emailVerified: principal.emailVerified === true,
       isPrivateEmail: principal.isPrivateEmail === true,
     });
+    return true;
+  }
+
+  if (req.method === "DELETE" && pathname === "/auth/me") {
+    const authorization = String(req.headers.authorization ?? "").trim();
+    const tokenFromAuth = authorization.toLowerCase().startsWith("bearer ")
+      ? authorization.slice("bearer ".length).trim()
+      : "";
+
+    if (!tokenFromAuth) {
+      logApi(req, pathname, "unauthorized: missing token");
+      json(res, 401, { error: "unauthorized" });
+      return true;
+    }
+
+    const principal = interceptStore.getUserByAuthToken(tokenFromAuth);
+    if (!principal?.userId) {
+      logApi(req, pathname, "unauthorized: invalid token");
+      json(res, 401, { error: "unauthorized" });
+      return true;
+    }
+
+    if (String(principal.authType ?? "").trim().toLowerCase() === "admin") {
+      logApi(req, pathname, `forbidden: refuse self-delete for admin userId=${principal.userId}`);
+      json(res, 403, { error: "forbidden" });
+      return true;
+    }
+
+    const deletion = interceptStore.withTransaction(() => {
+      return interceptStore.deleteUserAccountData({ userId: principal.userId });
+    });
+    const apnsDeletion = apnsStore.deleteUserData(principal.userId);
+    const revokedPairingCode = pairingCodeRegistry.revokeAuthToken(tokenFromAuth);
+
+    logApi(
+      req,
+      pathname,
+      `account deleted userId=${principal.userId} userRemoved=${deletion.userRemoved} requests=${deletion.deletedRequests} toolCalls=${deletion.deletedToolCalls} toolEvents=${deletion.deletedToolEvents} surveys=${deletion.deletedSurveys} authSessions=${deletion.deletedAuthSessions} deviceBindings=${apnsDeletion.deletedDeviceBindings} pushEvents=${apnsDeletion.deletedPushEvents} pairingRevoked=${revokedPairingCode}`,
+    );
+    res.writeHead(204);
+    res.end();
     return true;
   }
 

@@ -484,6 +484,49 @@ function openDatabase(dbFile) {
 
     CREATE INDEX IF NOT EXISTS idx_watch_alpha_surveys_user_id
       ON watch_alpha_surveys(user_id, submitted_at_ms DESC);
+
+    CREATE TABLE IF NOT EXISTS usage_buckets (
+      user_id TEXT NOT NULL,
+      hostname TEXT NOT NULL,
+      source TEXT NOT NULL,
+      model TEXT NOT NULL,
+      project TEXT NOT NULL,
+      bucket_start TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+      reasoning_output_tokens INTEGER NOT NULL DEFAULT 0,
+      total_tokens INTEGER NOT NULL DEFAULT 0,
+      updated_at_ms INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, hostname, source, model, project, bucket_start)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_usage_buckets_user_time
+      ON usage_buckets(user_id, bucket_start DESC);
+    CREATE INDEX IF NOT EXISTS idx_usage_buckets_user_source_time
+      ON usage_buckets(user_id, source, bucket_start DESC);
+    CREATE INDEX IF NOT EXISTS idx_usage_buckets_user_model_time
+      ON usage_buckets(user_id, model, bucket_start DESC);
+
+    CREATE TABLE IF NOT EXISTS usage_sessions (
+      user_id TEXT NOT NULL,
+      hostname TEXT NOT NULL,
+      source TEXT NOT NULL,
+      project TEXT NOT NULL,
+      session_hash TEXT NOT NULL,
+      first_message_at TEXT NOT NULL,
+      last_message_at TEXT NOT NULL,
+      duration_seconds INTEGER NOT NULL DEFAULT 0,
+      active_seconds INTEGER NOT NULL DEFAULT 0,
+      message_count INTEGER NOT NULL DEFAULT 0,
+      user_message_count INTEGER NOT NULL DEFAULT 0,
+      user_prompt_hours_json TEXT NOT NULL DEFAULT '[]',
+      updated_at_ms INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, hostname, source, session_hash)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_usage_sessions_user_time
+      ON usage_sessions(user_id, last_message_at DESC);
   `);
 
   migrateInterceptStateTableIfNeeded(database);
@@ -1721,6 +1764,195 @@ class InterceptStore {
     `).get(normalizedFromMs, normalizedFromMs, normalizedToMs, normalizedToMs);
 
     return Number.isFinite(row?.total) ? row.total : 0;
+  }
+
+  upsertUsageBuckets(userId, buckets) {
+    const statement = this.db.prepare(`
+      INSERT INTO usage_buckets (
+        user_id, hostname, source, model, project, bucket_start,
+        input_tokens, output_tokens, cached_input_tokens,
+        reasoning_output_tokens, total_tokens, updated_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, hostname, source, model, project, bucket_start) DO UPDATE SET
+        input_tokens = excluded.input_tokens,
+        output_tokens = excluded.output_tokens,
+        cached_input_tokens = excluded.cached_input_tokens,
+        reasoning_output_tokens = excluded.reasoning_output_tokens,
+        total_tokens = excluded.total_tokens,
+        updated_at_ms = excluded.updated_at_ms
+    `);
+    const now = Date.now();
+    for (const bucket of buckets) {
+      statement.run(
+        userId, bucket.hostname, bucket.source, bucket.model, bucket.project,
+        bucket.bucketStart, bucket.inputTokens, bucket.outputTokens,
+        bucket.cachedInputTokens, bucket.reasoningOutputTokens,
+        bucket.totalTokens, now,
+      );
+    }
+    return buckets.length;
+  }
+
+  upsertUsageSessions(userId, sessions) {
+    const statement = this.db.prepare(`
+      INSERT INTO usage_sessions (
+        user_id, hostname, source, project, session_hash,
+        first_message_at, last_message_at, duration_seconds, active_seconds,
+        message_count, user_message_count, user_prompt_hours_json, updated_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, hostname, source, session_hash) DO UPDATE SET
+        project = excluded.project,
+        first_message_at = excluded.first_message_at,
+        last_message_at = excluded.last_message_at,
+        duration_seconds = excluded.duration_seconds,
+        active_seconds = excluded.active_seconds,
+        message_count = excluded.message_count,
+        user_message_count = excluded.user_message_count,
+        user_prompt_hours_json = excluded.user_prompt_hours_json,
+        updated_at_ms = excluded.updated_at_ms
+    `);
+    const now = Date.now();
+    for (const session of sessions) {
+      statement.run(
+        userId, session.hostname, session.source, session.project,
+        session.sessionHash, session.firstMessageAt, session.lastMessageAt,
+        session.durationSeconds, session.activeSeconds, session.messageCount,
+        session.userMessageCount, stringifyJson(session.userPromptHours, "[]"), now,
+      );
+    }
+    return sessions.length;
+  }
+
+  listUsageBuckets(userId, { from = "", to = "", source = "", model = "", hostname = "", limit = 200 } = {}) {
+    const normalizedLimit = Math.max(1, Math.min(toInt(limit, 200), 1000));
+    return this.db.prepare(`
+      SELECT hostname, source, model, project, bucket_start,
+        input_tokens, output_tokens, cached_input_tokens,
+        reasoning_output_tokens, total_tokens, updated_at_ms
+      FROM usage_buckets
+      WHERE user_id = ?
+        AND (? = '' OR bucket_start >= ?)
+        AND (? = '' OR bucket_start < ?)
+        AND (? = '' OR source = ?)
+        AND (? = '' OR model = ?)
+        AND (? = '' OR hostname = ?)
+      ORDER BY bucket_start DESC, source, model
+      LIMIT ?
+    `).all(
+      userId, from, from, to, to, source, source,
+      model, model, hostname, hostname, normalizedLimit,
+    ).map((row) => ({
+      hostname: row.hostname,
+      source: row.source,
+      model: row.model,
+      project: row.project,
+      bucketStart: row.bucket_start,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      cachedInputTokens: row.cached_input_tokens,
+      reasoningOutputTokens: row.reasoning_output_tokens,
+      totalTokens: row.total_tokens,
+      updatedAtMs: row.updated_at_ms,
+    }));
+  }
+
+  getUsageSummary(userId, { from = "", to = "", source = "", model = "", hostname = "" } = {}) {
+    const rows = this.db.prepare(`
+      SELECT hostname, source, model, bucket_start,
+        input_tokens, output_tokens, cached_input_tokens,
+        reasoning_output_tokens, total_tokens
+      FROM usage_buckets
+      WHERE user_id = ?
+        AND (? = '' OR bucket_start >= ?)
+        AND (? = '' OR bucket_start < ?)
+        AND (? = '' OR source = ?)
+        AND (? = '' OR model = ?)
+        AND (? = '' OR hostname = ?)
+    `).all(userId, from, from, to, to, source, source, model, model, hostname, hostname);
+
+    const empty = () => ({ inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0, modelTokens: 0, contextTokens: 0 });
+    const totals = empty();
+    const bySource = new Map();
+    const byModel = new Map();
+    const byDay = new Map();
+    const add = (target, row) => {
+      target.inputTokens += Number(row.input_tokens) || 0;
+      target.outputTokens += Number(row.output_tokens) || 0;
+      target.cachedInputTokens += Number(row.cached_input_tokens) || 0;
+      target.reasoningOutputTokens += Number(row.reasoning_output_tokens) || 0;
+      target.modelTokens += Number(row.total_tokens) || 0;
+      target.contextTokens += (Number(row.total_tokens) || 0) + (Number(row.cached_input_tokens) || 0);
+    };
+    for (const row of rows) {
+      add(totals, row);
+      const day = String(row.bucket_start).slice(0, 10);
+      if (!bySource.has(row.source)) bySource.set(row.source, empty());
+      if (!byModel.has(row.model)) byModel.set(row.model, empty());
+      if (!byDay.has(day)) byDay.set(day, empty());
+      add(bySource.get(row.source), row);
+      add(byModel.get(row.model), row);
+      add(byDay.get(day), row);
+    }
+    const entries = (map, key) => [...map.entries()].map(([name, value]) => ({ [key]: name, ...value }));
+    return {
+      totals,
+      bySource: entries(bySource, "source").sort((a, b) => b.modelTokens - a.modelTokens),
+      byModel: entries(byModel, "model").sort((a, b) => b.modelTokens - a.modelTokens),
+      byDay: entries(byDay, "day").sort((a, b) => a.day.localeCompare(b.day)),
+    };
+  }
+
+  deleteUserAccountData({ userId }: { userId: string }) {
+    const normalizedUserId = String(userId ?? "").trim();
+    if (!normalizedUserId) {
+      throw new Error("userId is required");
+    }
+
+    const requestsResult = this.db.prepare(`
+      DELETE FROM intercept_requests
+      WHERE user_id = ?
+    `).run(normalizedUserId);
+
+    const toolCallsResult = this.db.prepare(`
+      DELETE FROM intercept_tool_calls
+      WHERE user_id = ?
+    `).run(normalizedUserId);
+
+    const toolEventsResult = this.db.prepare(`
+      DELETE FROM intercept_tool_events
+      WHERE user_id = ?
+    `).run(normalizedUserId);
+
+    const stateResult = this.db.prepare(`
+      DELETE FROM intercept_state
+      WHERE user_id = ?
+    `).run(normalizedUserId);
+
+    const surveysResult = this.db.prepare(`
+      DELETE FROM watch_alpha_surveys
+      WHERE user_id = ?
+    `).run(normalizedUserId);
+
+    const authSessionsResult = this.db.prepare(`
+      DELETE FROM auth_sessions
+      WHERE user_id = ?
+    `).run(normalizedUserId);
+
+    const userResult = this.db.prepare(`
+      DELETE FROM users
+      WHERE user_id = ?
+    `).run(normalizedUserId);
+
+    return {
+      userRemoved: Number(userResult?.changes ?? 0) > 0,
+      deletedUserRows: Number(userResult?.changes ?? 0),
+      deletedRequests: Number(requestsResult?.changes ?? 0),
+      deletedToolCalls: Number(toolCallsResult?.changes ?? 0),
+      deletedToolEvents: Number(toolEventsResult?.changes ?? 0),
+      deletedStateRows: Number(stateResult?.changes ?? 0),
+      deletedSurveys: Number(surveysResult?.changes ?? 0),
+      deletedAuthSessions: Number(authSessionsResult?.changes ?? 0),
+    };
   }
 }
 

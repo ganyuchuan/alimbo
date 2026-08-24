@@ -113,6 +113,27 @@ export const config = {
     jobTimeoutMs: toInt(process.env.CRON_JOB_TIMEOUT_MS, 600000),
     maxConcurrent: toInt(process.env.CRON_MAX_CONCURRENT, 1),
   },
+  usage: {
+    enabled: toBool(process.env.USAGE_SYNC_ENABLED, false),
+    sources: toList(process.env.USAGE_SYNC_SOURCES, ["copilot-cli", "claude-code", "codex", "kimi-code"]),
+    intervalMs: toInt(process.env.USAGE_SYNC_INTERVAL_MS, 30 * 60 * 1000),
+    startDelayMs: toNonNegativeInt(process.env.USAGE_SYNC_START_DELAY_MS, 15000),
+    stateFile: process.env.USAGE_SYNC_STATE_FILE?.trim() || "data/usage-sync-state.json",
+    hostname: process.env.USAGE_SYNC_HOSTNAME?.trim() || "",
+    projectEnabled: toBool(process.env.USAGE_SYNC_PROJECT_ENABLED, false),
+    concurrency: toInt(process.env.USAGE_SYNC_CONCURRENCY, 2),
+    cloudUrl:
+      process.env.USAGE_SYNC_CLOUD_URL?.trim() ||
+      process.env.COPILOT_INTERCEPT_SERVER_URL?.trim() ||
+      "https://go.aigc4me.cloud",
+    authToken:
+      process.env.USAGE_SYNC_AUTH_TOKEN?.trim() ||
+      process.env.COPILOT_INTERCEPT_AUTH_TOKEN?.trim() ||
+      "",
+    timeoutMs: toInt(process.env.USAGE_SYNC_TIMEOUT_MS, 15000),
+    codexExtraHome: process.env.USAGE_SYNC_CODEX_EXTRA_HOME?.trim() || "",
+    includeSessions: toBool(process.env.USAGE_SYNC_INCLUDE_SESSIONS, false),
+  },
   feishu: {
     enabled: toBool(process.env.FEISHU_ENABLED, false),
     appId: process.env.FEISHU_APP_ID?.trim() || "",

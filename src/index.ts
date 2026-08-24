@@ -5,6 +5,7 @@ import * as Lark from "@larksuiteoapi/node-sdk";
 import { runCopilotWithSharedSession, stopCopilotClient } from "./agent-runtime/copilot.js";
 import { runAgentWithSharedSession } from "./agent-runtime/agent.js";
 import { looksLikeMarkdown } from "./bridge/reply-format.js";
+import { createUsageSyncService } from "./usage/service.js";
 
 process.title = process.env.PROCESS_TITLE || "alimbo-gateway";
 
@@ -137,16 +138,32 @@ const server = createGatewayServer(config, { cronScheduler });
 
 await server.listen();
 
+let usageSyncService = null;
+if (config.usage.enabled) {
+  if (!config.usage.authToken) {
+    console.warn("[usage] disabled: USAGE_SYNC_AUTH_TOKEN is required");
+  } else {
+    usageSyncService = createUsageSyncService(config.usage);
+    usageSyncService.start();
+  }
+}
+
 console.log(`[alimbo] gateway listening on ws://127.0.0.1:${config.port}/ws`);
 console.log(`[alimbo] health endpoint: http://127.0.0.1:${config.port}/health`);
 if (cronScheduler) {
   console.log(`[alimbo] cron subsystem enabled, jobs file: ${config.cron.jobsFile}`);
+}
+if (usageSyncService) {
+  console.log(`[alimbo] usage sync enabled, sources: ${config.usage.sources.join(",")}`);
 }
 
 const shutdown = async () => {
   try {
     if (cronScheduler) {
       cronScheduler.stop();
+    }
+    if (usageSyncService) {
+      await usageSyncService.stop();
     }
     await stopCopilotClient();
     await server.close();

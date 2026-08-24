@@ -2,6 +2,97 @@
 
 ## 2026-08-24
 
+### 56) 接入 vibe-usage parser 与独立 usage 同步链路
+
+变更目标：
+- 将 vibe-usage `0.10.14` 的基础 Agent parser 复制进 alimbo，避免恢复 agent-runtime 文本 token 估算。
+- 建立“本地日志解析 → 增量状态 → cloud 绝对值 upsert → 汇总/明细查询”的独立 usage 链路。
+- 保持 vibe-usage 统计口径：30 分钟 bucket，`totalTokens = inputTokens + outputTokens + reasoningOutputTokens`，缓存读取单列统计且不计入 `totalTokens`。
+
+主要改动：
+- `src/usage/vendor/vibe-usage/`
+  - vendoring Copilot CLI、Claude Code、Codex、Kimi Code parser 及必要公共依赖。
+  - 保留上游日志发现、usage 去重、Codex fork/subagent 去重和 parser cache 逻辑。
+- `src/usage/`
+  - 新增 alimbo usage 类型契约与 parser adapter。
+  - 新增有限并发 collector、字段白名单和统计口径归一化。
+  - 新增原子写入的本地 hash 状态，只上传新增或变化 bucket/session。
+  - 新增 cloud client 与 gateway 生命周期内置同步服务；启动延迟执行，之后按间隔同步，单实例防重入。
+  - 项目名默认隐藏，隐藏后重新聚合，避免多个项目 bucket 相互覆盖。
+- `src/config.ts` / `.env.example`
+  - 新增 `USAGE_SYNC_*` 配置，包括开关、source、周期、状态文件、hostname、项目名隐私、并发、cloud URL/token、超时、Codex extra home 与 session 开关。
+- `src/index.ts`
+  - gateway 启动后托管 usage sync service，关闭时清理定时器并等待当前同步结束。
+- `src/cloud/intercept-store.ts`
+  - 新增 `usage_buckets` 与 `usage_sessions` 表和查询索引。
+  - bucket 以用户、主机、source、model、project、bucketStart 为唯一键执行绝对值 upsert，重传不重复累计。
+  - 新增 summary 与 bucket 明细查询。
+- `src/cloud/intercept-server.ts`
+  - 新增 Bearer 鉴权接口：
+    - `POST /api/copilot/usage/ingest`
+    - `GET /api/copilot/usage/summary`
+    - `GET /api/copilot/usage/buckets`
+  - 增加 source、长度、时间、非负安全整数、batch 大小与 totalTokens 一致性校验。
+- `package.json`
+  - postbuild 将 vendored parser 原样复制至 `dist/usage/vendor`。
+
+验证记录：
+- `npm run build`：通过。
+- 构建产物实际加载并执行 Copilot CLI、Claude Code、Codex、Kimi Code parser：通过。
+- 临时 cloud SQLite + Bearer 用户完成 API 集成测试：同一 bucket 连续上传两次，summary 仍为单份绝对值。
+- 测试口径：input=100、output=20、reasoning=5、cache=300，返回 `modelTokens=125`、`contextTokens=425`。
+
+## 2026-08-24
+
+### 56) Usage 数据上报链路 + /auth/me 账号删除接口
+
+变更目标：
+- 新增本地 usage 同步能力：定时收集多源 AI Coding 使用量（30 分钟 bucket）并上报 cloud。
+- 新增 cloud usage API：支持 ingest / summary / buckets 查询。
+- 新增账号自助删除接口：`DELETE /auth/me`，完成账号与关联数据的级联清理。
+
+主要改动：
+- `src/usage/*`（新增）
+  - 新增 usage 同步服务、收集器、解析适配器、本地状态与 cloud 客户端。
+  - 接入 `vibe-usage` vendor parser，支持 `claude-code` / `copilot-cli` / `codex` / `kimi-code`。
+  - 增量同步基于本地 hash 状态，支持 bucket/session 批量上报与并发采集。
+- `src/index.ts`
+  - 启动阶段新增 usage sync service（受 `USAGE_SYNC_ENABLED` 控制）。
+  - 退出时增加 usage sync service 的优雅停止。
+- `src/config.ts`、`.env.example`
+  - 新增 `USAGE_SYNC_*` 配置（sources/interval/state/cloudUrl/authToken/includeSessions 等）。
+- `src/cloud/intercept-server.ts`
+  - 新增 `/api/copilot/usage/ingest`（POST）与 usage 查询接口：
+    - `/api/copilot/usage/summary`（GET）
+    - `/api/copilot/usage/buckets`（GET）
+  - 增加 usage payload 校验、source 白名单与批次大小限制。
+- `src/cloud/intercept-store.ts`
+  - 新增 `usage_buckets`、`usage_sessions` 表与索引。
+  - 新增 upsert/list/summary 相关存储方法。
+  - 新增 `deleteUserAccountData`：按 userId 级联删除用户、拦截记录、会话、问卷与状态数据。
+- `src/cloud/auth-server.ts`
+  - 新增 `DELETE /auth/me`：
+    - 基于 Bearer Token 识别当前用户。
+    - 删除账号及关联业务数据。
+    - 删除 APNS 绑定与推送事件。
+    - 撤销配对码映射并使现有 token 失效。
+    - 成功返回 `204 No Content`。
+- `src/cloud/apns-store.ts`
+  - 新增 `deleteUserData(userId)`，删除用户设备绑定与推送事件。
+- `src/cloud/pairing-code-registry.ts`
+  - 新增 `revokeAuthToken(authToken)`，撤销 token 到 pairing code 的映射。
+- `package.json`
+  - `postbuild` 增加 `src/usage/vendor -> dist/usage/vendor` 复制步骤。
+
+兼容性说明：
+- usage 同步默认关闭，仅在显式配置后启用。
+- 账号删除接口对 admin 账号返回 `403`，避免误删管理账号。
+- 既有鉴权与拦截主链路不变。
+
+验证记录：
+- `npm run typecheck`：执行完成；存在仓库既有 TS 报错（非本次改动引入）。
+- 本次修改文件诊断：无新增错误。
+
 ### 55) 移除 token 估算链路（agent-runtime + cloud）
 
 变更目标：
