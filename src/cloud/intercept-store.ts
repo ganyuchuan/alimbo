@@ -1938,6 +1938,16 @@ class InterceptStore {
       WHERE user_id = ?
     `).run(normalizedUserId);
 
+    const usageBucketsResult = this.db.prepare(`
+      DELETE FROM usage_buckets
+      WHERE user_id = ?
+    `).run(normalizedUserId);
+
+    const usageSessionsResult = this.db.prepare(`
+      DELETE FROM usage_sessions
+      WHERE user_id = ?
+    `).run(normalizedUserId);
+
     const userResult = this.db.prepare(`
       DELETE FROM users
       WHERE user_id = ?
@@ -1952,6 +1962,8 @@ class InterceptStore {
       deletedStateRows: Number(stateResult?.changes ?? 0),
       deletedSurveys: Number(surveysResult?.changes ?? 0),
       deletedAuthSessions: Number(authSessionsResult?.changes ?? 0),
+      deletedUsageBuckets: Number(usageBucketsResult?.changes ?? 0),
+      deletedUsageSessions: Number(usageSessionsResult?.changes ?? 0),
     };
   }
 }

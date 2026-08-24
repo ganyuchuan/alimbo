@@ -39,6 +39,8 @@ type AuthServerRouteContext = {
       deletedStateRows: number;
       deletedSurveys: number;
       deletedAuthSessions: number;
+      deletedUsageBuckets: number;
+      deletedUsageSessions: number;
     };
   };
   pairingCodeRegistry: {
@@ -450,7 +452,7 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
     logApi(
       req,
       pathname,
-      `account deleted userId=${principal.userId} userRemoved=${deletion.userRemoved} requests=${deletion.deletedRequests} toolCalls=${deletion.deletedToolCalls} toolEvents=${deletion.deletedToolEvents} surveys=${deletion.deletedSurveys} authSessions=${deletion.deletedAuthSessions} deviceBindings=${apnsDeletion.deletedDeviceBindings} pushEvents=${apnsDeletion.deletedPushEvents} pairingRevoked=${revokedPairingCode}`,
+      `account deleted userId=${principal.userId} userRemoved=${deletion.userRemoved} requests=${deletion.deletedRequests} toolCalls=${deletion.deletedToolCalls} toolEvents=${deletion.deletedToolEvents} surveys=${deletion.deletedSurveys} authSessions=${deletion.deletedAuthSessions} usageBuckets=${deletion.deletedUsageBuckets} usageSessions=${deletion.deletedUsageSessions} deviceBindings=${apnsDeletion.deletedDeviceBindings} pushEvents=${apnsDeletion.deletedPushEvents} pairingRevoked=${revokedPairingCode}`,
     );
     res.writeHead(204);
     res.end();
