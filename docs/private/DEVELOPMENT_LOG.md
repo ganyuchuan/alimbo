@@ -1,5 +1,13 @@
 # Development Log
 
+## 2026-08-25
+
+### 58) Usage Dashboard 补充推理 Token 展示
+
+- 总体指标新增“推理 Token”卡片，并明确其计入模型 Token。
+- Agent 分布卡片新增推理 Token 明细。
+- 统计口径保持不变：模型 Token = 输入 + 输出 + 推理；缓存读取独立展示。
+
 ## 2026-08-24
 
 ### 57) 新增用户 Token Usage Dashboard

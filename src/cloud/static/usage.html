@@ -70,7 +70,7 @@
       .check input { width: auto; }
       .status { margin-left: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
       .status.ok { color: #8be7b2; } .status.err { color: var(--danger); }
-      .metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 12px; }
+      .metrics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 12px; }
       .metric { min-height: 126px; padding: 16px; border: 1px solid var(--line); border-radius: 15px; background: linear-gradient(145deg, var(--surface-2), rgba(5,12,8,.76)); position: relative; overflow: hidden; }
       .metric::after { content: ""; position: absolute; width: 100px; height: 100px; border-radius: 50%; top: -62px; right: -38px; background: var(--metric-color, var(--accent)); filter: blur(28px); opacity: .24; }
       .metric .name { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -144,6 +144,7 @@
         <article class="metric" style="--metric-color:var(--blue)"><div class="name">上下文 Token</div><div id="contextTokens" class="value">—</div><div class="note">模型 Token + 缓存读取</div></article>
         <article class="metric" style="--metric-color:var(--purple)"><div class="name">输入 Token</div><div id="inputTokens" class="value">—</div><div class="note">不含缓存读取</div></article>
         <article class="metric" style="--metric-color:var(--amber)"><div class="name">输出 Token</div><div id="outputTokens" class="value">—</div><div class="note">模型生成输出</div></article>
+        <article class="metric" style="--metric-color:#ff8f70"><div class="name">推理 Token</div><div id="reasoningTokens" class="value">—</div><div class="note">计入模型 Token</div></article>
         <article class="metric" style="--metric-color:#5ac8c8"><div class="name">缓存读取</div><div id="cachedTokens" class="value">—</div><div class="note">单独统计，不计入模型 Token</div></article>
       </section>
 
@@ -199,6 +200,7 @@
         $("contextTokens").textContent = compact(t.contextTokens); $("contextTokens").title = full(t.contextTokens);
         $("inputTokens").textContent = compact(t.inputTokens); $("inputTokens").title = full(t.inputTokens);
         $("outputTokens").textContent = compact(t.outputTokens); $("outputTokens").title = full(t.outputTokens);
+        $("reasoningTokens").textContent = compact(t.reasoningOutputTokens); $("reasoningTokens").title = full(t.reasoningOutputTokens);
         $("cachedTokens").textContent = compact(t.cachedInputTokens); $("cachedTokens").title = full(t.cachedInputTokens);
       }
       function renderAgents(items = []) {
@@ -207,7 +209,7 @@
         $("agents").innerHTML = items.length ? items.map((item) => {
           const color = agentColors[item.source] || "#8eb29d";
           const percentage = Math.max(2, count(item.modelTokens) / max * 100);
-          return `<article class="agent" style="--agent-color:${color}"><div class="agent-top"><div class="agent-name"><span class="dot"></span>${escapeHtml(agentNames[item.source] || item.source)}</div><span class="eyebrow">${escapeHtml(item.source)}</span></div><div class="agent-total" title="${full(item.modelTokens)}">${compact(item.modelTokens)}</div><div class="agent-meta"><span>输入 ${compact(item.inputTokens)}</span><span>输出 ${compact(item.outputTokens)}</span><span>缓存 ${compact(item.cachedInputTokens)}</span></div><div class="bar-track"><div class="bar" style="width:${percentage}%"></div></div></article>`;
+          return `<article class="agent" style="--agent-color:${color}"><div class="agent-top"><div class="agent-name"><span class="dot"></span>${escapeHtml(agentNames[item.source] || item.source)}</div><span class="eyebrow">${escapeHtml(item.source)}</span></div><div class="agent-total" title="${full(item.modelTokens)}">${compact(item.modelTokens)}</div><div class="agent-meta"><span>输入 ${compact(item.inputTokens)}</span><span>输出 ${compact(item.outputTokens)}</span><span>推理 ${compact(item.reasoningOutputTokens)}</span><span>缓存 ${compact(item.cachedInputTokens)}</span></div><div class="bar-track"><div class="bar" style="width:${percentage}%"></div></div></article>`;
         }).join("") : '<div class="empty" style="grid-column:1/-1">当前筛选范围内没有 Agent 用量</div>';
       }
       function renderDays(items = []) {
