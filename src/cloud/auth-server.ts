@@ -199,7 +199,9 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
       return true;
     }
 
-    const issued = interceptStore.withTransaction(() => interceptStore.createUserTokenRecord({ username }));
+    const issued = admin.isDemoAccount === true
+      ? admin
+      : interceptStore.withTransaction(() => interceptStore.createUserTokenRecord({ username }));
     const pairing = pairingCodeRegistry.issue({
       authToken: issued.authToken,
       userId: issued.userId,
@@ -414,6 +416,7 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
       email: principal.email || "",
       emailVerified: principal.emailVerified === true,
       isPrivateEmail: principal.isPrivateEmail === true,
+      isDemoAccount: principal.isDemoAccount === true,
     });
     return true;
   }

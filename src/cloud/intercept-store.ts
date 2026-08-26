@@ -335,6 +335,7 @@ function openDatabase(dbFile) {
       apple_email_verified INTEGER NOT NULL DEFAULT 0,
       apple_is_private_email INTEGER NOT NULL DEFAULT 0,
       apple_last_login_at_ms INTEGER NOT NULL DEFAULT 0,
+      is_demo_account INTEGER NOT NULL DEFAULT 0,
       auth_token TEXT NOT NULL UNIQUE,
       created_at_ms INTEGER NOT NULL DEFAULT 0,
       updated_at_ms INTEGER NOT NULL DEFAULT 0
@@ -564,6 +565,7 @@ function openDatabase(dbFile) {
   tryExecMigration(database, "ALTER TABLE users ADD COLUMN apple_email_verified INTEGER NOT NULL DEFAULT 0; ");
   tryExecMigration(database, "ALTER TABLE users ADD COLUMN apple_is_private_email INTEGER NOT NULL DEFAULT 0; ");
   tryExecMigration(database, "ALTER TABLE users ADD COLUMN apple_last_login_at_ms INTEGER NOT NULL DEFAULT 0; ");
+  tryExecMigration(database, "ALTER TABLE users ADD COLUMN is_demo_account INTEGER NOT NULL DEFAULT 0; ");
   tryExecMigration(database, "ALTER TABLE auth_sessions ADD COLUMN user_id TEXT NOT NULL DEFAULT ''; ");
   tryExecMigration(database, "ALTER TABLE auth_sessions ADD COLUMN created_at_ms INTEGER NOT NULL DEFAULT 0; ");
   tryExecMigration(database, "ALTER TABLE auth_sessions ADD COLUMN updated_at_ms INTEGER NOT NULL DEFAULT 0; ");
@@ -1238,6 +1240,33 @@ class InterceptStore {
     return countTotalFromDb(this.db, "intercept_requests", userId);
   }
 
+  deleteDemoSyntheticData(userId) {
+    const normalizedUserId = String(userId ?? "").trim();
+    if (!normalizedUserId) {
+      return { deletedRequests: 0, deletedToolEvents: 0, deletedToolCalls: 0 };
+    }
+
+    const toolEventsResult = this.db.prepare(`
+      DELETE FROM intercept_tool_events
+      WHERE user_id = ?
+        AND (id LIKE 'evt_demo_%' OR request_id LIKE 'demo_%')
+    `).run(normalizedUserId);
+    const toolCallsResult = this.db.prepare(`
+      DELETE FROM intercept_tool_calls
+      WHERE user_id = ? AND id LIKE 'demo_%'
+    `).run(normalizedUserId);
+    const requestsResult = this.db.prepare(`
+      DELETE FROM intercept_requests
+      WHERE user_id = ? AND id LIKE 'demo_%'
+    `).run(normalizedUserId);
+
+    return {
+      deletedRequests: Number(requestsResult?.changes ?? 0),
+      deletedToolEvents: Number(toolEventsResult?.changes ?? 0),
+      deletedToolCalls: Number(toolCallsResult?.changes ?? 0),
+    };
+  }
+
   createAuthSessionRecord({ userId, expiresAtMs, now = Date.now() }) {
     const normalizedUserId = String(userId ?? "").trim();
     if (!normalizedUserId) {
@@ -1319,6 +1348,61 @@ class InterceptStore {
     }
 
     throw new Error("failed to issue auth token");
+  }
+
+  createOrGetDemoUserTokenRecord({ username, now = Date.now() }) {
+    const normalizedUsername = String(username ?? "").trim();
+    if (!normalizedUsername) {
+      throw new Error("username is required");
+    }
+
+    const existing = this.db.prepare(`
+      SELECT user_id, user_name, auth_token, auth_type, auth_password_hash
+      FROM users
+      WHERE is_demo_account = 1
+      ORDER BY created_at_ms ASC
+      LIMIT 1
+    `).get();
+
+    if (existing?.user_id) {
+      const hasPassword = Boolean(String(existing.auth_password_hash ?? "").trim());
+      const password = hasPassword ? "" : generateStrongPassword();
+      if (!hasPassword || String(existing.auth_type ?? "").trim() !== "admin") {
+        const passwordSalt = hasPassword ? "" : generatePasswordSalt();
+        const passwordHash = hasPassword ? String(existing.auth_password_hash).trim() : hashPassword(password, passwordSalt);
+        this.db.prepare(`
+          UPDATE users
+          SET auth_type = 'admin',
+              auth_password_salt = CASE WHEN ? <> '' THEN ? ELSE auth_password_salt END,
+              auth_password_hash = CASE WHEN ? <> '' THEN ? ELSE auth_password_hash END,
+              updated_at_ms = ?
+          WHERE user_id = ?
+        `).run(passwordSalt, passwordSalt, passwordHash, passwordHash, now, existing.user_id);
+      }
+
+      return {
+        userId: String(existing.user_id).trim(),
+        authToken: String(existing.auth_token).trim(),
+        username: String(existing.user_name).trim(),
+        authType: "admin",
+        isDemoAccount: true,
+        created: false,
+        password: password || undefined,
+      };
+    }
+
+    const issued = this.createAdminUserRecord({ username: normalizedUsername, now });
+    this.db.prepare(`
+      UPDATE users
+      SET is_demo_account = 1, updated_at_ms = ?
+      WHERE user_id = ?
+    `).run(now, issued.userId);
+
+    return {
+      ...issued,
+      isDemoAccount: true,
+      created: true,
+    };
   }
 
   createAdminUserRecord({ username, now = Date.now() }) {
@@ -1442,7 +1526,7 @@ class InterceptStore {
 
   getUserByAuthToken(authToken) {
     const row = this.db.prepare(`
-      SELECT user_id, user_name, auth_token, auth_type, auth_password_salt, auth_password_hash, apple_sub, apple_email, apple_email_verified, apple_is_private_email
+      SELECT user_id, user_name, auth_token, auth_type, auth_password_salt, auth_password_hash, apple_sub, apple_email, apple_email_verified, apple_is_private_email, is_demo_account
       FROM users
       WHERE auth_token = ?
       LIMIT 1
@@ -1463,6 +1547,7 @@ class InterceptStore {
       email: String(row.apple_email ?? "").trim(),
       emailVerified: Number(row.apple_email_verified ?? 0) > 0,
       isPrivateEmail: Number(row.apple_is_private_email ?? 0) > 0,
+      isDemoAccount: Number(row.is_demo_account ?? 0) > 0,
       source: "user",
     };
   }
@@ -1474,7 +1559,7 @@ class InterceptStore {
     }
 
     const row = this.db.prepare(`
-      SELECT user_id, user_name, auth_token, auth_type, auth_password_salt, auth_password_hash, apple_sub, apple_email, apple_email_verified, apple_is_private_email
+      SELECT user_id, user_name, auth_token, auth_type, auth_password_salt, auth_password_hash, apple_sub, apple_email, apple_email_verified, apple_is_private_email, is_demo_account
       FROM users
       WHERE user_name = ? AND auth_type = 'admin'
       LIMIT 1
@@ -1495,6 +1580,7 @@ class InterceptStore {
       email: String(row.apple_email ?? "").trim(),
       emailVerified: Number(row.apple_email_verified ?? 0) > 0,
       isPrivateEmail: Number(row.apple_is_private_email ?? 0) > 0,
+      isDemoAccount: Number(row.is_demo_account ?? 0) > 0,
       source: "user",
     };
   }
@@ -1519,7 +1605,7 @@ class InterceptStore {
     }
 
     const row = this.db.prepare(`
-      SELECT user_id, user_name, auth_token, auth_type, auth_password_salt, auth_password_hash, apple_sub, apple_email, apple_email_verified, apple_is_private_email
+      SELECT user_id, user_name, auth_token, auth_type, auth_password_salt, auth_password_hash, apple_sub, apple_email, apple_email_verified, apple_is_private_email, is_demo_account
       FROM users
       WHERE user_id = ?
       LIMIT 1
@@ -1540,6 +1626,7 @@ class InterceptStore {
       email: String(row.apple_email ?? "").trim(),
       emailVerified: Number(row.apple_email_verified ?? 0) > 0,
       isPrivateEmail: Number(row.apple_is_private_email ?? 0) > 0,
+      isDemoAccount: Number(row.is_demo_account ?? 0) > 0,
       source: "user",
     };
   }
@@ -1547,7 +1634,7 @@ class InterceptStore {
   listUsers(limit = 100) {
     const normalizedLimit = Math.max(1, Math.min(toInt(limit, 100), 500));
     const rows = this.db.prepare(`
-      SELECT user_id, user_name, auth_type, auth_password_salt, auth_password_hash, apple_sub, apple_email, apple_email_verified, apple_is_private_email, apple_last_login_at_ms, auth_token, created_at_ms, updated_at_ms
+      SELECT user_id, user_name, auth_type, auth_password_salt, auth_password_hash, apple_sub, apple_email, apple_email_verified, apple_is_private_email, apple_last_login_at_ms, is_demo_account, auth_token, created_at_ms, updated_at_ms
       FROM users
       ORDER BY updated_at_ms DESC, created_at_ms DESC
       LIMIT ?
@@ -1562,6 +1649,7 @@ class InterceptStore {
       email: String(row.apple_email ?? "").trim(),
       emailVerified: Number(row.apple_email_verified ?? 0) > 0,
       isPrivateEmail: Number(row.apple_is_private_email ?? 0) > 0,
+      isDemoAccount: Number(row.is_demo_account ?? 0) > 0,
       appleLastLoginAtMs: Number.isFinite(row.apple_last_login_at_ms) ? row.apple_last_login_at_ms : 0,
       authToken: String(row.auth_token ?? "").trim(),
       createdAtMs: Number.isFinite(row.created_at_ms) ? row.created_at_ms : 0,

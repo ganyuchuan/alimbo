@@ -76,7 +76,6 @@
 - 构建产物实际加载并执行 Copilot CLI、Claude Code、Codex、Kimi Code parser：通过。
 - 临时 cloud SQLite + Bearer 用户完成 API 集成测试：同一 bucket 连续上传两次，summary 仍为单份绝对值。
 - 测试口径：input=100、output=20、reasoning=5、cache=300，返回 `modelTokens=125`、`contextTokens=425`。
-
 ## 2026-08-24
 
 ### 56) Usage 数据上报链路 + /auth/me 账号删除接口
@@ -3088,3 +3087,72 @@
 - 同步更新 `package.json` 与 `package-lock.json` 版本号至 `0.2.12`。
 - 发布目标：npm 包与 GitHub Release `v0.2.12`。
 
+---
+
+## 2026-08-26
+
+### 41) Demo 审核账号模块化：角色标记 + 安全请求补数 + 可密码登录
+
+变更目标：
+- 提供专用 demo 审核账号，避免在代码中硬编码用户名判断。
+- demo 账号登录后始终可见可审核数据（active approve requests / tool calls / active agent）。
+- 审核请求可 Allow / Deny 全链路成功，但不触发真实危险动作。
+
+主要改动：
+- 新增模块：`src/cloud/demo-account.ts`
+  - 封装 demo 账号服务：`provisionAccount`、`ensureData`、`isDemoAccount`。
+  - 生成合成的安全审核请求（仅读取/检索类语义，`executesRealAction=false`）。
+  - 同步写入 pretool tool event，确保 `tool-calls` 列表与审批页面可见。
+- `src/cloud/intercept-store.ts`
+  - `users` 表新增 `is_demo_account` 字段并提供兼容迁移。
+  - 用户读取接口（`getUserByAuthToken/getUserById/listUsers`）返回 `isDemoAccount`。
+  - 新增 `createOrGetDemoUserTokenRecord`，保证 demo 账号创建幂等。
+  - 支持将 demo 账号升级为 `admin` 登录类型，并在首次补齐密码时返回明文密码。
+  - 新增 `deleteDemoSyntheticData`，用于清理旧版 demo 合成数据。
+- `src/cloud/intercept-server.ts`
+  - 鉴权结果透传 `isDemoAccount`。
+  - 在 intercept API 访问与 manual decision 保存后调用 demo 数据补数。
+- `src/cloud/auth-server.ts`
+  - `/auth/me` 返回 `isDemoAccount`。
+  - `/auth/token` 在 demo 管理员模式下返回 demo 自身 token，不再误签发普通用户 token。
+- `src/cloud/create-user.ts`
+  - 新增 `--demo` 模式：`npm run cloud:create-user -- --demo --username <name>`。
+  - demo 账号创建/复用后自动初始化审核数据。
+
+涉及文件：
+- `src/cloud/demo-account.ts`
+- `src/cloud/intercept-store.ts`
+- `src/cloud/intercept-server.ts`
+- `src/cloud/auth-server.ts`
+- `src/cloud/create-user.ts`
+
+验证记录：
+- `npm run build`：通过。
+- 隔离 DB 集成验证：Allow/Deny 全流程成功，且不执行真实工具动作。
+
+---
+
+### 42) Demo 审核队列策略优化：2 + 3 两阶段补数，完成后不再补充
+
+变更目标：
+- 初始待审批固定为 2 条，初始 Tool Calls 固定为 2 条。
+- 初始 2 条清空后只补充剩余 3 条。
+- 全部 5 条处理完成后不再自动补数。
+
+主要改动：
+- `src/cloud/demo-account.ts`
+  - 增加数据集版本标识与两阶段补数逻辑（`INITIAL_REQUEST_COUNT=2`）。
+  - 首轮仅注入前 2 条请求；首轮清空后注入后 3 条；二轮清空后停止补数。
+  - 状态消息区分进行中与已完成（`Demo review dataset completed`）。
+- `src/cloud/intercept-store.ts`
+  - 补充 demo 历史合成数据清理能力，支持旧无限补数数据迁移到新规则。
+
+涉及文件：
+- `src/cloud/demo-account.ts`
+- `src/cloud/intercept-store.ts`
+
+验证记录：
+- 隔离 DB 自动化验证结果：
+  - 初始：`waiting=2`，`toolCalls=2`
+  - 首次清空后：`waiting=3`
+  - 再次清空后：`waiting=0`，`totalRequests=5`

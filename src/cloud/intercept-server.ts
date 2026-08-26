@@ -7,6 +7,7 @@ import { createApnsClient, loadApnsPrivateKeyFromEnv } from "./apns-client.js";
 import { verifyAppleIdentityToken } from "./apple-auth.js";
 import { apnsStore } from "./apns-store.js";
 import { handleAuthServerRoute } from "./auth-server.js";
+import { createDemoAccountService } from "./demo-account.js";
 import { interceptStore } from "./intercept-store.js";
 import { createPairingCodeRegistry } from "./pairing-code-registry.js";
 import { handleWebServerRoute } from "./web-server.js";
@@ -72,6 +73,7 @@ const maxUsageBucketsPerRequest = 100;
 const maxUsageSessionsPerRequest = 500;
 const pairingCodeTtlMs = 30 * 60 * 1000;
 const pairingCodeRegistry = createPairingCodeRegistry({ ttlMs: pairingCodeTtlMs });
+const demoAccountService = createDemoAccountService({ store: interceptStore });
 const apnsEnabled = toBool(process.env.APNS_ENABLED, false);
 const apnsUseSandbox = toBool(process.env.APNS_USE_SANDBOX, true);
 const apnsIosTopic = String(process.env.APNS_IOS_TOPIC).trim();
@@ -698,6 +700,7 @@ function requireInterceptAuth(req, res) {
         userId: userPrincipal.userId,
         authToken: provided,
         username: userPrincipal.username,
+        isDemoAccount: userPrincipal.isDemoAccount === true,
         source: "user",
       };
     }
@@ -1286,6 +1289,7 @@ const server = createServer(async (req, res) => {
       logApi(req, pathname, `auth ok userId=${principal.userId}`);
 
       const principalUserId = principal.userId;
+      demoAccountService.ensureData(principal);
 
       if (req.method === "GET" && pathname === "/api/copilot/intercepts/state") {
         logApi(req, pathname, `load state userId=${principalUserId}`);
@@ -1655,13 +1659,16 @@ const server = createServer(async (req, res) => {
 
         logApi(req, pathname, `decision saved id=${result.item.id} status=${result.item.status}`);
 
+        const demoRefresh = demoAccountService.ensureData(principal);
+        const responseState = demoRefresh.state || result.state;
+
         return json(res, 200, {
           ok: true,
           id: result.item.id,
           status: result.item.status,
           decision: result.item.decision,
           reason: result.item.reason,
-          state: toPublicInterceptState(result.state),
+          state: toPublicInterceptState(responseState),
         });
       }
 
