@@ -74,6 +74,8 @@ export function createDemoAccountService({ store }: {
 
       let waitingItems = store.listRequests(userId, { status: "waiting", limit: 100 });
       let seeded = 0;
+      let shouldSeedInitial = datasetItems.length === 0;
+      let shouldSeedRemaining = datasetItems.length === INITIAL_REQUEST_COUNT && waitingItems.length === 0;
 
       // Keep demo approvals alive while the reviewer is actively using the client.
       for (const item of waitingItems) {
@@ -82,12 +84,8 @@ export function createDemoAccountService({ store }: {
         store.saveRequest(userId, item);
       }
 
-      const seedStart = datasetItems.length === 0
-        ? 0
-        : datasetItems.length === INITIAL_REQUEST_COUNT && waitingItems.length === 0
-          ? INITIAL_REQUEST_COUNT
-          : SAFE_DEMO_REQUESTS.length;
-      const seedEnd = seedStart === 0 ? INITIAL_REQUEST_COUNT : SAFE_DEMO_REQUESTS.length;
+      const seedStart = shouldSeedInitial ? 0 : shouldSeedRemaining ? INITIAL_REQUEST_COUNT : SAFE_DEMO_REQUESTS.length;
+      const seedEnd = shouldSeedInitial ? INITIAL_REQUEST_COUNT : shouldSeedRemaining ? SAFE_DEMO_REQUESTS.length : SAFE_DEMO_REQUESTS.length;
 
       if (seedStart < seedEnd) {
         for (let index = seedStart; index < seedEnd; index += 1) {
@@ -160,7 +158,9 @@ export function createDemoAccountService({ store }: {
       state.completed = false;
       state.msg = waitingItems.length > 0
         ? "Demo agent is active and waiting for safe review decisions"
-        : "Demo review dataset completed";
+        : datasetItems.length >= SAFE_DEMO_REQUESTS.length
+          ? "Demo review dataset completed"
+          : "Demo review dataset primed";
       state.agent = { provider: "copilot", version: "demo" };
       state.work_dir = DEMO_WORK_DIR;
       state.prompt = newest
