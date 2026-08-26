@@ -2,6 +2,12 @@
 
 ## 2026-08-25
 
+### 60) 完善 Usage Dashboard 与客户端接入文档
+
+- Agent 分布固定覆盖 Copilot CLI、Claude Code、Codex 和 Kimi Code；无数据 Agent 以 0 展示。
+- 新增 `docs/private/TOKEN_USAGE_API.md`，以 curl 示例整理 summary、buckets、ingest 和 health 接口。
+- 文档明确 Bearer Token 鉴权、查询时间边界、统计公式、上传限制及绝对值幂等 upsert 语义。
+
 ### 58) Usage Dashboard 补充推理 Token 展示
 
 - 总体指标新增“推理 Token”卡片，并明确其计入模型 Token。

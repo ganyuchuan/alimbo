@@ -173,6 +173,7 @@
 
     <script>
       const $ = (id) => document.getElementById(id);
+      const allSources = ["copilot-cli", "claude-code", "codex", "kimi-code"];
       const agentNames = { "copilot-cli": "Copilot CLI", "claude-code": "Claude Code", codex: "Codex", "kimi-code": "Kimi Code" };
       const agentColors = { "copilot-cli": "#68a9ff", "claude-code": "#d59cff", codex: "#42d986", "kimi-code": "#f4ba62" };
       const nf = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 });
@@ -205,13 +206,28 @@
         $("cachedTokens").textContent = compact(t.cachedInputTokens); $("cachedTokens").title = full(t.cachedInputTokens);
       }
       function renderAgents(items = []) {
-        const max = Math.max(1, ...items.map((x) => count(x.modelTokens)));
-        $("agentCaption").textContent = `${items.length} 个有数据的 Agent`;
-        $("agents").innerHTML = items.length ? items.map((item) => {
+        const selectedSource = $("source").value;
+        const visibleSources = selectedSource ? [selectedSource] : allSources;
+        const bySource = new Map((items || []).map((item) => [item.source, item]));
+        const viewItems = visibleSources.map((source) => {
+          const current = bySource.get(source);
+          return {
+            source,
+            inputTokens: count(current?.inputTokens),
+            outputTokens: count(current?.outputTokens),
+            cachedInputTokens: count(current?.cachedInputTokens),
+            reasoningOutputTokens: count(current?.reasoningOutputTokens),
+            modelTokens: count(current?.modelTokens),
+          };
+        });
+        const max = Math.max(1, ...viewItems.map((x) => count(x.modelTokens)));
+        const nonZeroCount = viewItems.filter((item) => count(item.modelTokens) > 0).length;
+        $("agentCaption").textContent = `${viewItems.length} 个 Agent · ${nonZeroCount} 个有数据`;
+        $("agents").innerHTML = viewItems.map((item) => {
           const color = agentColors[item.source] || "#8eb29d";
           const percentage = Math.max(2, count(item.modelTokens) / max * 100);
           return `<article class="agent" style="--agent-color:${color}"><div class="agent-top"><div class="agent-name"><span class="dot"></span>${escapeHtml(agentNames[item.source] || item.source)}</div><span class="eyebrow">${escapeHtml(item.source)}</span></div><div class="agent-total" title="${full(item.modelTokens)}">${compact(item.modelTokens)}</div><div class="agent-meta"><span>输入 ${compact(item.inputTokens)}</span><span>输出 ${compact(item.outputTokens)}</span><span>推理 ${compact(item.reasoningOutputTokens)}</span><span>缓存 ${compact(item.cachedInputTokens)}</span></div><div class="bar-track"><div class="bar" style="width:${percentage}%"></div></div></article>`;
-        }).join("") : '<div class="empty" style="grid-column:1/-1">当前筛选范围内没有 Agent 用量</div>';
+        }).join("");
       }
       function renderDays(items = []) {
         const max = Math.max(1, ...items.map((x) => count(x.modelTokens)));
