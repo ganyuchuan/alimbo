@@ -1240,33 +1240,6 @@ class InterceptStore {
     return countTotalFromDb(this.db, "intercept_requests", userId);
   }
 
-  deleteDemoSyntheticData(userId) {
-    const normalizedUserId = String(userId ?? "").trim();
-    if (!normalizedUserId) {
-      return { deletedRequests: 0, deletedToolEvents: 0, deletedToolCalls: 0 };
-    }
-
-    const toolEventsResult = this.db.prepare(`
-      DELETE FROM intercept_tool_events
-      WHERE user_id = ?
-        AND (id LIKE 'evt_demo_%' OR request_id LIKE 'demo_%')
-    `).run(normalizedUserId);
-    const toolCallsResult = this.db.prepare(`
-      DELETE FROM intercept_tool_calls
-      WHERE user_id = ? AND id LIKE 'demo_%'
-    `).run(normalizedUserId);
-    const requestsResult = this.db.prepare(`
-      DELETE FROM intercept_requests
-      WHERE user_id = ? AND id LIKE 'demo_%'
-    `).run(normalizedUserId);
-
-    return {
-      deletedRequests: Number(requestsResult?.changes ?? 0),
-      deletedToolEvents: Number(toolEventsResult?.changes ?? 0),
-      deletedToolCalls: Number(toolCallsResult?.changes ?? 0),
-    };
-  }
-
   createAuthSessionRecord({ userId, expiresAtMs, now = Date.now() }) {
     const normalizedUserId = String(userId ?? "").trim();
     if (!normalizedUserId) {

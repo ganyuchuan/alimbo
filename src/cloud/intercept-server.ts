@@ -1092,7 +1092,6 @@ const server = createServer(async (req, res) => {
       apnsStore,
       isLikelyDeviceToken,
       toInt,
-      demoAccountService,
     });
     if (handledByAuthServer) {
       return;

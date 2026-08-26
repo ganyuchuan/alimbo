@@ -43,9 +43,6 @@ type AuthServerRouteContext = {
       deletedUsageSessions: number;
     };
   };
-  demoAccountService?: {
-    ensureData: (principal: any) => { seeded: number; state: any };
-  };
   pairingCodeRegistry: {
     issue: (params: { authToken: string; userId: string; username: string }) => { pairingCode: string; expiresAtMs: number };
     resolve: (pairingCode: string) => { pairingCode: string; userId: string; username: string; authToken: string; expiresAtMs: number } | null;
@@ -128,7 +125,6 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
     apnsStore,
     isLikelyDeviceToken,
     toInt,
-    demoAccountService,
   } = context;
 
   if (req.method === "POST" && pathname === "/auth/login") {
@@ -151,9 +147,6 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
     }
 
     const session = createAdminSessionForPrincipal(res, principal);
-    if (principal?.isDemoAccount === true) {
-      demoAccountService?.ensureData(principal);
-    }
     logApi(req, pathname, `admin login ok userId=${principal.userId} session=${session.sessionToken.slice(0, 8)}...`);
     redirect(res, returnTo || "/");
     return true;
@@ -209,9 +202,6 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
     const issued = admin.isDemoAccount === true
       ? admin
       : interceptStore.withTransaction(() => interceptStore.createUserTokenRecord({ username }));
-    if (issued?.isDemoAccount === true) {
-      demoAccountService?.ensureData(issued);
-    }
     const pairing = pairingCodeRegistry.issue({
       authToken: issued.authToken,
       userId: issued.userId,

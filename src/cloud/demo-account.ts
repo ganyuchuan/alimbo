@@ -3,8 +3,8 @@ import crypto from "node:crypto";
 const DEMO_WORK_DIR = "/workspace/alimbo-demo";
 const DEMO_SESSION_ID = "demo-review-session";
 const DEMO_REQUEST_TTL_MS = 24 * 60 * 60 * 1000;
-const DEMO_DATASET_VERSION = "v2";
-const INITIAL_REQUEST_COUNT = 2;
+const DEMO_REFILL_MIN_DELAY_SECONDS = 3;
+const DEMO_REFILL_MAX_DELAY_SECONDS = 10;
 
 const SAFE_DEMO_REQUESTS = [
   {
@@ -43,9 +43,49 @@ function appendEntry(state: any, text: string) {
   state.entries = [...entries, text].slice(-50);
 }
 
-export function createDemoAccountService({ store }: {
+export function createDemoAccountService({ store, minBatchSize = 3, maxBatchSize = 5 }: {
   store: any;
+  minBatchSize?: number;
+  maxBatchSize?: number;
 }) {
+  const normalizedMin = Math.max(3, Math.min(5, Math.trunc(minBatchSize)));
+  const normalizedMax = Math.max(normalizedMin, Math.min(5, Math.trunc(maxBatchSize)));
+  const refillSchedules = new Map<string, { deadlineMs: number; delaySeconds: number; timer: NodeJS.Timeout | null }>();
+
+  function clearRefillSchedule(userId: string) {
+    const schedule = refillSchedules.get(userId);
+    if (schedule?.timer) {
+      clearTimeout(schedule.timer);
+    }
+    refillSchedules.delete(userId);
+  }
+
+  function scheduleRefill(principal: any, userId: string, now: number) {
+    const existing = refillSchedules.get(userId);
+    if (existing) {
+      return existing;
+    }
+
+    const delaySeconds = crypto.randomInt(DEMO_REFILL_MIN_DELAY_SECONDS, DEMO_REFILL_MAX_DELAY_SECONDS + 1);
+    const deadlineMs = now + delaySeconds * 1000;
+    const schedule = { deadlineMs, delaySeconds, timer: null as NodeJS.Timeout | null };
+    schedule.timer = setTimeout(() => {
+      const current = refillSchedules.get(userId);
+      if (!current || current !== schedule) {
+        return;
+      }
+      current.timer = null;
+      try {
+        ensureData(principal);
+      } catch (error) {
+        console.warn(`[cloud-server][demo] refill failed userId=${userId} reason=${String((error as any)?.message ?? error)}`);
+        clearRefillSchedule(userId);
+      }
+    }, delaySeconds * 1000);
+    refillSchedules.set(userId, schedule);
+    return schedule;
+  }
+
   function provisionAccount({ username = "app-review-demo" } = {}) {
     return store.withTransaction(() => store.createOrGetDemoUserTokenRecord({ username }));
   }
@@ -62,20 +102,8 @@ export function createDemoAccountService({ store }: {
 
     return store.withTransaction(() => {
       const now = Date.now();
-      const requestIdPrefix = `demo_${DEMO_DATASET_VERSION}_`;
-      let datasetItems = store
-        .listRequests(userId, { limit: 1000 })
-        .filter((item: any) => String(item.id ?? "").startsWith(requestIdPrefix));
-
-      // One-time migration from the previous endlessly replenished demo dataset.
-      if (datasetItems.length === 0) {
-        store.deleteDemoSyntheticData(userId);
-      }
-
       let waitingItems = store.listRequests(userId, { status: "waiting", limit: 100 });
       let seeded = 0;
-      let shouldSeedInitial = datasetItems.length === 0;
-      let shouldSeedRemaining = datasetItems.length === INITIAL_REQUEST_COUNT && waitingItems.length === 0;
 
       // Keep demo approvals alive while the reviewer is actively using the client.
       for (const item of waitingItems) {
@@ -84,70 +112,75 @@ export function createDemoAccountService({ store }: {
         store.saveRequest(userId, item);
       }
 
-      const seedStart = shouldSeedInitial ? 0 : shouldSeedRemaining ? INITIAL_REQUEST_COUNT : SAFE_DEMO_REQUESTS.length;
-      const seedEnd = shouldSeedInitial ? INITIAL_REQUEST_COUNT : shouldSeedRemaining ? SAFE_DEMO_REQUESTS.length : SAFE_DEMO_REQUESTS.length;
+      if (waitingItems.length > 0) {
+        clearRefillSchedule(userId);
+      }
 
-      if (seedStart < seedEnd) {
-        for (let index = seedStart; index < seedEnd; index += 1) {
-          const template = SAFE_DEMO_REQUESTS[index];
-          const id = `${requestIdPrefix}${index + 1}_${crypto.randomUUID()}`;
-          const traceId = `tr_${id}`;
-          const providerCallId = `demo_call_${crypto.randomUUID()}`;
-          const createdAtMs = now - index * 1000;
-          const item = {
-            id,
-            traceId,
-            providerCallId,
-            tool: template.tool,
-            hint: template.hint,
-            msg: "Safe demo approval request (no real tool will run)",
-            input: {
-              ...template.input,
-              demo: true,
-              executesRealAction: false,
-            },
-            sessionId: DEMO_SESSION_ID,
-            workDir: DEMO_WORK_DIR,
-            status: "waiting",
-            decision: "wait",
-            reason: "waiting for demo reviewer decision",
-            createdAtMs,
-            updatedAtMs: createdAtMs,
-            expiresAtMs: now + DEMO_REQUEST_TTL_MS,
-            decidedBy: "",
-            decidedAtMs: 0,
-          };
+      if (waitingItems.length === 0) {
+        const schedule = scheduleRefill(principal, userId, now);
+        if (now >= schedule.deadlineMs) {
+          clearRefillSchedule(userId);
+          const batchSize = crypto.randomInt(normalizedMin, normalizedMax + 1);
+          const offset = crypto.randomInt(0, SAFE_DEMO_REQUESTS.length);
 
-          store.saveRequest(userId, item);
-          store.insertToolEvent(userId, {
-            eventId: `evt_demo_pre_${id}`,
-            traceId,
-            providerCallId,
-            requestId: id,
-            sessionId: DEMO_SESSION_ID,
-            tool: template.tool,
-            stage: "pretool",
-            status: "waiting",
-            decision: "wait",
-            reason: item.reason,
-            decidedBy: "",
-            args: item.input,
-            result: null,
-            meta: {
-              demo: true,
-              synthetic: true,
-              executesRealAction: false,
-            },
-            ts: createdAtMs,
-            workDir: DEMO_WORK_DIR,
-          });
-          seeded += 1;
+          for (let index = 0; index < batchSize; index += 1) {
+            const template = SAFE_DEMO_REQUESTS[(offset + index) % SAFE_DEMO_REQUESTS.length];
+            const id = `demo_${crypto.randomUUID()}`;
+            const traceId = `tr_${id}`;
+            const providerCallId = `demo_call_${crypto.randomUUID()}`;
+            const createdAtMs = now - index * 1000;
+            const item = {
+              id,
+              traceId,
+              providerCallId,
+              tool: template.tool,
+              hint: template.hint,
+              msg: "Safe demo approval request (no real tool will run)",
+              input: {
+                ...template.input,
+                demo: true,
+                executesRealAction: false,
+              },
+              sessionId: DEMO_SESSION_ID,
+              workDir: DEMO_WORK_DIR,
+              status: "waiting",
+              decision: "wait",
+              reason: "waiting for demo reviewer decision",
+              createdAtMs,
+              updatedAtMs: createdAtMs,
+              expiresAtMs: now + DEMO_REQUEST_TTL_MS,
+              decidedBy: "",
+              decidedAtMs: 0,
+            };
+
+            store.saveRequest(userId, item);
+            store.insertToolEvent(userId, {
+              eventId: `evt_demo_pre_${id}`,
+              traceId,
+              providerCallId,
+              requestId: id,
+              sessionId: DEMO_SESSION_ID,
+              tool: template.tool,
+              stage: "pretool",
+              status: "waiting",
+              decision: "wait",
+              reason: item.reason,
+              decidedBy: "",
+              args: item.input,
+              result: null,
+              meta: {
+                demo: true,
+                synthetic: true,
+                executesRealAction: false,
+              },
+              ts: createdAtMs,
+              workDir: DEMO_WORK_DIR,
+            });
+            seeded += 1;
+          }
+
+          waitingItems = store.listRequests(userId, { status: "waiting", limit: 100 });
         }
-
-        waitingItems = store.listRequests(userId, { status: "waiting", limit: 100 });
-        datasetItems = store
-          .listRequests(userId, { limit: 1000 })
-          .filter((item: any) => String(item.id ?? "").startsWith(requestIdPrefix));
       }
 
       const state = store.loadState(userId);
@@ -156,18 +189,17 @@ export function createDemoAccountService({ store }: {
       state.waiting = waitingItems.length;
       state.running = 1;
       state.completed = false;
+      const pendingRefill = refillSchedules.get(userId);
       state.msg = waitingItems.length > 0
         ? "Demo agent is active and waiting for safe review decisions"
-        : datasetItems.length >= SAFE_DEMO_REQUESTS.length
-          ? "Demo review dataset completed"
-          : "Demo review dataset primed";
+        : `Demo agent will add safe review requests in ${pendingRefill?.delaySeconds ?? DEMO_REFILL_MIN_DELAY_SECONDS} seconds`;
       state.agent = { provider: "copilot", version: "demo" };
       state.work_dir = DEMO_WORK_DIR;
       state.prompt = newest
         ? { id: newest.traceId, tool: newest.tool, hint: newest.hint }
         : null;
       if (seeded > 0) {
-        appendEntry(state, `Added ${seeded} safe demo approval requests (${datasetItems.length}/5)`);
+        appendEntry(state, `Added ${seeded} safe demo approval requests`);
       }
       store.saveState(userId, state);
 
