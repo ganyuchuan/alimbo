@@ -6,31 +6,18 @@ const DEMO_REQUEST_TTL_MS = 24 * 60 * 60 * 1000;
 const DEMO_REFILL_MIN_DELAY_SECONDS = 3;
 const DEMO_REFILL_MAX_DELAY_SECONDS = 10;
 
-const SAFE_DEMO_REQUESTS = [
+export const SAFE_DEMO_REQUESTS = [
   {
     tool: "read_file",
     hint: "Read README.md to summarize the project overview",
     input: { path: "README.md", purpose: "demo-only preview" },
+    pushNotification: true,
   },
   {
     tool: "list_directory",
     hint: "List files in the docs directory",
     input: { path: "docs", depth: 1, purpose: "demo-only preview" },
-  },
-  {
-    tool: "search_workspace",
-    hint: "Search documentation for onboarding references",
-    input: { query: "onboarding", path: "docs", purpose: "demo-only preview" },
-  },
-  {
-    tool: "read_config",
-    hint: "Preview the public TypeScript compiler options",
-    input: { path: "tsconfig.json", purpose: "demo-only preview" },
-  },
-  {
-    tool: "inspect_status",
-    hint: "Inspect a simulated read-only agent status",
-    input: { scope: "demo", purpose: "demo-only preview" },
+    pushNotification: false,
   },
 ];
 
@@ -43,13 +30,10 @@ function appendEntry(state: any, text: string) {
   state.entries = [...entries, text].slice(-50);
 }
 
-export function createDemoAccountService({ store, minBatchSize = 3, maxBatchSize = 5 }: {
+export function createDemoAccountService({ store, onApprovalCreated }: {
   store: any;
-  minBatchSize?: number;
-  maxBatchSize?: number;
+  onApprovalCreated?: (event: { userId: string; request: any }) => void | Promise<void>;
 }) {
-  const normalizedMin = Math.max(3, Math.min(5, Math.trunc(minBatchSize)));
-  const normalizedMax = Math.max(normalizedMin, Math.min(5, Math.trunc(maxBatchSize)));
   const refillSchedules = new Map<string, { deadlineMs: number; delaySeconds: number; timer: NodeJS.Timeout | null }>();
 
   function clearRefillSchedule(userId: string) {
@@ -100,7 +84,8 @@ export function createDemoAccountService({ store, minBatchSize = 3, maxBatchSize
       return { seeded: 0, state: null };
     }
 
-    return store.withTransaction(() => {
+    const notifications: Array<{ userId: string; request: any }> = [];
+    const result = store.withTransaction(() => {
       const now = Date.now();
       let waitingItems = store.listRequests(userId, { status: "waiting", limit: 100 });
       let seeded = 0;
@@ -120,11 +105,11 @@ export function createDemoAccountService({ store, minBatchSize = 3, maxBatchSize
         const schedule = scheduleRefill(principal, userId, now);
         if (now >= schedule.deadlineMs) {
           clearRefillSchedule(userId);
-          const batchSize = crypto.randomInt(normalizedMin, normalizedMax + 1);
-          const offset = crypto.randomInt(0, SAFE_DEMO_REQUESTS.length);
+          store.deleteDemoSyntheticData(userId);
+          const batchSize = SAFE_DEMO_REQUESTS.length;
 
           for (let index = 0; index < batchSize; index += 1) {
-            const template = SAFE_DEMO_REQUESTS[(offset + index) % SAFE_DEMO_REQUESTS.length];
+            const template = SAFE_DEMO_REQUESTS[index];
             const id = `demo_${crypto.randomUUID()}`;
             const traceId = `tr_${id}`;
             const providerCallId = `demo_call_${crypto.randomUUID()}`;
@@ -140,6 +125,7 @@ export function createDemoAccountService({ store, minBatchSize = 3, maxBatchSize
                 ...template.input,
                 demo: true,
                 executesRealAction: false,
+                pushNotification: template.pushNotification,
               },
               sessionId: DEMO_SESSION_ID,
               workDir: DEMO_WORK_DIR,
@@ -176,6 +162,9 @@ export function createDemoAccountService({ store, minBatchSize = 3, maxBatchSize
               ts: createdAtMs,
               workDir: DEMO_WORK_DIR,
             });
+            if (template.pushNotification) {
+              notifications.push({ userId, request: item });
+            }
             seeded += 1;
           }
 
@@ -205,6 +194,18 @@ export function createDemoAccountService({ store, minBatchSize = 3, maxBatchSize
 
       return { seeded, state };
     });
+
+    if (onApprovalCreated) {
+      for (const notification of notifications) {
+        Promise.resolve(onApprovalCreated(notification)).catch((error) => {
+          console.warn(
+            `[cloud-server][demo] approval push failed userId=${userId} requestId=${notification.request.id} reason=${String((error as any)?.message ?? error)}`,
+          );
+        });
+      }
+    }
+
+    return result;
   }
 
   return {

@@ -73,7 +73,6 @@ const maxUsageBucketsPerRequest = 100;
 const maxUsageSessionsPerRequest = 500;
 const pairingCodeTtlMs = 30 * 60 * 1000;
 const pairingCodeRegistry = createPairingCodeRegistry({ ttlMs: pairingCodeTtlMs });
-const demoAccountService = createDemoAccountService({ store: interceptStore });
 const apnsEnabled = toBool(process.env.APNS_ENABLED, false);
 const apnsUseSandbox = toBool(process.env.APNS_USE_SANDBOX, true);
 const apnsIosTopic = String(process.env.APNS_IOS_TOPIC).trim();
@@ -99,6 +98,20 @@ let adminLoginPageTemplate = "";
 const APNS_CATEGORY_APPROVAL = "ALIMBO_APPROVAL_V1";
 const APNS_CATEGORY_SESSION_COMPLETED = "ALIMBO_SESSION_COMPLETED_V1";
 const APNS_CATEGORY_INFORMATION = "ALIMBO_INFORMATION_V1";
+const demoAccountService = createDemoAccountService({
+  store: interceptStore,
+  onApprovalCreated: ({ userId, request }) => sendApnsInterceptNotification({
+    userId,
+    requestId: request.id,
+    tool: request.tool,
+    decision: "wait",
+    title: `${request.tool} 发了一条消息需要你审批`,
+    message: `${request.hint}`,
+    eventKey: `demo-pretool-wait:${userId}:${request.id}`,
+    category: APNS_CATEGORY_APPROVAL,
+    eventType: "intercept.approval_required",
+  }),
+});
 
 function setToArray(setLike) {
   return Array.isArray(setLike) ? setLike : [...setLike];
