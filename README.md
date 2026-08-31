@@ -14,10 +14,6 @@ Alimbo 是一个基于 Node.js 的 AI 中转站：把本地 Copilot、Claude Cod
 - 移动消息桥接：飞书消息与本地 Agent 双向通信
 - 可控自动化入口：支持 git、sql、cron、service、skills、mcp 等能力
 
-## 如果你正在参与 Alimbo Watch 内测
-
-[点击进入 Alimbo Watch 内测说明与产品场景](docs/watch-alpha-tests.md)
-
 ## 快速开始
 
 ### 1) 开始之前
