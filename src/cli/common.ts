@@ -38,8 +38,8 @@ export function loadEnvExampleTemplate(cwd: string, dirname: string) {
     "FEISHU_GATEWAY_TOKEN=c55d35b5a584591b350f46a937a489ca",
     "FEISHU_INTERCEPT_AUTH_TOKEN=c55d35b5a584591b350f46a937a489ca",
     "COPILOT_INTERCEPT_AUTH_TOKEN=c55d35b5a584591b350f46a937a489ca",
-    "COPILOT_INTERCEPT_SERVER_URL=https://go.aigc4me.cloud",
-    "FEISHU_INTERCEPT_SERVER_URL=https://go.aigc4me.cloud",
+    "COPILOT_INTERCEPT_SERVER_URL=https://limbo.ganyuchuan.cn",
+    "FEISHU_INTERCEPT_SERVER_URL=https://limbo.ganyuchuan.cn",
   ].join("\n");
 }
 

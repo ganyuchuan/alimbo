@@ -125,7 +125,7 @@ export const config = {
     cloudUrl:
       process.env.USAGE_SYNC_CLOUD_URL?.trim() ||
       process.env.COPILOT_INTERCEPT_SERVER_URL?.trim() ||
-      "https://go.aigc4me.cloud",
+      "https://limbo.ganyuchuan.cn",
     authToken:
       process.env.USAGE_SYNC_AUTH_TOKEN?.trim() ||
       process.env.COPILOT_INTERCEPT_AUTH_TOKEN?.trim() ||
@@ -162,7 +162,7 @@ export const config = {
     interceptServerUrl:
       process.env.FEISHU_INTERCEPT_SERVER_URL?.trim() ||
       process.env.COPILOT_INTERCEPT_SERVER_URL?.trim() ||
-      "https://go.aigc4me.cloud",
+      "https://limbo.ganyuchuan.cn",
     interceptAuthToken:
       process.env.FEISHU_INTERCEPT_AUTH_TOKEN?.trim() ||
       process.env.COPILOT_INTERCEPT_AUTH_TOKEN?.trim() ||

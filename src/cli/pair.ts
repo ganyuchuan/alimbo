@@ -116,7 +116,7 @@ async function main() {
     throw new Error("pairing code must be 4 digits, usage: alimbo pair <4digits> [--base-url <url>]");
   }
 
-  const cloudBaseUrl = readOption(args, "--base-url") || "https://go.aigc4me.cloud";
+  const cloudBaseUrl = readOption(args, "--base-url") || "https://limbo.ganyuchuan.cn";
 
   console.log(`[alimbo-pair] Resolve token via ${cloudBaseUrl}/auth/pairing-token ...`);
   const pairingPayload = await resolveTokenByPairingCode({ cloudBaseUrl, pairingCode });

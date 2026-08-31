@@ -1114,7 +1114,7 @@ async function updateFeishuInteractiveMessage({ feishuClient, messageId, content
 }
 
 function createInterceptReviewClient(feishuCfg) {
-  const baseUrl = trimTrailingSlash(feishuCfg.interceptServerUrl || "https://go.aigc4me.cloud");
+  const baseUrl = trimTrailingSlash(feishuCfg.interceptServerUrl || "https://limbo.ganyuchuan.cn");
   const authToken = String(feishuCfg.interceptAuthToken ?? "").trim();
   const timeoutMs = toPositiveInt(feishuCfg.requestTimeoutMs, 15000);
 

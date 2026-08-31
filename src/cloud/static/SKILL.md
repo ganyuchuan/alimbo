@@ -78,7 +78,7 @@ alimbo pair 1234
 说明：
 - 4 位配对码来自 Alimbo Watch 首次输入用户名后的界面。
 - 非首次可在手表设置点击 new pairing code 获取新码。
-- 默认云端地址是 `https://go.aigc4me.cloud`，如需私有云可加 `--base-url`。
+- 默认云端地址是 `https://limbo.ganyuchuan.cn`，如需私有云可加 `--base-url`。
 
 示例：
 

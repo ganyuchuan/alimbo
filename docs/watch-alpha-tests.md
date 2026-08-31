@@ -84,7 +84,7 @@ Alimbo 是一个安装在桌面设备的中转站，将本地 Agent 消息转发
 
 ! [用户名输入截图](../assets/username-input.png)
 
-- Alimbo 中转站 SKILL 文档链接：https://go.aigc4me.cloud
+- Alimbo 中转站 SKILL 文档链接：https://limbo.ganyuchuan.cn
 - 4位数的配对码（关键）
 
 ![配对码截图](../assets/pairing-code.png)
@@ -95,13 +95,13 @@ Alimbo 是一个安装在桌面设备的中转站，将本地 Agent 消息转发
 
 让你的 Agent 访问 SKILL 文档链接，它会自动帮你在电脑上安装 Alimbo 中转站。然后引导你进入配对流程，输入刚刚获取的4个数字完成配对。
 
-- 让 Agent 访问 https://go.aigc4me.cloud 这份 SKILL 文档链接，帮你自动安装 Alimbo。
+- 让 Agent 访问 https://limbo.ganyuchuan.cn 这份 SKILL 文档链接，帮你自动安装 Alimbo。
 
 这里**以 Claude Code 为例**，我在 `tmp` 目录（tmp 可以换成你自己的目录）下打开 Claude Code CLI。
 
 ![Claude Code CLI截图](../assets/claude-code-cli.jpg)
 
-输入提示词：`阅读 https://go.aigc4me.cloud 并帮我安装这个工具`，Claude Code 就会自己直到帮你下载并安装 Alimbo 中转站。
+输入提示词：`阅读 https://limbo.ganyuchuan.cn 并帮我安装这个工具`，Claude Code 就会自己直到帮你下载并安装 Alimbo 中转站。
 
 ![Claude Code 安装截图](../assets/claude-code-install-alimbo.jpg)
 
