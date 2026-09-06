@@ -186,6 +186,9 @@ export async function handleCopilotOnPreToolUse(runtime, input) {
       msg: `Intercepted tool ${toolName}`,
       sessionId: String(input?.sessionId ?? "").trim() || null,
       workDir: runtime.workDir,
+      agent: {
+        provider: "copilot",
+      },
       input: {
         toolName,
         toolArgs: safeCloneToolArgs(input?.toolArgs),

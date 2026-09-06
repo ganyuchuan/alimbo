@@ -59,6 +59,7 @@ export async function handleCodexHookPhase({
         msg: `Intercepted tool ${normalized.toolName}`,
         sessionId: normalized.sessionId || null,
         workDir: normalized.workDir,
+        agent: { provider: "codex" },
         input: {
           toolName: normalized.toolName,
           toolArgs: safeCloneToolArgs(normalized.toolArgs),

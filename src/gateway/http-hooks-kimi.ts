@@ -138,6 +138,7 @@ export async function handleKimiHookPhase({
         msg: `Intercepted tool ${normalized.toolName}`,
         sessionId: normalized.sessionId || null,
         workDir: normalized.workDir,
+        agent: { provider: "kimi" },
         input: {
           toolName: normalized.toolName,
           toolArgs: safeCloneToolArgs(normalized.toolArgs),

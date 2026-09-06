@@ -30,7 +30,12 @@ type PairingTokenPayload = {
 };
 
 function printHelp() {
-  console.log("Usage: alimbo pair <4digits> [--base-url <url>]");
+  console.log("Usage: alimbo pair <4digits> [--base-url <url>] [--provider <claude|copilot|codex|kimi>]");
+}
+
+function normalizeProvider(value: string) {
+  const provider = String(value ?? "").trim().toLowerCase();
+  return ["claude", "copilot", "codex", "kimi"].includes(provider) ? provider : "";
 }
 
 async function resolveTokenByPairingCode({ cloudBaseUrl, pairingCode }: { cloudBaseUrl: string; pairingCode: string }) {
@@ -58,10 +63,12 @@ async function verifyInterceptDecisionApi({
   cloudBaseUrl,
   authToken,
   workDir,
+  provider,
 }: {
   cloudBaseUrl: string;
   authToken: string;
   workDir: string;
+  provider: string;
 }) {
   const endpoint = `${cloudBaseUrl}/api/copilot/intercepts/pretool`;
   console.log(`[alimbo-pair] POST ${endpoint}`);
@@ -80,11 +87,12 @@ async function verifyInterceptDecisionApi({
       msg: "It is not a hook",
       sessionId: "pair",
       workDir,
+      agent: { provider },
       input: {
         toolName: "pair",
         toolArgs: {
-          "command": "alimbo claude",
-          "description": "Start Claude Code CLI in the terminal",
+          "command": `alimbo ${provider}`,
+          "description": `Start ${provider} CLI in the terminal`,
         },
         metadata: {},
       },
@@ -117,6 +125,13 @@ async function main() {
   }
 
   const cloudBaseUrl = readOption(args, "--base-url") || "https://limbo.ganyuchuan.cn";
+  const providerOption = readOption(args, "--provider");
+  const provider = normalizeProvider(providerOption)
+    || normalizeProvider(String(process.env.AGENT_PROVIDER ?? ""))
+    || "agent";
+  if (providerOption && provider === "agent") {
+    throw new Error("--provider must be claude, copilot, codex, or kimi");
+  }
 
   console.log(`[alimbo-pair] Resolve token via ${cloudBaseUrl}/auth/pairing-token ...`);
   const pairingPayload = await resolveTokenByPairingCode({ cloudBaseUrl, pairingCode });
@@ -164,6 +179,7 @@ async function main() {
       cloudBaseUrl,
       authToken: token,
       workDir: cwd,
+      provider,
     });
 
     console.log("[alimbo-pair] Success");

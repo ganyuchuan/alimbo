@@ -1,5 +1,31 @@
 # Development Log
 
+## 2026-09-06
+
+### 61) 修复多 Agent 场景下审批与完成推送的 Provider 误标
+
+变更目标：
+- 让 APNs 审批和会话完成通知始终显示实际发起当前请求的 Agent，避免同一用户此前的 Codex/Claude 状态覆盖 Copilot 标识。
+
+主要改动：
+- `src/agent-runtime/intercept-decision.ts`
+  - pretool 请求契约新增可选 `agent` 字段，并透传至 cloud API。
+- Agent Hook 调用方
+  - Copilot、Claude、Codex、Kimi 的 pretool 请求显式携带其 Provider。
+  - Copilot HTTP Hook 运行时固定注入 `agentProvider: "copilot"`。
+- `src/agent-runtime/intercept-event.ts`
+  - 上报生命周期事件时，事件自身的 `meta.provider` 优先于网关进程中的 `AGENT_PROVIDER`，防止遗留环境变量污染事件身份。
+- `src/cloud/intercept-server.ts`
+  - pretool 请求中的 Provider 写入当前用户状态。
+  - 推送名称按“当前请求/事件 Provider → 状态 Provider → 云端环境变量 → `agent`”解析。
+- `src/cli/agent.ts` / `src/cli/pair.ts`
+  - `alimbo <provider> <4digits>` 将选定 Provider 传递给配对连通性检查。
+  - 配对 pretool 检查携带 `agent.provider`，且命令说明改为使用实际 Provider，避免检查通知错误回退到旧会话状态。
+
+验证记录：
+- `npm run build`：通过。
+- `npm run typecheck`：仍有 18 个既有类型错误，位于 `activity-event-builder.ts`、`common.ts`、`intercept-decision.ts`，与本次改动无关。
+
 ## 2026-08-25
 
 ### 60) 完善 Usage Dashboard 与客户端接入文档

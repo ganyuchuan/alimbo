@@ -90,7 +90,7 @@ const appleIssuer = String(process.env.APPLE_SIGNIN_ISSUER ?? "https://appleid.a
 const adminSessionTtlMs = toInt(process.env.CLOUD_ADMIN_SESSION_TTL_MS, 7 * 24 * 60 * 60 * 1000);
 const adminSessionCookieName = "alimbo_admin_session";
 const authTokenAllowPasswordGrant = toBool(process.env.CLOUD_AUTH_TOKEN_ALLOW_PASSWORD_GRANT, false);
-const agentProvider = String(process.env.AGENT_PROVIDER ?? "").trim();
+const configuredAgentProvider = String(process.env.AGENT_PROVIDER ?? "").trim().toLowerCase();
 const pushHost = String(process.env.ALIMBO_PUSH_HOST ?? process.env.HOSTNAME ?? os.hostname() ?? "").trim() || "unknown";
 const adminLoginPagePath = new URL("./static/auth-login.html", import.meta.url);
 let adminLoginPageTemplate = "";
@@ -172,6 +172,10 @@ type InterceptPretoolRequest = {
   input?: Record<string, unknown> | null;
   sessionId?: string;
   workDir?: string;
+  agent?: {
+    provider?: string;
+    version?: string;
+  };
 };
 
 type InterceptPretoolBody = {
@@ -697,6 +701,13 @@ function resolvePretoolDecision(tool) {
   }
 
   return interceptDefaultDecision;
+}
+
+function resolveAgentProvider(state, preferredProvider = "") {
+  return String(preferredProvider ?? "").trim().toLowerCase()
+    || String(state?.agent?.provider ?? "").trim().toLowerCase()
+    || configuredAgentProvider
+    || "agent";
 }
 
 function requireInterceptAuth(req, res) {
@@ -1418,6 +1429,15 @@ const server = createServer(async (req, res) => {
           const state = interceptStore.loadState(principalUserId);
           refreshTodayTokens(state);
 
+          const requestAgentProvider = String(request.agent?.provider ?? "").trim().toLowerCase();
+          const requestAgentVersion = String(request.agent?.version ?? "").trim();
+          if (requestAgentProvider || requestAgentVersion) {
+            state.agent = {
+              provider: requestAgentProvider || String(state?.agent?.provider ?? "").trim().toLowerCase(),
+              version: requestAgentVersion || String(state?.agent?.version ?? "").trim(),
+            };
+          }
+
           let item = interceptStore.getRequestById(principalUserId, id);
           if (item) {
             maybeExpireRequest(state, item);
@@ -1520,12 +1540,13 @@ const server = createServer(async (req, res) => {
         });
 
         if (result.item.status === "waiting") {
+          const provider = resolveAgentProvider(result.state, request.agent?.provider);
           await sendApnsInterceptNotification({
             userId: principalUserId,
             requestId: result.item.id,
             tool: result.item.tool,
             decision: "wait",
-            title: `${agentProvider} waiting for your decision`,
+            title: `${provider} waiting for your decision`,
             message: `Quickly tap to let it continue: ${result.item.tool} - ${result.item.hint}`,
             eventKey: `pretool-wait:${principalUserId}:${result.item.id}`,
             category: APNS_CATEGORY_APPROVAL,
@@ -1841,13 +1862,14 @@ const server = createServer(async (req, res) => {
             return json(res, 200, { ok: true, state: toPublicInterceptState(state) });
           }
           const tool = String(event?.prompt?.tool ?? "session").trim() || "session";
+          const provider = resolveAgentProvider(state, eventAgentProvider);
           await sendApnsInterceptNotification({
             userId: principalUserId,
             requestId,
             tool,
             decision: "completed",
-            title: `${agentProvider} has exited`,
-            message: `Typing in the terminal to resume: alimbo ${agentProvider}`,
+            title: `${provider} has exited`,
+            message: `Typing in the terminal to resume: alimbo ${provider}`,
             eventKey: `session-completed:${principalUserId}:${requestId}`,
             category: APNS_CATEGORY_SESSION_COMPLETED,
             eventType: "session.completed",

@@ -128,6 +128,7 @@ function buildClaudeHooks(config) {
         msg: `Intercepted tool ${toolName}`,
         sessionId: String(input?.session_id ?? "").trim() || null,
         workDir,
+        agent: { provider: "claude" },
         input: {
           toolName,
           toolArgs: safeCloneToolArgs(input?.tool_input),

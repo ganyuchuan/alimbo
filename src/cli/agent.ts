@@ -188,7 +188,7 @@ async function main() {
   }
 
   if (pairingCode) {
-    const pairArgs = [pairingCode];
+    const pairArgs = [pairingCode, "--provider", provider];
     if (cloudBaseUrl) {
       pairArgs.push("--base-url", cloudBaseUrl);
     }

@@ -169,6 +169,10 @@ export async function requestInterceptDecisionByApi({
     sessionId?: string | null;
     workDir?: string;
     input?: unknown;
+    agent?: {
+      provider?: string;
+      version?: string;
+    };
   };
   logPrefix?: string;
 }) {
@@ -227,6 +231,7 @@ export async function requestInterceptDecisionByApi({
         sessionId: String(request?.sessionId ?? "").trim() || null,
         workDir: String(request?.workDir ?? "").trim(),
         input: request?.input ?? null,
+        agent: request?.agent,
         ts: Date.now(),
       },
     }),

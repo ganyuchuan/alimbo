@@ -21,6 +21,7 @@ export async function handleCopilotHookPhase({
 }) {
   const copilotRuntime = createCopilotHookRuntime(
     {
+      agentProvider: "copilot",
       interceptAuthToken: runtime.interceptAuthToken,
       interceptTimeoutMs: runtime.interceptTimeoutMs,
       interceptPollIntervalMs: runtime.interceptPollIntervalMs,
