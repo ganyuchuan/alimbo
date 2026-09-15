@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Device Token Manager</title>
     <style>
+      @layer legacy {
       :root {
         --bg: #f3f6fb;
         --card: #ffffff;
@@ -139,9 +140,12 @@
           align-items: flex-start;
         }
       }
+      }
     </style>
+    <link rel="stylesheet" href="/limbo-ui.css" />
+    <script src="/limbo-ui.js" defer></script>
   </head>
-  <body>
+  <body class="lm-devices" data-page="devices">
     <div class="wrap">
       <div class="hero">
         <div>

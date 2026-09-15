@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agent Limbo</title>
   <style>
+    @layer legacy {
     :root {
       --bg: #080808;
       --bg-soft: #121212;
@@ -529,12 +530,6 @@
 
     .notification-preview {
       margin-top: 32px;
-    }
-
-    .notification-screen {
-      background:
-        radial-gradient(circle at top, rgba(255, 255, 255, 0.1), transparent 28%),
-        linear-gradient(180deg, #050505 0%, #0d0d0d 38%, #020202 100%);
     }
 
     .notification-lockscreen {
@@ -1384,10 +1379,13 @@
         gap: 10px 14px;
       }
     }
+    }
   </style>
+  <link rel="stylesheet" href="/limbo-ui.css" />
+  <script src="/limbo-ui.js" defer></script>
 </head>
 
-<body>
+<body class="lm-home" data-page="home">
   <div class="app">
     <nav class="site-nav" aria-label="主导航">
       <a class="brand" href="/" aria-label="Agent Limbo 首页">
@@ -1616,7 +1614,7 @@
           </aside>
 
           <div class="iphone-stage" aria-label="iPhone 锁屏通知预览">
-            <div class="iphone-screen notification-screen">
+            <div class="iphone-screen">
               <div class="notification-lockscreen">
                 <div class="notification-clock" aria-hidden="true">
                   <div class="time">9:41</div>

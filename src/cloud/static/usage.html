@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Alimbo Usage Dashboard</title>
     <style>
+      @layer legacy {
       :root {
         color-scheme: dark;
         --bg: #050806;
@@ -110,9 +111,12 @@
       .empty { display: grid; place-items: center; min-height: 150px; color: var(--muted); font-size: 13px; text-align: center; }
       @media (max-width: 1100px) { .controls { grid-template-columns: 1fr 1fr 1fr; } .token-field { grid-column: 1 / -1; } .metrics { grid-template-columns: repeat(3, 1fr); } .agents { grid-template-columns: repeat(2, 1fr); } }
       @media (max-width: 720px) { .wrap { width: min(100% - 18px, 1420px); padding-top: 10px; } .hero { padding: 18px; flex-direction: column; } .controls { grid-template-columns: 1fr 1fr; } .token-field, .load { grid-column: 1 / -1; } .metrics { grid-template-columns: 1fr 1fr; } .metrics .metric:first-child { grid-column: 1 / -1; } .agents, .split { grid-template-columns: 1fr; } .status { width: 100%; margin-left: 0; } }
+      }
     </style>
+    <link rel="stylesheet" href="/limbo-ui.css" />
+    <script src="/limbo-ui.js" defer></script>
   </head>
-  <body>
+  <body class="lm-usage" data-page="usage">
     <main class="wrap">
       <header class="hero">
         <div>

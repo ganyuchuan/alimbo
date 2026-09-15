@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Agent Limbo Survey</title>
     <style>
+      @layer legacy {
       :root {
         --bg: #080808;
         --bg-soft: #121212;
@@ -338,9 +339,12 @@
           grid-template-columns: 1fr;
         }
       }
+      }
     </style>
+    <link rel="stylesheet" href="/limbo-ui.css" />
+    <script src="/limbo-ui.js" defer></script>
   </head>
-  <body>
+  <body class="lm-survey" data-page="survey">
     <div class="app">
       <header class="page-header">
         <h1>Agent Limbo</h1>

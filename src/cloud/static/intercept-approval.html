@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Cloud Intercept Approval</title>
     <style>
+      @layer legacy {
       :root {
         --bg: #f4f6f8;
         --card: #ffffff;
@@ -194,9 +195,12 @@
           position: static;
         }
       }
+      }
     </style>
+    <link rel="stylesheet" href="/limbo-ui.css" />
+    <script src="/limbo-ui.js" defer></script>
   </head>
-  <body>
+  <body class="lm-approval" data-page="approval">
     <div class="wrap">
       <div class="hero">
         <h1 class="title">Approval Workspace</h1>

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Cloud Auth Users</title>
     <style>
+      @layer legacy {
       :root {
         --bg: #f3f6fb;
         --card: #ffffff;
@@ -163,9 +164,12 @@
           align-items: flex-start;
         }
       }
+      }
     </style>
+    <link rel="stylesheet" href="/limbo-ui.css" />
+    <script src="/limbo-ui.js" defer></script>
   </head>
-  <body>
+  <body class="lm-users" data-page="users">
     <div class="wrap">
       <div class="hero">
         <div>

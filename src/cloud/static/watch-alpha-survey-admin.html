@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Watch Alpha Survey Admin</title>
     <style>
+      @layer legacy {
       :root {
         --bg: #000000;
         --bg-2: #06110d;
@@ -164,9 +165,12 @@
       @media (max-width: 900px) {
         .hero { flex-direction: column; }
       }
+      }
     </style>
+    <link rel="stylesheet" href="/limbo-ui.css" />
+    <script src="/limbo-ui.js" defer></script>
   </head>
-  <body>
+  <body class="lm-survey-admin" data-page="survey-admin">
     <div class="wrap">
       <div class="hero">
         <div>
