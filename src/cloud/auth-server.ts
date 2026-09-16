@@ -127,6 +127,15 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
     toInt,
   } = context;
 
+  if (req.method === "GET" && pathname === "/auth/session") {
+    const principal = requireAdminSession(req, res);
+    json(res, 200, {
+      authenticated: Boolean(principal),
+      isAdmin: Boolean(principal && isAdminPrincipal(principal)),
+    });
+    return true;
+  }
+
   if (req.method === "POST" && pathname === "/auth/login") {
     const body = await readFormBody(req);
     const username = String(body.get("username") ?? "").trim();
