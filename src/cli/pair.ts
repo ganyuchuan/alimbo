@@ -148,6 +148,7 @@ async function main() {
       COPILOT_INTERCEPT_SERVER_URL: cloudBaseUrl,
       CLAUDE_INTERCEPT_SERVER_URL: cloudBaseUrl,
       FEISHU_INTERCEPT_SERVER_URL: cloudBaseUrl,
+      USAGE_SYNC_AUTH_TOKEN: token,
       COPILOT_INTERCEPT_ENABLED: "true",
       COPILOT_INTERCEPT_TOOLS: "bash,run_in_terminal,edit_file,create_file,delete_file",
     },
