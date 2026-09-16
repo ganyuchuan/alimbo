@@ -148,7 +148,11 @@ async function main() {
       COPILOT_INTERCEPT_SERVER_URL: cloudBaseUrl,
       CLAUDE_INTERCEPT_SERVER_URL: cloudBaseUrl,
       FEISHU_INTERCEPT_SERVER_URL: cloudBaseUrl,
+      USAGE_SYNC_ENABLED: "true",
+      USAGE_SYNC_START_DELAY_MS: "0",
+      USAGE_SYNC_CLOUD_URL: cloudBaseUrl,
       USAGE_SYNC_AUTH_TOKEN: token,
+      USAGE_SYNC_USER_ID: String(pairingPayload.userId ?? "").trim(),
       COPILOT_INTERCEPT_ENABLED: "true",
       COPILOT_INTERCEPT_TOOLS: "bash,run_in_terminal,edit_file,create_file,delete_file",
     },
@@ -157,6 +161,16 @@ async function main() {
 
   const envValues = parseEnvFile(envPath);
   const gatewayPort = toInt(envValues.PORT, 18789);
+
+  const verification = await verifyInterceptDecisionApi({
+    cloudBaseUrl,
+    authToken: token,
+    workDir: cwd,
+    provider,
+  });
+  if (verification.decision !== "allow" && verification.decision !== "approved") {
+    throw new Error(`pairing was not approved (decision=${verification.decision}${verification.reason ? `, reason=${verification.reason}` : ""})`);
+  }
 
   let pm2Connected = false;
   let gatewayPid: number | undefined;
@@ -174,13 +188,6 @@ async function main() {
     await waitForGatewayHealth({
       baseUrl: `http://127.0.0.1:${gatewayPort}`,
       timeoutMs: 20_000,
-    });
-
-    const verification = await verifyInterceptDecisionApi({
-      cloudBaseUrl,
-      authToken: token,
-      workDir: cwd,
-      provider,
     });
 
     console.log("[alimbo-pair] Success");

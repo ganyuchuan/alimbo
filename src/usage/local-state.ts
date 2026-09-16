@@ -4,7 +4,7 @@ import path from "node:path";
 import type { UsageBucket, UsageSession, UsageSource, UsageSyncState } from "./types.js";
 
 export function emptyUsageSyncState(): UsageSyncState {
-  return { version: 1, hostname: "", buckets: {}, sessions: {}, lastSyncAtMs: 0 };
+  return { version: 1, hostname: "", cloudUrl: "", userId: "", buckets: {}, sessions: {}, lastSyncAtMs: 0 };
 }
 
 export function loadUsageSyncState(file: string): UsageSyncState {
@@ -13,6 +13,8 @@ export function loadUsageSyncState(file: string): UsageSyncState {
     return {
       version: 1,
       hostname: String(raw.hostname || ""),
+      cloudUrl: String(raw.cloudUrl || ""),
+      userId: String(raw.userId || ""),
       buckets: raw.buckets && typeof raw.buckets === "object" ? raw.buckets : {},
       sessions: raw.sessions && typeof raw.sessions === "object" ? raw.sessions : {},
       lastSyncAtMs: Number.isFinite(raw.lastSyncAtMs) ? raw.lastSyncAtMs : 0,
@@ -20,6 +22,25 @@ export function loadUsageSyncState(file: string): UsageSyncState {
   } catch {
     return emptyUsageSyncState();
   }
+}
+
+export function rotateUsageSyncState(file: string) {
+  try {
+    const suffix = new Date().toISOString().replace(/[:.]/g, "-");
+    fs.renameSync(file, `${file}.backup-${suffix}`);
+    return true;
+  } catch (error: any) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+export function usageSyncTargetChanged(state: UsageSyncState, cloudUrl: string, userId: string) {
+  const hasTrackedTarget = Boolean(state.cloudUrl || state.userId);
+  const hasTrackedUsage = Object.keys(state.buckets).length > 0 || Object.keys(state.sessions).length > 0;
+  return hasTrackedTarget
+    ? state.cloudUrl !== cloudUrl || state.userId !== userId
+    : hasTrackedUsage;
 }
 
 export function saveUsageSyncState(file: string, state: UsageSyncState) {

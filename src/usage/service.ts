@@ -5,7 +5,9 @@ import { ingestUsage } from "./cloud-client.js";
 import {
   loadUsageSyncState,
   pruneUsageSyncState,
+  rotateUsageSyncState,
   saveUsageSyncState,
+  usageSyncTargetChanged,
   usageBucketHash,
   usageBucketKey,
   usageSessionHash,
@@ -29,7 +31,16 @@ export function createUsageSyncService(config) {
   async function sync() {
     if (running) return running;
     running = (async () => {
-      const state = loadUsageSyncState(config.stateFile);
+      const cloudUrl = config.cloudUrl.replace(/\/+$/, "");
+      const userId = String(config.userId || "").trim() || crypto.createHash("sha256").update(config.authToken).digest("hex");
+      let state = loadUsageSyncState(config.stateFile);
+      if (usageSyncTargetChanged(state, cloudUrl, userId)) {
+        rotateUsageSyncState(config.stateFile);
+        state = loadUsageSyncState(config.stateFile);
+        console.log("[usage] sync target changed; rotated previous sync state");
+      }
+      state.cloudUrl = cloudUrl;
+      state.userId = userId;
       const hostname = stableHostname(config.hostname, state.hostname);
       state.hostname = hostname;
 

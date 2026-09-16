@@ -130,6 +130,7 @@ export const config = {
       process.env.USAGE_SYNC_AUTH_TOKEN?.trim() ||
       process.env.COPILOT_INTERCEPT_AUTH_TOKEN?.trim() ||
       "",
+    userId: process.env.USAGE_SYNC_USER_ID?.trim() || "",
     timeoutMs: toInt(process.env.USAGE_SYNC_TIMEOUT_MS, 15000),
     codexExtraHome: process.env.USAGE_SYNC_CODEX_EXTRA_HOME?.trim() || "",
     includeSessions: toBool(process.env.USAGE_SYNC_INCLUDE_SESSIONS, false),

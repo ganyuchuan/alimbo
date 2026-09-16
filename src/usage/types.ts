@@ -47,6 +47,8 @@ export type UsageCollection = {
 export type UsageSyncState = {
   version: 1;
   hostname: string;
+  cloudUrl: string;
+  userId: string;
   buckets: Record<string, string>;
   sessions: Record<string, string>;
   lastSyncAtMs: number;
