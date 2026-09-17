@@ -120,11 +120,19 @@ export function createPairingCodeRegistry({ ttlMs }: { ttlMs: number }) {
     return true;
   };
 
+  const getByAuthToken = (authToken: string): PairingCodeResolveResult | null => {
+    cleanup();
+    const normalizedAuthToken = String(authToken ?? "").trim();
+    const pairingCode = codeByToken.get(normalizedAuthToken);
+    return pairingCode ? resolve(pairingCode) : null;
+  };
+
   return {
     ttlMs,
     cleanup,
     issue,
     resolve,
     revokeAuthToken,
+    getByAuthToken,
   };
 }

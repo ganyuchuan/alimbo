@@ -159,7 +159,7 @@
           <div class="row">
             <button id="refresh" class="primary">Refresh</button>
             <button id="markInvalid">Mark Invalid Candidates</button>
-            <button id="deleteChecked" class="danger">Delete Checked</button>
+            <button id="deleteChecked" class="danger" hidden>Delete Checked</button>
           </div>
           <div class="meta" id="summary">Loading...</div>
         </div>
@@ -225,6 +225,10 @@
         })).filter((item) => item.userId && item.deviceToken);
       }
 
+      function updateDeleteCheckedVisibility() {
+        deleteCheckedBtn.hidden = checkedBindings().length === 0;
+      }
+
       function renderTable(items) {
         if (!Array.isArray(items) || items.length === 0) {
           tableWrapEl.innerHTML = '<p class="empty">No device tokens found.</p>';
@@ -245,43 +249,33 @@
             '<td>' + escapeHtml(item.authType || "-") + '</td>' +
             '<td>' + escapeHtml(item.platform || "-") + '</td>' +
             '<td class="token-cell">' + escapeHtml(item.deviceToken || "-") + '</td>' +
-            '<td>' + escapeHtml(item.tokenPreview || "-") + '</td>' +
             '<td>' + ts(item.createdAtMs) + '</td>' +
             '<td>' + ts(item.updatedAtMs) + '</td>' +
             '<td>' + invalidTag + '</td>' +
-            '<td><div class="actions"><button data-role="delete-one" data-user-id="' + escapeHtml(item.userId) + '" data-device-token="' + escapeHtml(item.deviceToken) + '" class="danger">Delete</button></div></td>' +
             '</tr>'
           );
         }).join("");
 
         tableWrapEl.innerHTML =
           '<table>' +
-          '<thead><tr><th>Select</th><th>#</th><th>UserId</th><th>Username</th><th>AuthType</th><th>Platform</th><th>DeviceToken</th><th>Preview</th><th>Created</th><th>Updated</th><th>Invalid Flags</th><th>Action</th></tr></thead>' +
+          '<thead><tr><th><input data-role="pick-all" type="checkbox" aria-label="全选" /></th><th>#</th><th>UserId</th><th>Username</th><th>AuthType</th><th>Platform</th><th>DeviceToken</th><th>Created</th><th>Updated</th><th>Invalid Flags</th></tr></thead>' +
           '<tbody>' + rows + '</tbody></table>';
 
-        tableWrapEl.querySelectorAll('button[data-role="delete-one"]').forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const userId = String(btn.getAttribute("data-user-id") || "").trim();
-            const deviceToken = String(btn.getAttribute("data-device-token") || "").trim();
-            if (!userId || !deviceToken) {
-              return;
-            }
-            btn.disabled = true;
-            try {
-              await fetchJson("/auth/device-tokens/delete", {
-                method: "POST",
-                body: JSON.stringify({
-                  bindings: [{ userId, deviceToken }],
-                }),
-              });
-              await refreshList();
-            } catch (error) {
-              statusEl.className = "error";
-              statusEl.textContent = String(error.message || error);
-              btn.disabled = false;
-            }
+        const selectAll = tableWrapEl.querySelector('input[data-role="pick-all"]');
+        const rowChecks = tableWrapEl.querySelectorAll('input[data-role="pick"]');
+        selectAll.checked = rowChecks.length > 0 && [...rowChecks].every((check) => check.checked);
+        selectAll.addEventListener("change", () => {
+          rowChecks.forEach((check) => { check.checked = selectAll.checked; });
+          updateDeleteCheckedVisibility();
+        });
+        rowChecks.forEach((check) => {
+          check.addEventListener("change", () => {
+            selectAll.checked = [...rowChecks].every((item) => item.checked);
+            selectAll.indeterminate = !selectAll.checked && [...rowChecks].some((item) => item.checked);
+            updateDeleteCheckedVisibility();
           });
         });
+        updateDeleteCheckedVisibility();
       }
 
       function updateSummary(items) {

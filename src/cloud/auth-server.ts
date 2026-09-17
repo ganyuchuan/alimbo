@@ -47,6 +47,7 @@ type AuthServerRouteContext = {
     issue: (params: { authToken: string; userId: string; username: string }) => { pairingCode: string; expiresAtMs: number };
     resolve: (pairingCode: string) => { pairingCode: string; userId: string; username: string; authToken: string; expiresAtMs: number } | null;
     revokeAuthToken: (authToken: string) => boolean;
+    getByAuthToken: (authToken: string) => { pairingCode: string; userId: string; username: string; authToken: string; expiresAtMs: number } | null;
   };
   pairingCodeTtlMs: number;
   authTokenAllowPasswordGrant: boolean;
@@ -486,11 +487,14 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
     const items = users.map((user) => {
       const deviceBindings = apnsStore.listDeviceBindingsByUserId(user.userId);
       const deviceTokens = deviceBindings.map((item) => item.deviceToken);
+      const pairing = pairingCodeRegistry.getByAuthToken(user.authToken);
       return {
         ...user,
         deviceBindings,
         deviceTokens,
         deviceToken: deviceTokens[0] || "",
+        pairingCode: pairing?.pairingCode || "",
+        pairingCodeExpiresAtMs: pairing?.expiresAtMs || 0,
       };
     });
     logApi(req, pathname, `list users count=${items.length}`);
@@ -498,6 +502,53 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
       ok: true,
       items,
     });
+    return true;
+  }
+
+  if (req.method === "POST" && pathname === "/auth/users") {
+    const admin = requireAdminSession(req, res);
+    if (!admin) {
+      logApi(req, pathname, "unauthorized: admin session required");
+      json(res, 401, { error: "unauthorized" });
+      return true;
+    }
+
+    const body = await parseBody<AuthTokenBody>(req);
+    const username = String(body?.username ?? "").trim();
+    if (!username) {
+      json(res, 400, { error: "username is required" });
+      return true;
+    }
+
+    const user = interceptStore.withTransaction(() => interceptStore.createUserTokenRecord({ username }));
+    logApi(req, pathname, `created userId=${user.userId} admin=${admin.userId}`);
+    json(res, 201, { ok: true, user });
+    return true;
+  }
+
+  if (req.method === "POST" && pathname === "/auth/users/pairing-code") {
+    const admin = requireAdminSession(req, res);
+    if (!admin) {
+      logApi(req, pathname, "unauthorized: admin session required");
+      json(res, 401, { error: "unauthorized" });
+      return true;
+    }
+
+    const body = await parseBody<{ userId?: string }>(req);
+    const userId = String(body?.userId ?? "").trim();
+    const user = interceptStore.getUserById(userId);
+    if (!user?.userId || !user.authToken) {
+      json(res, 404, { error: "user not found" });
+      return true;
+    }
+
+    const pairing = pairingCodeRegistry.issue({
+      authToken: user.authToken,
+      userId: user.userId,
+      username: user.username,
+    });
+    logApi(req, pathname, `created pairingCode=${pairing.pairingCode} userId=${user.userId} admin=${admin.userId}`);
+    json(res, 200, { ok: true, ...pairing, userId: user.userId, username: user.username });
     return true;
   }
 

@@ -157,6 +157,7 @@ limbo-site-nav { display: block; }
 .lm-login h1::before { content: "> "; color: var(--lm-green); }
 .lm-login .meta { word-break: normal; }
 .lm-login .error { background: var(--lm-pink); }
+.lm-users .grid { grid-template-columns: minmax(0, 1fr); }
 .lm-home .site-nav { padding-top: 0; }
 .lm-home .site-nav .brand { display: none; }
 .lm-home .site-nav { justify-content: flex-end; }

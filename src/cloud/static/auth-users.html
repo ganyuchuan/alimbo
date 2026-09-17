@@ -183,28 +183,9 @@
           <h2>Known Users</h2>
           <div class="meta" id="usersSummary">Loading users...</div>
           <div id="usersTable" style="margin-top: 12px;"></div>
-        </div>
-        <div class="panel">
-          <h2>User Management</h2>
-          <div class="stack">
-            <div class="row">
-              <label>Username <input id="username" value="admin" placeholder="required" /></label>
-              <button id="issueToken" class="primary">Issue Token</button>
-              <button id="refreshUsers">Refresh Users</button>
-            </div>
-            <div class="row">
-              <label>Pairing Code <input id="pairingCode" type="text" placeholder="4 digits" maxlength="4" /></label>
-              <button id="resolvePairing" class="primary">Resolve Token by Pairing Code</button>
-              <button id="refreshPairing" class="primary">Refresh Pairing Code</button>
-            </div>
-            <div class="status-box">
-              <div class="meta" id="tokenStatus">Issue a token to start.</div>
-              <div class="meta" id="pairingStatus"></div>
-              <div class="meta" id="onboardingStatus"></div>
-            </div>
-            <div>
-              <label>Auth Token <input id="token" type="text" placeholder="paste or issue token" /></label>
-            </div>
+          <div class="row" style="margin-top: 16px;">
+            <button id="addUser" class="primary" type="button">添加用户</button>
+            <button id="refreshUsers" type="button">刷新列表</button>
           </div>
         </div>
       </div>
@@ -212,16 +193,8 @@
 
     <script>
       const $ = (id) => document.getElementById(id);
-      const tokenInput = $("token");
-      const usernameInput = $("username");
-      const issueTokenBtn = $("issueToken");
       const refreshUsersBtn = $("refreshUsers");
-      const pairingCodeInput = $("pairingCode");
-      const resolvePairingBtn = $("resolvePairing");
-      const refreshPairingBtn = $("refreshPairing");
-      const tokenStatusEl = $("tokenStatus");
-      const pairingStatusEl = $("pairingStatus");
-      const onboardingStatusEl = $("onboardingStatus");
+      const addUserBtn = $("addUser");
       const usersTableEl = $("usersTable");
       const usersSummaryEl = $("usersSummary");
 
@@ -231,145 +204,18 @@
       }
 
       async function fetchJson(path, options = {}) {
-        const token = String(tokenInput.value || "").trim();
         const response = await fetch(path, {
           ...options,
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",
             ...(options.headers || {}),
-            ...(token ? { Authorization: "Bearer " + token } : {}),
           },
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
           throw new Error(payload.error || response.statusText || "request failed");
         }
-        return payload;
-      }
-
-      async function issueAuthToken() {
-        const username = String(usernameInput.value || "").trim();
-        if (!username) {
-          throw new Error("username is required");
-        }
-
-        const response = await fetch("/auth/token", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({ username }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.error || response.statusText || "issue token failed");
-        }
-
-        const token = String(payload.authToken || "").trim();
-        if (!token) {
-          throw new Error("empty auth token returned");
-        }
-
-        const pairingCode = String(payload.pairingCode || "").trim();
-        if (pairingCode) {
-          pairingCodeInput.value = pairingCode;
-        }
-
-        tokenInput.value = token;
-        tokenStatusEl.className = "meta";
-        tokenStatusEl.textContent =
-          "Token issued for userId=" +
-          (payload.userId || "-") +
-          ", pairingCode=" +
-          (pairingCode || "-") +
-          ", expires=" +
-          ts(payload.pairingCodeExpiresAtMs || 0);
-
-        const onboardingURL = String(payload.onboardingUrl || "").trim();
-        onboardingStatusEl.className = "meta";
-        onboardingStatusEl.textContent = onboardingURL ? "Onboarding URL: " + onboardingURL : "Onboarding URL: -";
-
-        return payload;
-      }
-
-      async function resolvePairingToken() {
-        const pairingCode = String(pairingCodeInput.value || "").trim();
-        if (!/^\d{4}$/.test(pairingCode)) {
-          throw new Error("pairingCode must be 4 digits");
-        }
-
-        const response = await fetch("/auth/pairing-token", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({ pairingCode }),
-        });
-
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.error || response.statusText || "resolve pairing token failed");
-        }
-
-        const token = String(payload.authToken || "").trim();
-        if (!token) {
-          throw new Error("empty auth token returned");
-        }
-
-        tokenInput.value = token;
-        tokenStatusEl.className = "meta";
-        tokenStatusEl.textContent =
-          "Resolved token for userId=" +
-          (payload.userId || "-") +
-          ", pairingCode=" +
-          (payload.pairingCode || pairingCode) +
-          ", expires=" +
-          ts(payload.expiresAtMs || 0);
-        onboardingStatusEl.className = "meta";
-        onboardingStatusEl.textContent = "";
-
-        return payload;
-      }
-
-      async function refreshPairingCode() {
-        const token = String(tokenInput.value || "").trim();
-        if (!token) {
-          throw new Error("auth token is required to refresh pairing code");
-        }
-
-        const response = await fetch("/auth/pairing-code/refresh", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: "Bearer " + token,
-          },
-          body: JSON.stringify({}),
-        });
-
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.error || response.statusText || "refresh pairing code failed");
-        }
-
-        const pairingCode = String(payload.pairingCode || "").trim();
-        if (!pairingCode) {
-          throw new Error("empty pairing code returned");
-        }
-
-        pairingCodeInput.value = pairingCode;
-        pairingStatusEl.className = "meta";
-        pairingStatusEl.textContent =
-          "Refreshed pairingCode=" +
-          pairingCode +
-          ", expires=" +
-          ts(payload.pairingCodeExpiresAtMs || 0) +
-          ", ttlMs=" +
-          String(payload.pairingCodeTtlMs || 0);
-
         return payload;
       }
 
@@ -388,6 +234,8 @@
           "<th>Auth Type</th>" +
           "<th>Device Token</th>" +
           "<th>Auth Token</th>" +
+          "<th>Pairing Code</th>" +
+          "<th>Code Expires</th>" +
           "<th>Updated</th>" +
           "</tr></thead><tbody>";
 
@@ -399,6 +247,8 @@
             "<td>" + ((item.authType || "user") + (item.isAdmin ? " / admin" : "")) + "</td>" +
             '<td class="token-cell">' + (item.deviceToken || "-") + "</td>" +
             '<td class="token-cell">' + (item.authToken || "-") + "</td>" +
+            "<td>" + (item.pairingCode || '<button class="create-code" type="button" data-user-id="' + item.userId + '">+</button>') + "</td>" +
+            "<td>" + (item.pairingCodeExpiresAtMs ? ts(item.pairingCodeExpiresAtMs) : "-") + "</td>" +
             "<td>" + ts(item.updatedAtMs || item.createdAtMs || 0) + "</td>" +
             "</tr>";
         }
@@ -413,16 +263,21 @@
         renderUsersTable(payload.items || []);
       }
 
-      issueTokenBtn.addEventListener("click", async () => {
-        issueTokenBtn.disabled = true;
+      usersTableEl.addEventListener("click", async (event) => {
+        const button = event.target.closest(".create-code");
+        if (!button) return;
+        button.disabled = true;
         try {
-          await issueAuthToken();
+          await fetchJson("/auth/users/pairing-code", {
+            method: "POST",
+            body: JSON.stringify({ userId: button.dataset.userId }),
+          });
           await refreshUsers();
         } catch (error) {
-          tokenStatusEl.textContent = String(error.message || error);
-          tokenStatusEl.className = "error";
+          usersSummaryEl.textContent = String(error.message || error);
+          usersSummaryEl.className = "error";
         } finally {
-          issueTokenBtn.disabled = false;
+          button.disabled = false;
         }
       });
 
@@ -430,38 +285,29 @@
         refreshUsersBtn.disabled = true;
         try {
           await refreshUsers();
-          tokenStatusEl.className = "meta";
-          tokenStatusEl.textContent = "Users refreshed at " + new Date().toLocaleTimeString();
         } catch (error) {
-          tokenStatusEl.textContent = String(error.message || error);
-          tokenStatusEl.className = "error";
+          usersSummaryEl.textContent = String(error.message || error);
+          usersSummaryEl.className = "error";
         } finally {
           refreshUsersBtn.disabled = false;
         }
       });
 
-      resolvePairingBtn.addEventListener("click", async () => {
-        resolvePairingBtn.disabled = true;
+      addUserBtn.addEventListener("click", async () => {
+        const username = window.prompt("用户名");
+        if (!username || !username.trim()) return;
+        addUserBtn.disabled = true;
         try {
-          await resolvePairingToken();
+          await fetchJson("/auth/users", {
+            method: "POST",
+            body: JSON.stringify({ username: username.trim() }),
+          });
           await refreshUsers();
         } catch (error) {
-          tokenStatusEl.textContent = String(error.message || error);
-          tokenStatusEl.className = "error";
+          usersSummaryEl.textContent = String(error.message || error);
+          usersSummaryEl.className = "error";
         } finally {
-          resolvePairingBtn.disabled = false;
-        }
-      });
-
-      refreshPairingBtn.addEventListener("click", async () => {
-        refreshPairingBtn.disabled = true;
-        try {
-          await refreshPairingCode();
-        } catch (error) {
-          pairingStatusEl.textContent = String(error.message || error);
-          pairingStatusEl.className = "error";
-        } finally {
-          refreshPairingBtn.disabled = false;
+          addUserBtn.disabled = false;
         }
       });
 
