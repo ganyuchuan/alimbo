@@ -43,6 +43,21 @@
         color: var(--muted);
         font-size: 13px;
       }
+      .curl-request {
+        margin-top: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        max-width: 100%;
+      }
+      .curl-request code {
+        min-width: 0;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+        overflow-wrap: anywhere;
+      }
       .nav a {
         display: inline-block;
         padding: 8px 12px;
@@ -173,14 +188,17 @@
     <div class="wrap">
       <div class="hero">
         <div>
-          <h1>Auth Token Manager</h1>
-          <p>Issue tokens, refresh pairing codes, and inspect known users from a dedicated page.</p>
+          <h1>用户管理</h1>
+          <p>接口：<code>GET /auth/users</code>；必要认证：管理员 Bearer Token；可选参数：<code>limit</code>，返回用户数量上限，当前为 100。</p>
+          <div class="curl-request">
+            <code id="usersCurl">正在生成 cURL...</code>
+          </div>
         </div>
       </div>
 
       <div class="grid">
         <div class="panel">
-          <h2>Known Users</h2>
+          <h2>已知用户</h2>
           <div class="meta" id="usersSummary">Loading users...</div>
           <div id="usersTable" style="margin-top: 12px;"></div>
           <div class="row" style="margin-top: 16px;">
@@ -197,6 +215,7 @@
       const addUserBtn = $("addUser");
       const usersTableEl = $("usersTable");
       const usersSummaryEl = $("usersSummary");
+      const usersCurlEl = $("usersCurl");
 
       function ts(ms) {
         if (!ms) return "-";
@@ -237,6 +256,7 @@
           "<th>Pairing Code</th>" +
           "<th>Code Expires</th>" +
           "<th>Updated</th>" +
+          "<th>Action</th>" +
           "</tr></thead><tbody>";
 
         for (const item of items) {
@@ -247,9 +267,10 @@
             "<td>" + ((item.authType || "user") + (item.isAdmin ? " / admin" : "")) + "</td>" +
             '<td class="token-cell">' + (item.deviceToken || "-") + "</td>" +
             '<td class="token-cell">' + (item.authToken || "-") + "</td>" +
-            "<td>" + (item.pairingCode || '<button class="create-code" type="button" data-user-id="' + item.userId + '">+</button>') + "</td>" +
+            "<td>" + (item.pairingCode || '<button class="create-code" type="button" data-user-id="' + item.userId + '">创建</button>') + "</td>" +
             "<td>" + (item.pairingCodeExpiresAtMs ? ts(item.pairingCodeExpiresAtMs) : "-") + "</td>" +
             "<td>" + ts(item.updatedAtMs || item.createdAtMs || 0) + "</td>" +
+            '<td><a href="/intercepts/approve?token=' + encodeURIComponent(item.authToken || "") + '">审批</a><br/><a href="/usage?token=' + encodeURIComponent(item.authToken || "") + '">用量</a></td>' +
             "</tr>";
         }
 
@@ -260,6 +281,12 @@
       async function refreshUsers() {
         usersSummaryEl.textContent = "Refreshing users...";
         const payload = await fetchJson("/auth/users?limit=100");
+        const admin = (payload.items || []).find((item) => item.isAdmin && item.authToken);
+        if (admin) {
+          usersCurlEl.textContent = `curl -sS -H 'Accept: application/json' -H 'Authorization: Bearer ${admin.authToken}' '${location.origin}/auth/users?limit=100'`;
+        } else {
+          usersCurlEl.textContent = "未找到可用于 cURL 的管理员 Token";
+        }
         renderUsersTable(payload.items || []);
       }
 

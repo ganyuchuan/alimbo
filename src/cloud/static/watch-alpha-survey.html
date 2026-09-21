@@ -355,6 +355,9 @@
       </header>
 
       <form id="surveyForm" class="stack">
+        <input id="userId" type="hidden" />
+        <input id="username" type="hidden" />
+        <input id="contact" type="hidden" />
         <section class="card">
           <h2 class="q">1. 你本次主要使用了哪些端？<span class="required">*</span></h2>
           <div class="grid">
@@ -574,6 +577,51 @@
         return el ? String(el.value || "").trim() : "";
       }
 
+      function selectRadio(name, value) {
+        const choice = form.querySelector(`input[name="${name}"][value="${CSS.escape(String(value || ""))}"]`);
+        if (choice) choice.checked = true;
+      }
+
+      function setScore(name, value) {
+        const score = Number.parseInt(String(value || ""), 10);
+        if (!Number.isFinite(score) || score < 1 || score > 5) return;
+        const input = form.querySelector(`input[name="${name}"]`);
+        const button = input?.parentElement?.querySelectorAll(".star-btn")[score - 1];
+        if (button) button.click();
+      }
+
+      function applyPrefill() {
+        const serialized = sessionStorage.getItem("alimbo.watch-alpha-survey.prefill");
+        if (!serialized) return;
+        sessionStorage.removeItem("alimbo.watch-alpha-survey.prefill");
+
+        try {
+          const survey = JSON.parse(serialized);
+          ["userId", "username", "contact", "usageScenariosOther", "nextPriorityOther", "extraFeedback"].forEach((id) => {
+            const input = document.getElementById(id);
+            if (input) input.value = String(survey[id] || "");
+          });
+          selectRadio("terminalUsed", survey.terminalUsed);
+          selectRadio("usageFrequency", survey.usageFrequency);
+          selectRadio("usageScenarios", Array.isArray(survey.usageScenarios) ? survey.usageScenarios[0] : survey.usageScenarios);
+          selectRadio("nextPriority", survey.nextPriority);
+          [
+            "installIphoneScore",
+            "installWatchScore",
+            "permissionGuideScore",
+            "loginStabilityScore",
+            "pairingFlowScore",
+            "pairingStatusScore",
+            "approvalArrivalScore",
+            "approvalReliabilityScore",
+            "cardCompletenessScore",
+          ].forEach((name) => setScore(name, survey[name]));
+          setMessage("已带入所选问卷的数据，可修改后重新提交。", true);
+        } catch {
+          sessionStorage.removeItem("alimbo.watch-alpha-survey.prefill");
+        }
+      }
+
       function setMessage(text, ok) {
         result.textContent = text;
         result.className = ok ? "msg ok" : "msg err";
@@ -612,6 +660,8 @@
         });
         setMessage("", true);
       });
+
+      applyPrefill();
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();

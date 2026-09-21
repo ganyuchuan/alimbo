@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Device Token Manager</title>
+    <title>设备 Token 管理</title>
     <style>
       @layer legacy {
       :root {
@@ -42,6 +42,19 @@
         margin: 6px 0 0;
         color: var(--muted);
         font-size: 13px;
+      }
+      .curl-request {
+        margin-top: 10px;
+        display: flex;
+        max-width: 100%;
+      }
+      .curl-request code {
+        min-width: 0;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+        overflow-wrap: anywhere;
       }
       .panel {
         background: var(--card);
@@ -149,8 +162,11 @@
     <div class="wrap">
       <div class="hero">
         <div>
-          <h1>Device Token Manager</h1>
-          <p>管理员可查看所有注册 token，删除指定 token，或先标记无效再勾选批量删除。</p>
+          <h1>设备 Token 管理</h1>
+          <p>接口：<code>GET /auth/device-tokens</code>；必要认证：管理员 Bearer Token；可选参数：<code>limit</code>，返回设备 Token 数量上限，当前为 5000。</p>
+          <div class="curl-request">
+            <code id="deviceTokensCurl">正在生成 cURL...</code>
+          </div>
         </div>
       </div>
 
@@ -179,6 +195,7 @@
       const summaryEl = $("summary");
       const statusEl = $("status");
       const tableWrapEl = $("tableWrap");
+      const deviceTokensCurlEl = $("deviceTokensCurl");
 
       let itemsCache = [];
       let invalidMarked = false;
@@ -289,7 +306,14 @@
       async function refreshList() {
         statusEl.className = "meta";
         statusEl.textContent = "Refreshing...";
-        const payload = await fetchJson("/auth/device-tokens?limit=5000");
+        const [payload, usersPayload] = await Promise.all([
+          fetchJson("/auth/device-tokens?limit=5000"),
+          fetchJson("/auth/users?limit=100"),
+        ]);
+        const admin = (usersPayload.items || []).find((item) => item.isAdmin && item.authToken);
+        deviceTokensCurlEl.textContent = admin
+          ? `curl -sS -H 'Accept: application/json' -H 'Authorization: Bearer ${admin.authToken}' '${location.origin}/auth/device-tokens?limit=5000'`
+          : "未找到可用于 cURL 的管理员 Token";
         itemsCache = Array.isArray(payload.items) ? payload.items : [];
         invalidMarked = false;
         renderTable(itemsCache);

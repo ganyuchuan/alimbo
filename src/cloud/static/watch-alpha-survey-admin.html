@@ -121,21 +121,6 @@
         font-size: 12px;
         cursor: pointer;
       }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-      }
-      th, td {
-        border: 1px solid rgba(122, 160, 141, 0.32);
-        padding: 7px 8px;
-        text-align: left;
-        vertical-align: top;
-      }
-      th {
-        background: rgba(15, 34, 25, 0.92);
-        color: #d9f8e5;
-      }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
       .muted { color: var(--muted); }
       .status { min-height: 20px; }
@@ -147,6 +132,65 @@
         border-radius: 999px;
         padding: 2px 7px;
         background: rgba(60, 181, 111, 0.14);
+      }
+      .survey-list {
+        display: grid;
+        gap: 12px;
+      }
+      .survey-result {
+        padding: 16px;
+        border: 1px solid rgba(122, 160, 141, 0.32);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.02);
+        cursor: pointer;
+        transition: border-color 160ms ease, background 160ms ease;
+      }
+      .survey-result:hover {
+        border-color: var(--line-strong);
+        background: rgba(60, 181, 111, 0.08);
+      }
+      .survey-result:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .survey-result-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid rgba(122, 160, 141, 0.24);
+      }
+      .survey-result-number {
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .survey-result-time {
+        color: var(--muted);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .survey-result-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px 18px;
+        margin-top: 14px;
+      }
+      .survey-field {
+        min-width: 0;
+      }
+      .survey-field-wide {
+        grid-column: 1 / -1;
+      }
+      .survey-field-label {
+        margin-bottom: 3px;
+        color: var(--muted);
+        font-size: 10px;
+        text-transform: uppercase;
+      }
+      .survey-field-value {
+        overflow-wrap: anywhere;
+        font-size: 12px;
       }
       .title-sub {
         margin-top: 8px;
@@ -164,6 +208,12 @@
       }
       @media (max-width: 900px) {
         .hero { flex-direction: column; }
+        .survey-result-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 560px) {
+        .survey-result-header { display: grid; gap: 4px; }
+        .survey-result-time { white-space: normal; }
+        .survey-result-grid { grid-template-columns: minmax(0, 1fr); }
       }
       }
     </style>
@@ -174,7 +224,7 @@
     <div class="wrap">
       <div class="hero">
         <div>
-          <h1>WATCH ALPHA // SURVEY RESULTS</h1>
+          <h1>问卷结果</h1>
           <div class="meta">管理员查看问卷列表、按时间筛选并导出 CSV。</div>
           <div class="title-sub">
             <span class="badge">ADMIN CONSOLE</span>
@@ -220,6 +270,7 @@
       const statusEl = $("status");
       const summaryEl = $("summary");
       const tableEl = $("table");
+      let surveyItems = [];
 
       function toInt(value, fallback) {
         const n = Number.parseInt(String(value || "").trim(), 10);
@@ -266,12 +317,13 @@
       }
 
       function render(items) {
+        surveyItems = Array.isArray(items) ? items : [];
         if (!Array.isArray(items) || items.length === 0) {
           tableEl.innerHTML = '<div class="muted">暂无数据</div>';
           return;
         }
 
-        const rows = items.map((item, index) => {
+        const cards = items.map((item, index) => {
           const usageScenarios = Array.isArray(item.usageScenarios)
             ? item.usageScenarios.map((s) => `<span class="chip">${escapeHtml(s)}</span>`).join("")
             : "";
@@ -289,32 +341,48 @@
           ].map((v) => (v == null ? "-" : String(v))).join("/");
 
           return [
-            "<tr>",
-            `<td>${index + 1}</td>`,
-            `<td class="mono">${escapeHtml(item.id || "-")}</td>`,
-            `<td>${fmtTime(item.submittedAtMs)}</td>`,
-            `<td>${escapeHtml(item.userId || "-")}</td>`,
-            `<td>${escapeHtml(item.username || "-")}</td>`,
-            `<td>${escapeHtml(item.contact || "-")}</td>`,
-            `<td>${escapeHtml(item.terminalUsed || "-")}</td>`,
-            `<td>${escapeHtml(item.usageFrequency || "-")}</td>`,
-            `<td><div class="chips">${usageScenarios}</div><div class="muted">${escapeHtml(item.usageScenariosOther || "")}</div></td>`,
-            `<td>${scores}</td>`,
-            `<td>${escapeHtml(item.nextPriority || "-")}<div class="muted">${escapeHtml(item.nextPriorityOther || "")}</div></td>`,
-            `<td>${escapeHtml(item.extraFeedback || "")}</td>`,
-            "</tr>",
+            `<article class="survey-result" data-survey-index="${index}" tabindex="0" role="button" aria-label="编辑第 ${index + 1} 份问卷">`,
+            '<header class="survey-result-header">',
+            `<div><span class="survey-result-number">#${index + 1}</span> <span class="mono">${escapeHtml(item.id || "-")}</span></div>`,
+            `<time class="survey-result-time">${fmtTime(item.submittedAtMs)}</time>`,
+            "</header>",
+            '<div class="survey-result-grid">',
+            `<div class="survey-field"><div class="survey-field-label">User ID</div><div class="survey-field-value mono">${escapeHtml(item.userId || "-")}</div></div>`,
+            `<div class="survey-field"><div class="survey-field-label">昵称</div><div class="survey-field-value">${escapeHtml(item.username || "-")}</div></div>`,
+            `<div class="survey-field"><div class="survey-field-label">联系方式</div><div class="survey-field-value">${escapeHtml(item.contact || "-")}</div></div>`,
+            `<div class="survey-field"><div class="survey-field-label">使用终端</div><div class="survey-field-value">${escapeHtml(item.terminalUsed || "-")}</div></div>`,
+            `<div class="survey-field"><div class="survey-field-label">使用频率</div><div class="survey-field-value">${escapeHtml(item.usageFrequency || "-")}</div></div>`,
+            `<div class="survey-field"><div class="survey-field-label">九项评分</div><div class="survey-field-value mono">${scores}</div></div>`,
+            `<div class="survey-field survey-field-wide"><div class="survey-field-label">使用场景</div><div class="survey-field-value"><div class="chips">${usageScenarios}</div>${item.usageScenariosOther ? `<div class="muted">${escapeHtml(item.usageScenariosOther)}</div>` : ""}</div></div>`,
+            `<div class="survey-field survey-field-wide"><div class="survey-field-label">下版优先项</div><div class="survey-field-value">${escapeHtml(item.nextPriority || "-")}${item.nextPriorityOther ? `<div class="muted">${escapeHtml(item.nextPriorityOther)}</div>` : ""}</div></div>`,
+            `<div class="survey-field survey-field-wide"><div class="survey-field-label">补充反馈</div><div class="survey-field-value">${escapeHtml(item.extraFeedback || "-")}</div></div>`,
+            "</div>",
+            "</article>",
           ].join("");
         }).join("");
 
-        tableEl.innerHTML = [
-          "<table>",
-          "<thead><tr>",
-          "<th>#</th><th>ID</th><th>提交时间</th><th>UserID</th><th>昵称</th><th>联系方式</th><th>终端</th><th>频率</th><th>场景</th><th>九项评分</th><th>下版优先项</th><th>补充反馈</th>",
-          "</tr></thead>",
-          `<tbody>${rows}</tbody>`,
-          "</table>",
-        ].join("");
+        tableEl.innerHTML = `<div class="survey-list">${cards}</div>`;
       }
+
+      function openSurvey(index) {
+        const survey = surveyItems[index];
+        if (!survey) return;
+        sessionStorage.setItem("alimbo.watch-alpha-survey.prefill", JSON.stringify(survey));
+        window.location.href = "/survey/watch-alpha";
+      }
+
+      tableEl.addEventListener("click", (event) => {
+        const card = event.target.closest(".survey-result");
+        if (card) openSurvey(Number(card.dataset.surveyIndex));
+      });
+
+      tableEl.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const card = event.target.closest(".survey-result");
+        if (!card) return;
+        event.preventDefault();
+        openSurvey(Number(card.dataset.surveyIndex));
+      });
 
       async function loadSurveys() {
         setStatus("加载中...", true);

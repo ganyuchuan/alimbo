@@ -59,9 +59,6 @@
       label { display: grid; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
       input, select { width: 100%; min-width: 0; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; background: rgba(2, 8, 5, .78); outline: none; }
       input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(66,217,134,.11); }
-      .token-wrap { display: grid; grid-template-columns: 1fr auto; }
-      .token-wrap input { border-radius: 10px 0 0 10px; }
-      .token-wrap button { border-radius: 0 10px 10px 0; border-left: 0; }
       button { color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; cursor: pointer; background: rgba(10,22,15,.9); }
       button:hover { border-color: var(--line-strong); }
       button.primary { border-color: rgba(108,237,167,.42); background: linear-gradient(125deg, var(--accent-2), #087641); font-weight: 750; min-width: 112px; }
@@ -120,8 +117,7 @@
     <main class="wrap">
       <header class="hero">
         <div>
-          <div class="eyebrow">Alimbo Cloud · Usage Intelligence</div>
-          <h1>Agent Token 消耗</h1>
+          <h1>用量统计</h1>
           <p>使用有效用户 Token 查看该账号下各个 Agent、模型和日期维度的真实日志统计。缓存读取保持独立口径，不会混入模型 Token。</p>
         </div>
       </header>
@@ -129,7 +125,7 @@
       <section class="panel">
         <div class="controls">
           <label class="token-field">用户 Token
-            <span class="token-wrap"><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴有效的用户 Bearer Token" /><button id="toggleToken" type="button" aria-label="显示或隐藏 Token">显示</button></span>
+            <input id="token" type="text" autocomplete="off" spellcheck="false" placeholder="粘贴有效的用户 Bearer Token" />
           </label>
           <label>开始日期<input id="from" type="date" /></label>
           <label>结束日期<input id="to" type="date" /></label>
@@ -138,7 +134,6 @@
         </div>
         <div class="subcontrols">
           <label class="check"><input id="remember" type="checkbox" checked />仅在当前标签页记住 Token</label>
-          <button id="clear" type="button">清除 Token</button>
           <span id="status" class="status">等待输入有效用户 Token</span>
         </div>
       </section>
@@ -261,9 +256,9 @@
       $("load").addEventListener("click", load);
       $("token").addEventListener("keydown", (event) => { if (event.key === "Enter") load(); });
       $("source").addEventListener("change", () => { if ($("token").value.trim()) load(); });
-      $("toggleToken").addEventListener("click", () => { const visible = $("token").type === "text"; $("token").type = visible ? "password" : "text"; $("toggleToken").textContent = visible ? "显示" : "隐藏"; });
-      $("clear").addEventListener("click", () => { sessionStorage.removeItem("alimbo.usage.token"); $("token").value = ""; setStatus("Token 已从当前标签页清除"); });
       const saved = sessionStorage.getItem("alimbo.usage.token") || ""; if (saved) { $("token").value = saved; load(); }
+      const tokenFromUrl = new URLSearchParams(location.search).get("token");
+      if (tokenFromUrl) { $("token").value = tokenFromUrl; load(); }
     </script>
   </body>
 </html>

@@ -551,12 +551,10 @@
       font-weight: 700;
       line-height: 0.95;
       letter-spacing: -2px;
-      color: rgba(255, 255, 255, 0.92);
     }
 
     .notification-clock .date {
       font-size: 14px;
-      color: rgba(255, 255, 255, 0.5);
       letter-spacing: 0.3px;
     }
 
@@ -780,7 +778,6 @@
 
     .gallery-item:hover,
     .gallery-item.active {
-      border-color: var(--buddy-item-color, var(--body));
       background: rgba(255, 255, 255, 0.05);
       transform: translateY(-1px);
     }
@@ -791,7 +788,6 @@
       margin: 0 0 2px;
       white-space: pre;
       pointer-events: none;
-      color: var(--buddy-item-color, var(--text));
     }
 
     .gallery-item .name {
@@ -1003,7 +999,12 @@
     }
 
     .feature-icon-monochrome {
-      filter: brightness(0) invert(1);
+      width: 100%;
+      height: 100%;
+      display: block;
+      background-color: var(--body);
+      -webkit-mask: var(--icon-mask) center / contain no-repeat;
+      mask: var(--icon-mask) center / contain no-repeat;
     }
 
     .feature-icon svg {
@@ -1445,8 +1446,8 @@
                 src="./codex-color.svg" alt="Codex" /></span>
             <div class="feature-title">Codex</div>
           </article>
-          <article class="feature-card" tabindex="0" role="button" data-agent="copilot"><span class="feature-icon"><img
-                class="feature-icon-monochrome" src="./githubcopilot.svg" alt="Github Copilot" /></span>
+              <article class="feature-card" tabindex="0" role="button" data-agent="copilot"><span class="feature-icon"><span
+                class="feature-icon-monochrome" style="--icon-mask: url('./githubcopilot.svg');" role="img" aria-label="Github Copilot"></span></span>
             <div class="feature-title">Github Copilot</div>
           </article>
           <article class="feature-card" tabindex="0" role="button" data-agent="openclaw"><span
@@ -1454,17 +1455,16 @@
                 src="./openclaw-color.svg" alt="OpenClaw" /></span>
             <div class="feature-title">OpenClaw</div>
           </article>
-          <article class="feature-card" tabindex="0" role="button" data-agent="hermes"><span class="feature-icon"><img
-                class="feature-icon-monochrome" src="./hermesagent.svg"
-                alt="Hermes Agent" /></span>
+              <article class="feature-card" tabindex="0" role="button" data-agent="hermes"><span class="feature-icon"><span
+                class="feature-icon-monochrome" style="--icon-mask: url('./hermesagent.svg');" role="img" aria-label="Hermes Agent"></span></span>
             <div class="feature-title">Hermes Agent</div>
           </article>
-          <article class="feature-card" tabindex="0" role="button" data-agent="opencode"><span class="feature-icon"><img
-                class="feature-icon-monochrome" src="./opencode.svg" alt="OpenCode" /></span>
+              <article class="feature-card" tabindex="0" role="button" data-agent="opencode"><span class="feature-icon"><span
+                class="feature-icon-monochrome" style="--icon-mask: url('./opencode.svg');" role="img" aria-label="OpenCode"></span></span>
             <div class="feature-title">OpenCode</div>
           </article>
-          <article class="feature-card" tabindex="0" role="button" data-agent="cursor"><span class="feature-icon"><img
-                class="feature-icon-monochrome" src="./cursor.svg" alt="Cursor" /></span>
+              <article class="feature-card" tabindex="0" role="button" data-agent="cursor"><span class="feature-icon"><span
+                class="feature-icon-monochrome" style="--icon-mask: url('./cursor.svg');" role="img" aria-label="Cursor"></span></span>
             <div class="feature-title">Cursor</div>
           </article>
           <article class="feature-card" tabindex="0" role="button" data-agent="trae"><span class="feature-icon"><svg
@@ -1957,11 +1957,11 @@
       const el = document.getElementById("spriteDisplay");
       if (!el) return;
       el.textContent = renderBuddySprite(buddyState.species, frame);
-      el.style.color = speciesColor(buddyState.species);
+      // el.style.color = speciesColor(buddyState.species);
       const nameEl = document.getElementById("speciesName");
       if (nameEl) {
         nameEl.textContent = buddyState.species;
-        nameEl.style.color = speciesColor(buddyState.species);
+        // nameEl.style.color = speciesColor(buddyState.species);
       }
       document.querySelectorAll(".gallery-item").forEach((item) => {
         item.classList.toggle("active", item.dataset.species === buddyState.species);

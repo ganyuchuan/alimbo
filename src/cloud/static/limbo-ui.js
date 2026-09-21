@@ -1,7 +1,7 @@
 (() => {
   const pages = Object.freeze([
     { id: "users", label: "用户管理", path: "/auth/users-ui", code: "~/users", access: "管理员", admin: true },
-    { id: "devices", label: "设备 Token", path: "/auth/device-tokens-ui", code: "~/devices", access: "管理员", admin: true },
+    { id: "devices", label: "设备 Token 管理", path: "/auth/device-tokens-ui", code: "~/devices", access: "管理员", admin: true },
     { id: "approval", label: "审批工作台", path: "/intercepts/approve", code: "~/approvals", access: "管理员", admin: true },
     { id: "usage", label: "用量统计", path: "/usage", code: "~/usage", access: "Token" },
     { id: "survey", label: "体验问卷", path: "/survey/watch-alpha", code: "~/survey", access: "公开" },

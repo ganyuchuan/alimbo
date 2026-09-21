@@ -176,7 +176,7 @@ limbo-site-nav { display: block; }
 .lm-home .watch-stage-image { max-width: 100%; object-fit: contain; }
 .lm-home .iphone-stage { width: min(384px, 100%); min-width: 0; }
 .lm-home .iphone-screen { width: 100%; height: auto; aspect-ratio: 384 / 760; }
-.lm-home .watch-screen, .lm-home .iphone-screen {
+.lm-home .watch-screen {
   --text: #f3f3f3;
   --text-dim: #b5c5bb;
   --body: #a7e9bf;
@@ -198,6 +198,8 @@ limbo-site-nav { display: block; }
 .lm-usage .status.ok { color: var(--lm-green); }
 .lm-usage .day-bar:hover::after { background: var(--lm-ink); color: white; }
 .lm-usage .table-scroll { border-radius: 6px; }
+.lm-usage .controls input, .lm-usage .controls select { height: 42px; }
+.lm-usage .controls .load { height: 42px; }
 .lm-usage .token-wrap { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; }
 .lm-usage .token-wrap input { border-radius: 6px 0 0 6px; }
 .lm-usage .token-wrap button { border-radius: 0 6px 6px 0; border-left: 0; }

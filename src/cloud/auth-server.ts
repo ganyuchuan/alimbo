@@ -473,7 +473,12 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
   }
 
   if (req.method === "GET" && pathname === "/auth/users") {
-    const admin = requireAdminSession(req, res);
+    const authorization = String(req.headers.authorization ?? "").trim();
+    const bearerToken = authorization.toLowerCase().startsWith("bearer ")
+      ? authorization.slice("bearer ".length).trim()
+      : "";
+    const bearerPrincipal = bearerToken ? interceptStore.getUserByAuthToken(bearerToken) : null;
+    const admin = requireAdminSession(req, res) || (isAdminPrincipal(bearerPrincipal) ? bearerPrincipal : null);
     if (!admin) {
       logApi(req, pathname, "unauthorized: admin session required");
       json(res, 401, { error: "unauthorized" });
@@ -591,7 +596,12 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
   }
 
   if (req.method === "GET" && pathname === "/auth/device-tokens") {
-    const admin = requireAdminSession(req, res);
+    const authorization = String(req.headers.authorization ?? "").trim();
+    const bearerToken = authorization.toLowerCase().startsWith("bearer ")
+      ? authorization.slice("bearer ".length).trim()
+      : "";
+    const bearerPrincipal = bearerToken ? interceptStore.getUserByAuthToken(bearerToken) : null;
+    const admin = requireAdminSession(req, res) || (isAdminPrincipal(bearerPrincipal) ? bearerPrincipal : null);
     if (!admin) {
       logApi(req, pathname, "unauthorized: admin session required");
       json(res, 401, { error: "unauthorized" });
