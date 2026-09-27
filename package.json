@@ -1,6 +1,6 @@
 {
   "name": "alimbo",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "private": false,
   "description": "An AI agent gateway for tool orchestration, automation, and chat integrations.",
   "repository": {
@@ -18,6 +18,9 @@
   },
   "files": [
     "dist",
+    "!dist/*-source.tar.gz",
+    "!dist/*-source.zip",
+    "!dist/cloud/static/SKILL.backup-*.md",
     "README.md",
     ".env.example",
     "SKILL.md"

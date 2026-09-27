@@ -104,7 +104,8 @@ alimbo hermes
 | CLI 接入 | 自动配对、启动网关和 Hermes，退出后移除本项目 hooks |
 | 工具审批 | `pre_tool_call` 接入现有 iOS / Watch 审批链路，拒绝或通信失败时阻止执行 |
 | 执行记录 | 上报工具结果、每轮输入和回答、会话状态；仅成功轮次触发完成标记 |
-| 远程 prompt / Token 用量 | 暂不支持 Hermes，不会回退执行 Copilot |
+| 远程 prompt | 暂不支持 Hermes，不会回退执行 Copilot |
+| Token 用量 | 支持从 Hermes 本地日志解析并同步到 Usage Dashboard |
 
 首次启动时，需要在 Hermes 终端确认 Alimbo Shell hooks 的信任提示。安装器不会开启全局自动信任；`HERMES_SAFE_MODE` 或未批准的 hooks 会导致 Hermes 不加载这些 hooks。移动端批准只通过 Alimbo 检查，不绕过 Hermes 自身或其他插件的审批。
 
