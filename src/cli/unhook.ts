@@ -3,9 +3,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { configureHermesHooks } from "./hermes-hooks.js";
 
 function printHelp() {
-  console.log("Usage: alimbo unhook");
+  console.log("Usage: alimbo unhook [--provider hermes]");
 }
 
 function removePath(targetPath: string) {
@@ -55,6 +56,12 @@ function main() {
   }
 
   const cwd = process.cwd();
+
+  if (args.includes("--provider")) {
+    if (args[args.indexOf("--provider") + 1] !== "hermes") throw new Error("--provider must be hermes");
+    configureHermesHooks({ cwd, remove: true });
+    return;
+  }
 
   const hookConfigTargets = [
     path.resolve(cwd, ".claude/settings.json"),

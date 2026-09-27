@@ -4,6 +4,7 @@ import { handleClaudeHookPhase } from "./http-hooks-claude.js";
 import { handleCopilotHookPhase } from "./http-hooks-copilot.js";
 import { handleKimiHookPhase } from "./http-hooks-kimi.js";
 import { handleCodexHookPhase } from "./http-hooks-codex.js";
+import { handleHermesHook } from "./http-hooks-hermes.js";
 import { readJsonBody, resolveHookRuntime, writeJson } from "./http-hooks-common.js";
 
 export function createGatewayHttpServer(config: any) {
@@ -11,6 +12,7 @@ export function createGatewayHttpServer(config: any) {
   const claudeLifecycleTracker = createSessionLifecycleStateTracker();
   const kimiLifecycleTracker = createSessionLifecycleStateTracker();
   const codexLifecycleTracker = createSessionLifecycleStateTracker();
+  const hermesLifecycleTracker = createSessionLifecycleStateTracker();
 
   return createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") {
@@ -34,8 +36,8 @@ export function createGatewayHttpServer(config: any) {
         const invocation = body?.invocation ?? {};
         const runtime = resolveHookRuntime(body?.runtime);
 
-        if (!provider || !["copilot", "claude", "kimi", "codex"].includes(provider)) {
-          writeJson(res, 400, { ok: false, error: "provider must be copilot, claude, kimi, or codex" });
+        if (!provider || !["copilot", "claude", "kimi", "codex", "hermes"].includes(provider)) {
+          writeJson(res, 400, { ok: false, error: "provider must be copilot, claude, kimi, codex, or hermes" });
           return;
         }
 
@@ -63,7 +65,9 @@ export function createGatewayHttpServer(config: any) {
 
         let payload: any = {};
         
-        if (provider === "claude") {
+        if (provider === "hermes") {
+          payload = await handleHermesHook({ input, runtime, lifecycleTracker: hermesLifecycleTracker });
+        } else if (provider === "claude") {
           payload = await handleClaudeHookPhase({
             phase,
             input,

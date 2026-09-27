@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function printHelp() {
-  console.log(`alimbo CLI\n\nUsage:\n  alimbo [--port N]                        Start gateway on default port or override PORT in .env\n  alimbo claude [XXXX] [--base-url URL]    Start Claude; optionally pair first with a 4-digit code\n  alimbo copilot [XXXX] [--base-url URL]   Start Copilot; optionally pair first with a 4-digit code\n  alimbo codex [XXXX] [--base-url URL]     Start Codex with Alimbo project hooks\n  alimbo kimi                              Setup hooks/env, start gateway, run kimi, then unhook on exit\n  alimbo pair XXXX [--base-url URL]\n  alimbo trace <requestId|traceId> [--db-file PATH] [--user-id USER] [--json]\n  alimbo feishu --app-id XXX --app-secret XXX\n  alimbo hook [--force]                    Copy hook configs/scripts to current repo (.claude/.github/.kimi-code/.codex)\n  alimbo unhook                            Remove Alimbo hook configs/scripts from current repo\n  alimbo logs gateway [--lines N] [--follow]\n  alimbo logs feishu [--lines N] [--follow]\n  alimbo --help\n  alimbo --version`);
+  console.log(`alimbo CLI\n\nUsage:\n  alimbo [--port N]                        Start gateway on default port or override PORT in .env\n  alimbo claude [XXXX] [--base-url URL]    Start Claude; optionally pair first with a 4-digit code\n  alimbo copilot [XXXX] [--base-url URL]   Start Copilot; optionally pair first with a 4-digit code\n  alimbo codex [XXXX] [--base-url URL]     Start Codex with Alimbo project hooks\n  alimbo hermes [XXXX] [--base-url URL]    Start Hermes with Shell hooks and optional pairing\n  alimbo kimi                              Setup hooks/env, start gateway, run kimi, then unhook on exit\n  alimbo pair XXXX [--base-url URL]\n  alimbo trace <requestId|traceId> [--db-file PATH] [--user-id USER] [--json]\n  alimbo feishu --app-id XXX --app-secret XXX\n  alimbo hook [--force] [--provider hermes]  Install project hooks; select hermes for its profile config\n  alimbo unhook [--provider hermes]         Remove Alimbo project hooks\n  alimbo logs gateway [--lines N] [--follow]\n  alimbo logs feishu [--lines N] [--follow]\n  alimbo --help\n  alimbo --version`);
 }
 
 function runDistEntry(entryFile, args = []) {
@@ -157,6 +157,8 @@ if (!commandOrOption) {
   runDistEntry("cli/agent.js", ["copilot", ...rest]);
 } else if (commandOrOption === "codex") {
   runDistEntry("cli/agent.js", ["codex", ...rest]);
+} else if (commandOrOption === "hermes") {
+  runDistEntry("cli/agent.js", ["hermes", ...rest]);
 } else if (commandOrOption === "kimi") {
   runDistEntry("cli/agent.js", ["kimi"]);
 } else if (commandOrOption === "hook") {

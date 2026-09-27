@@ -2,6 +2,44 @@
 
 ## 2026-09-27
 
+### 64) Hermes Agent CLI hooks 接入与移动端审批
+
+变更目标：
+- 将 Hermes CLI 的工具审批和会话事件接入 Alimbo Gateway、Cloud 与 iOS / Apple Watch 现有审批链路。
+- 保留 Hermes 用户级配置和已有 hooks，不启用全局自动信任。
+
+主要改动：
+- `src/gateway/http-hooks-hermes.ts`、`src/gateway/http-server.ts`
+  - 新增 Hermes provider hook 适配及 HTTP 分发。
+  - `pre_tool_call` 复用现有 intercept 决策；`post_tool_call` 上报工具结果；会话 hooks 上报生命周期、输入和回答。
+  - 仅成功的 `on_session_end` 更新完成状态，避免每轮多个结束事件重复触发完成通知。
+- `hooks/scripts/hermes/event.mjs`
+  - 新增 Hermes Shell hook 子进程入口，解析 stdin JSON 并转发到本地 Gateway。
+  - 限制事件工作目录在当前项目范围；审批采用 fail-closed，并校验返回指令。
+- `src/cli/hermes-hooks.ts`、`src/cli/hook.ts`、`src/cli/unhook.ts`
+  - 新增 `$HERMES_HOME/config.yaml` hooks 安装与卸载，保持其他 YAML 配置和 hook 项目不变。
+  - hook 脚本安装到当前项目 `.hermes/alimbo/`；不自动批准、不设置全局 `hooks_auto_accept`。
+- `src/cli/agent.ts`、`src/cli.ts`、`src/cli/pair.ts`
+  - 新增 `alimbo hermes [配对码]` 启动流程、pair provider 支持和退出清理。
+- `src/agent-runtime/agent.ts`
+  - Hermes 请求不会误回退执行 Copilot；远程 prompt 明确返回不支持。
+- `src/cli/common.ts`
+  - 导出 PM2 删除能力供 Hermes 退出流程清理网关。
+- `.env.example`、`README.md`
+  - 补充 Hermes 审批配置、使用步骤、能力边界及隐私说明。
+- `scripts/test-hermes.mjs`、`package.json`
+  - 新增隔离端到端回归及 `npm run test:hermes` 命令。
+
+兼容性与安全：
+- 使用 Hermes CLI Shell hooks；Hermes Gateway 的 `HOOK.yaml` hooks 不适用于 CLI。
+- 首次使用仍需用户在 Hermes 提示中批准；`HERMES_SAFE_MODE` 或拒绝授权会使 Hermes 不加载 hooks。
+- 默认工具审批列表为 `terminal,write_file,patch,execute_code,delegate_task`；网关不可用、审批拒绝或返回格式错误时阻止工具执行。
+- 不支持 Hermes 远程 prompt 和 Token 用量；不会将这些能力回退路由到 Copilot。
+
+验证记录：
+- `npm run test:hermes`：通过。
+- 覆盖工具 allow/deny/ask/wait、错误决策 fail-closed、gateway 不可达、错误 cwd 忽略、生命周期和完成状态、重复安装、YAML 原配置保留、卸载恢复。
+
 ### 63) 支持创建带密码的用户并通过客户端登录
 
 变更目标：
@@ -31,7 +69,6 @@
 验证记录：
 - `npm run build`：通过。
 - `node scripts/test-auth-password.mjs`：通过。
-- Hermes 回归当前失败，因为 `hooks/scripts/hermes/event.mjs` 已被清空；此项未纳入本次提交，保留在工作区继续处理。
 
 ## 2026-09-15
 

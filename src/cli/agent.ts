@@ -11,6 +11,7 @@ import {
   disconnectPm2Client,
   ensurePm2Process,
   parseEnvFile,
+  pm2DeleteProcess,
   toInt,
   waitForGatewayHealth,
   writeEnvOverrides,
@@ -20,12 +21,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function printHelp() {
-  console.log("Usage: alimbo <claude|copilot|codex> [4digits] [--base-url <url>]\n       alimbo kimi\n\nLegacy: --pairing-code <4digits> is still supported.");
+  console.log("Usage: alimbo <claude|copilot|codex|hermes> [4digits] [--base-url <url>]\n       alimbo kimi\n\nLegacy: --pairing-code <4digits> is still supported.");
 }
 
 function normalizeProvider(raw: string) {
   const value = String(raw ?? "").trim().toLowerCase();
-  if (value === "claude" || value === "copilot" || value === "codex" || value === "kimi") {
+  if (["claude", "copilot", "codex", "kimi", "hermes"].includes(value)) {
     return value;
   }
   return "";
@@ -96,7 +97,7 @@ function hasLocalPairing(envValues: Record<string, string>) {
 
 async function promptForPairingCode() {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error("no local pairing found; run alimbo <claude|copilot|codex> <4digits>");
+    throw new Error("no local pairing found; run alimbo <claude|copilot|codex|hermes> <4digits>");
   }
 
   const readline = createInterface({ input: process.stdin, output: process.stdout });
@@ -136,12 +137,12 @@ function runNodeScript(entryFile: string, args: string[] = []) {
   });
 }
 
-function runAgentCli(bin: string) {
+function runAgentCli(bin: string, env = process.env) {
   return new Promise<number>((resolve, reject) => {
     const child = spawn(bin, [], {
       stdio: "inherit",
       cwd: process.cwd(),
-      env: process.env,
+      env,
     });
 
     child.on("error", (error: any) => {
@@ -167,7 +168,7 @@ async function main() {
 
   const provider = normalizeProvider(String(args[0] ?? ""));
   if (!provider) {
-    throw new Error("provider must be claude, copilot, codex, or kimi");
+    throw new Error("provider must be claude, copilot, codex, kimi, or hermes");
   }
 
   const options = parseAgentOptions(args);
@@ -206,13 +207,15 @@ async function main() {
       COPILOT_INTERCEPT_ENABLED: "true",
       CODEX_INTERCEPT_ENABLED: "true",
       CLAUDE_INTERCEPT_ENABLED: "true",
+      ...(provider === "hermes" ? { HERMES_INTERCEPT_ENABLED: "true" } : {}),
       ALIMBO_AUTO_STOP_GATEWAY_ON_SESSION_END: "true",
       ALIMBO_PM2_GATEWAY_NAME: PM2_GATEWAY_NAME,
     },
   });
   console.log(`[alimbo-${provider}] updated env: ${envPath}`);
 
-  await runNodeScript("hook.js", ["--force"]);
+  const hookArgs = provider === "hermes" ? ["--provider", "hermes"] : [];
+  await runNodeScript("hook.js", ["--force", ...hookArgs]);
 
   const envValues = parseEnvFile(envPath);
   const gatewayPort = toInt(envValues.PORT, 18789);
@@ -237,16 +240,21 @@ async function main() {
 
     console.log(`[alimbo-${provider}] gateway started on port ${gatewayPort} pid=${gatewayPid ?? "unknown"}`);
 
-    const bin = provider === "claude" ? "claude" : provider === "kimi" ? "kimi" : provider === "codex" ? "codex" : "copilot";
+    const bin = provider;
     console.log(`[alimbo-${provider}] launching ${bin}`);
-    exitCode = await runAgentCli(bin);
+    exitCode = await runAgentCli(bin, provider === "hermes" ? { ...process.env, ...envValues } : process.env);
   } finally {
     if (pm2Connected) {
+      if (provider === "hermes") {
+        await pm2DeleteProcess(PM2_GATEWAY_NAME).catch(error => {
+          console.warn(`[alimbo-hermes] gateway cleanup failed: ${String(error?.message ?? error)}`);
+        });
+      }
       await disconnectPm2Client();
     }
 
     try {
-      await runNodeScript("unhook.js", []);
+      await runNodeScript("unhook.js", hookArgs);
     } catch (cleanupError: any) {
       console.warn(`[alimbo-${provider}] unhook cleanup failed: ${String(cleanupError?.message ?? cleanupError)}`);
     }

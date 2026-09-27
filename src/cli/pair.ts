@@ -30,12 +30,12 @@ type PairingTokenPayload = {
 };
 
 function printHelp() {
-  console.log("Usage: alimbo pair <4digits> [--base-url <url>] [--provider <claude|copilot|codex|kimi>]");
+  console.log("Usage: alimbo pair <4digits> [--base-url <url>] [--provider <claude|copilot|codex|kimi|hermes>]");
 }
 
 function normalizeProvider(value: string) {
   const provider = String(value ?? "").trim().toLowerCase();
-  return ["claude", "copilot", "codex", "kimi"].includes(provider) ? provider : "";
+  return ["claude", "copilot", "codex", "kimi", "hermes"].includes(provider) ? provider : "";
 }
 
 async function resolveTokenByPairingCode({ cloudBaseUrl, pairingCode }: { cloudBaseUrl: string; pairingCode: string }) {
@@ -130,7 +130,7 @@ async function main() {
     || normalizeProvider(String(process.env.AGENT_PROVIDER ?? ""))
     || "agent";
   if (providerOption && provider === "agent") {
-    throw new Error("--provider must be claude, copilot, codex, or kimi");
+    throw new Error("--provider must be claude, copilot, codex, kimi, or hermes");
   }
 
   console.log(`[alimbo-pair] Resolve token via ${cloudBaseUrl}/auth/pairing-token ...`);

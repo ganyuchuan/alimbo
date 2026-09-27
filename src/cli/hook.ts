@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { configureHermesHooks } from "./hermes-hooks.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,7 +14,7 @@ type WriteMode = {
 };
 
 function printHelp() {
-  console.log("Usage: alimbo hook [--force]");
+  console.log("Usage: alimbo hook [--force] [--provider hermes]");
 }
 
 function ensureDir(dirPath: string) {
@@ -102,6 +103,12 @@ function main() {
 
   const cwd = process.cwd();
   const hooksRoot = path.resolve(__dirname, "../hooks");
+
+  if (args.includes("--provider")) {
+    if (args[args.indexOf("--provider") + 1] !== "hermes") throw new Error("--provider must be hermes");
+    configureHermesHooks({ cwd, hooksRoot });
+    return;
+  }
 
   const sourceClaudeSettings = path.resolve(hooksRoot, "configs/settings.json");
   const sourceCopilotHooks = path.resolve(hooksRoot, "configs/alimbo-intercept.json");

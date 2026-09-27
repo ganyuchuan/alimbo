@@ -173,7 +173,7 @@ function pm2DescribeProcess(name: string) {
   });
 }
 
-function pm2DeleteProcess(name: string) {
+export function pm2DeleteProcess(name: string) {
   return new Promise<void>((resolve, reject) => {
     pm2.delete(name, (error) => {
       if (error) {

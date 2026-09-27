@@ -27,6 +27,7 @@
     "postbuild": "mkdir -p dist/cloud && rm -rf dist/cloud/static && cp -R src/cloud/static dist/cloud/static && rm -rf dist/hooks && cp -R hooks dist/hooks && mkdir -p dist/usage && rm -rf dist/usage/vendor && cp -R src/usage/vendor dist/usage/vendor",
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:hermes": "npm run build && node scripts/test-hermes.mjs",
     "start": "npm run build && node --title=alimbo-gateway dist/index.js",
     "dev": "tsc --watch -p tsconfig.json",
     "feishu": "npm run build && node --title=alimbo-feishu dist/bridge/feishu.js",
@@ -43,7 +44,8 @@
     "croner": "^10.0.1",
     "dotenv": "^17.3.1",
     "pm2": "^7.0.1",
-    "ws": "^8.19.0"
+    "ws": "^8.19.0",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

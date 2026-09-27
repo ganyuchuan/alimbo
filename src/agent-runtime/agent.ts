@@ -10,7 +10,11 @@ import {
  } from "./claude.js";
 
 function resolveProvider(config: any): string {
-  return String(config?.agentProvider).trim().toLowerCase();
+  const provider = String(config?.agentProvider).trim().toLowerCase();
+  if (provider === "hermes") {
+    throw new Error("Hermes supports CLI event hooks and tool approvals only; remote prompts are not supported. Use alimbo hermes in your terminal.");
+  }
+  return provider;
 }
 
 /**

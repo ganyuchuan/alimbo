@@ -87,6 +87,40 @@ alimbo copilot
 alimbo claude 1234 --base-url https://your-cloud.example.com
 ```
 
+#### Hermes Agent
+
+安装支持 [Shell hooks](https://hermes-agent.nousresearch.com/docs/user-guide/features/hooks#shell-hooks) 的 Hermes，并先完成它自身的模型配置。在 iOS 配对页选择 **Hermes**，然后在目标项目执行：
+
+```bash
+alimbo hermes 1234
+# 已配对后
+alimbo hermes
+```
+
+从源码测试时，将 `alimbo` 替换为 `node /path/to/alimbo/dist/cli.js`。新命令需要包含 Hermes 接入代码的构建或 npm 版本。
+
+| 能力 | 支持情况 |
+|------|----------|
+| CLI 接入 | 自动配对、启动网关和 Hermes，退出后移除本项目 hooks |
+| 工具审批 | `pre_tool_call` 接入现有 iOS / Watch 审批链路，拒绝或通信失败时阻止执行 |
+| 执行记录 | 上报工具结果、每轮输入和回答、会话状态；仅成功轮次触发完成标记 |
+| 远程 prompt / Token 用量 | 暂不支持 Hermes，不会回退执行 Copilot |
+
+首次启动时，需要在 Hermes 终端确认 Alimbo Shell hooks 的信任提示。安装器不会开启全局自动信任；`HERMES_SAFE_MODE` 或未批准的 hooks 会导致 Hermes 不加载这些 hooks。移动端批准只通过 Alimbo 检查，不绕过 Hermes 自身或其他插件的审批。
+
+配置合并到 `$HERMES_HOME/config.yaml`（默认 `~/.hermes/config.yaml`），保留已有 hooks；脚本放在当前项目的 `.hermes/alimbo/`，只处理此项目及子目录事件。自定义 profile 请先设置 `HERMES_HOME`，安装、运行和卸载时使用同一值。不要同时对嵌套项目安装 hooks，否则同一事件可能匹配多个项目。
+
+默认审批工具为 `terminal,write_file,patch,execute_code,delegate_task`，可用 `HERMES_INTERCEPT_TOOLS` 调整。服务地址和认证优先使用 `HERMES_INTERCEPT_SERVER_URL`、`HERMES_INTERCEPT_AUTH_TOKEN`，留空时回退到对应的 `COPILOT_INTERCEPT_*`。等待时间沿用 `COPILOT_INTERCEPT_MAX_WAIT_MS`，未设置时为 60 秒，最多 240 秒，以留出 Hermes 300 秒 hook 超时的通信余量。
+
+手动安装或异常退出后清理：
+
+```bash
+alimbo hook --provider hermes
+alimbo unhook --provider hermes
+```
+
+单独安装 hooks 不会启动网关；仍需配置当前项目的 `.env` 并运行网关。Hermes Gateway 的 `HOOK.yaml` 事件只在其消息网关触发，本接入使用兼容 CLI 的 Shell hooks。
+
 ### 3) 最小必填配置
 
 打开 `.env`，至少确认是否使用默认端口号：
@@ -318,4 +352,4 @@ Alimbo 的权限控制是应用层策略（Hook + Intercept），不是操作系
 
 ### 隐私
 
-Alimbo 不会上传任何数据到云端，所有消息仅在本地处理和转发。飞书桥的消息转发也仅限于飞书服务器和本地网关之间。
+启用远程审批或移动端同步后，Alimbo 会将相关工具参数、执行结果、会话消息和状态发送到配置的云端服务。请只连接可信服务，并避免在 Agent 输入或命令输出中包含敏感信息。飞书桥还会经由飞书服务器转发消息。
