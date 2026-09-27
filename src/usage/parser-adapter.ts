@@ -4,6 +4,7 @@ const parserLoaders: Record<UsageSource, () => Promise<Record<string, any>>> = {
   "claude-code": () => import("./vendor/vibe-usage/parsers/claude-code.js"),
   "copilot-cli": () => import("./vendor/vibe-usage/parsers/copilot-cli.js"),
   codex: () => import("./vendor/vibe-usage/parsers/codex.js"),
+  hermes: () => import("./vendor/vibe-usage/parsers/hermes.js"),
   "kimi-code": () => import("./vendor/vibe-usage/parsers/kimi-code.js"),
 };
 

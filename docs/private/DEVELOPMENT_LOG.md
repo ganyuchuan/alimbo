@@ -2,6 +2,31 @@
 
 ## 2026-09-27
 
+### 65) Hermes Token Usage 与 iOS Dashboard 适配
+
+变更目标：
+- 从 `vibe-usage 0.12.0` 迁移 Hermes Agent 的真实 Token 用量采集逻辑。
+- 让 Alimbo Cloud Dashboard 和 AgentCompanion 能查询、筛选及展示 Hermes 用量。
+
+主要改动：
+- `src/usage/vendor/vibe-usage/hermes-roots.js`、`parsers/hermes.js`
+  - 扫描默认 `$HERMES_HOME/state.db` 与 `profiles/<name>/state.db`。
+  - 从 `sessions` 读取累计 Token，将 cache write 计入 input、cache read 单列，并从 output 拆出 reasoning，避免重复计数。
+  - 从 `messages` 生成 session 时长和消息统计；兼容没有 `cache_write_tokens` 的旧数据库。
+- `src/usage/parser-adapter.ts`、`types.ts`、`config.ts`
+  - 注册 `hermes` source，并加入默认同步来源。
+- `src/cloud/intercept-server.ts`、`src/cloud/static/usage.html`
+  - Cloud API 接受 Hermes bucket/session，网页 Dashboard 增加 Hermes 筛选、名称与颜色。
+- `AgentCompanion/UsageView.swift`
+  - iOS Usage 页面增加 Hermes 来源、名称、颜色和系统图标。
+- `.env.example`、`docs/private/TOKEN_USAGE_API.md`
+  - 补充 Hermes 默认来源和 API source 说明。
+
+验证记录：
+- `npm run test:hermes-usage`：通过；覆盖 cache write、旧 schema、named profile、cache-only 和 reasoning 上限。
+- Alimbo `npm run build` 与构建产物 source 注册检查：通过。
+- AgentCompanion Swift 诊断：无错误；完整模拟器构建被 Watch App 既有 `AppIcon` 资源错误阻断。
+
 ### 64) Hermes Agent CLI hooks 接入与移动端审批
 
 变更目标：
@@ -34,7 +59,7 @@
 - 使用 Hermes CLI Shell hooks；Hermes Gateway 的 `HOOK.yaml` hooks 不适用于 CLI。
 - 首次使用仍需用户在 Hermes 提示中批准；`HERMES_SAFE_MODE` 或拒绝授权会使 Hermes 不加载 hooks。
 - 默认工具审批列表为 `terminal,write_file,patch,execute_code,delegate_task`；网关不可用、审批拒绝或返回格式错误时阻止工具执行。
-- 不支持 Hermes 远程 prompt 和 Token 用量；不会将这些能力回退路由到 Copilot。
+- 不支持 Hermes 远程 prompt；不会将该能力回退路由到 Copilot。
 
 验证记录：
 - `npm run test:hermes`：通过。

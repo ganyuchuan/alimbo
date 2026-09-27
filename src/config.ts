@@ -115,7 +115,7 @@ export const config = {
   },
   usage: {
     enabled: toBool(process.env.USAGE_SYNC_ENABLED, false),
-    sources: toList(process.env.USAGE_SYNC_SOURCES, ["copilot-cli", "claude-code", "codex", "kimi-code"]),
+    sources: toList(process.env.USAGE_SYNC_SOURCES, ["copilot-cli", "claude-code", "codex", "hermes", "kimi-code"]),
     intervalMs: toInt(process.env.USAGE_SYNC_INTERVAL_MS, 30 * 60 * 1000),
     startDelayMs: toNonNegativeInt(process.env.USAGE_SYNC_START_DELAY_MS, 15000),
     stateFile: process.env.USAGE_SYNC_STATE_FILE?.trim() || "data/usage-sync-state.json",

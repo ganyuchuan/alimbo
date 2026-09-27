@@ -28,6 +28,7 @@
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:hermes": "npm run build && node scripts/test-hermes.mjs",
+    "test:hermes-usage": "npm run build && node scripts/test-hermes-usage.mjs",
     "start": "npm run build && node --title=alimbo-gateway dist/index.js",
     "dev": "tsc --watch -p tsconfig.json",
     "feishu": "npm run build && node --title=alimbo-feishu dist/bridge/feishu.js",

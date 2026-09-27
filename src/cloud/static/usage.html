@@ -129,7 +129,7 @@
           </label>
           <label>开始日期<input id="from" type="date" /></label>
           <label>结束日期<input id="to" type="date" /></label>
-          <label>Agent<select id="source"><option value="">全部 Agent</option><option value="copilot-cli">Copilot CLI</option><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="kimi-code">Kimi Code</option></select></label>
+          <label>Agent<select id="source"><option value="">全部 Agent</option><option value="copilot-cli">Copilot CLI</option><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="hermes">Hermes</option><option value="kimi-code">Kimi Code</option></select></label>
           <button id="load" class="primary load" type="button">加载统计</button>
         </div>
         <div class="subcontrols">
@@ -171,9 +171,9 @@
 
     <script>
       const $ = (id) => document.getElementById(id);
-      const allSources = ["copilot-cli", "claude-code", "codex", "kimi-code"];
-      const agentNames = { "copilot-cli": "Copilot CLI", "claude-code": "Claude Code", codex: "Codex", "kimi-code": "Kimi Code" };
-      const agentColors = { "copilot-cli": "#68a9ff", "claude-code": "#d59cff", codex: "#42d986", "kimi-code": "#f4ba62" };
+      const allSources = ["copilot-cli", "claude-code", "codex", "hermes", "kimi-code"];
+      const agentNames = { "copilot-cli": "Copilot CLI", "claude-code": "Claude Code", codex: "Codex", hermes: "Hermes", "kimi-code": "Kimi Code" };
+      const agentColors = { "copilot-cli": "#68a9ff", "claude-code": "#d59cff", codex: "#42d986", hermes: "#ff8f70", "kimi-code": "#f4ba62" };
       const nf = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 });
       const fullNf = new Intl.NumberFormat("zh-CN");
 

@@ -1,4 +1,4 @@
-export type UsageSource = "claude-code" | "copilot-cli" | "codex" | "kimi-code";
+export type UsageSource = "claude-code" | "copilot-cli" | "codex" | "hermes" | "kimi-code";
 
 export type UsageBucket = {
   source: UsageSource;
