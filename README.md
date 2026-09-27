@@ -109,6 +109,49 @@ curl http://127.0.0.1:18789/health
 
 看到 `{"ok":true}` 或等价健康响应，即表示网关启动成功。
 
+## 创建可登录用户
+
+使用 `create-user.js` 创建用户时，可以通过 `--password` 指定客户端登录密码。密码会以 PBKDF2 哈希形式保存，不会明文写入数据库：
+
+```bash
+npm run build
+node dist/cloud/create-user.js \
+  --username app-user \
+  --password 'your-password-at-least-8-chars'
+```
+
+创建管理员账户：
+
+```bash
+node dist/cloud/create-user.js \
+  --admin \
+  --username admin \
+  --password 'your-admin-password-at-least-8-chars'
+```
+
+客户端通过用户名密码登录前，在 cloud-server 使用的 `.env` 中启用密码授权：
+
+```dotenv
+CLOUD_AUTH_TOKEN_ALLOW_PASSWORD_GRANT=true
+```
+
+然后重启 cloud-server：
+
+```bash
+npm run cloud
+```
+
+客户端请求 `POST /auth/token`，JSON 请求体如下：
+
+```json
+{
+  "username": "app-user",
+  "password": "your-password-at-least-8-chars"
+}
+```
+
+服务端会返回该用户已有的 `authToken`，客户端后续使用它访问接口。未指定 `--password` 创建的旧用户仍可使用命令输出的 `authToken`，但不能通过用户名密码登录。创建用户和启动 cloud-server 必须使用同一个 `CLOUD_DB_FILE`。
+
 ## 使用 WebSocket 网关发消息
 
 用 `wscat` 连接网关并完成一次握手 + 查询。

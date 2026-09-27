@@ -1,5 +1,38 @@
 # Development Log
 
+## 2026-09-27
+
+### 63) 支持创建带密码的用户并通过客户端登录
+
+变更目标：
+- 通过 `create-user.js` 创建普通用户或管理员时可显式指定密码。
+- 允许客户端使用用户名和密码调用 `/auth/token`，取得对应账户已有的 auth token。
+
+主要改动：
+- `src/cloud/create-user.ts`
+  - 新增 `--password` / `-p` 参数，拒绝空密码并要求至少 8 个字符。
+  - 将指定密码传给普通用户和管理员创建流程；未指定时保持既有行为。
+- `src/cloud/intercept-store.ts`
+  - 普通用户和管理员密码均以独立 salt 和 PBKDF2-SHA256 哈希保存。
+  - 新增用户名与密码校验，支持普通用户和管理员账户；校验成功返回账户已有 token。
+- `src/cloud/auth-server.ts`
+  - 在 `CLOUD_AUTH_TOKEN_ALLOW_PASSWORD_GRANT=true` 时允许普通用户或管理员使用密码授权。
+  - 密码授权返回已认证账户的 token，不额外创建重复用户；管理后台 Cookie 授权行为保持不变。
+- `README.md`
+  - 补充创建普通用户/管理员、开启密码授权及客户端请求示例。
+- `scripts/test-auth-password.mjs`
+  - 使用临时 SQLite 数据库验证普通用户/管理员创建、已有 token 登录、错误密码拒绝和开关关闭时拒绝。
+
+安全与兼容性：
+- 密码不以明文写入数据库；密码授权开关默认仍关闭。
+- 未指定密码创建的旧普通用户仍可使用签发的 auth token，但不能使用密码授权登录。
+- 创建用户与运行 cloud-server 必须指向相同的 `CLOUD_DB_FILE`。
+
+验证记录：
+- `npm run build`：通过。
+- `node scripts/test-auth-password.mjs`：通过。
+- Hermes 回归当前失败，因为 `hooks/scripts/hermes/event.mjs` 已被清空；此项未纳入本次提交，保留在工作区继续处理。
+
 ## 2026-09-15
 
 ### 62) 静态网页统一终端可爱风与共享组件库

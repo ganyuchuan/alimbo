@@ -18,8 +18,9 @@ type AuthServerRouteContext = {
   normalizeApnsPlatform: (value: unknown) => string;
   interceptStore: {
     verifyAdminPassword: (username: string, password: string) => any;
+    getPasswordUserByUsername: (username: string, password: string) => any;
     withTransaction: <T>(action: () => T) => T;
-    createUserTokenRecord: (params: { username: string }) => { userId: string; authToken: string; username: string };
+    createUserTokenRecord: (params: { username: string; password?: string }) => { userId: string; authToken: string; username: string };
     createOrRefreshAppleUserTokenRecord: (params: {
       appleSub: string;
       email?: string;
@@ -191,14 +192,14 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
         return true;
       }
 
-      const principal = interceptStore.verifyAdminPassword(username, password);
-      if (!principal?.userId || !isAdminPrincipal(principal)) {
+      const passwordPrincipal = interceptStore.getPasswordUserByUsername(username, password);
+      if (!passwordPrincipal?.userId) {
         logApi(req, pathname, `password grant failed username=${username || "-"}`);
         json(res, 401, { error: "unauthorized" });
         return true;
       }
 
-      admin = principal;
+      admin = passwordPrincipal;
       grantType = "password";
     }
 
@@ -209,7 +210,9 @@ export async function handleAuthServerRoute(context: AuthServerRouteContext) {
       return true;
     }
 
-    const issued = admin.isDemoAccount === true
+    const issued = grantType === "password"
+      ? admin
+      : admin.isDemoAccount === true
       ? admin
       : interceptStore.withTransaction(() => interceptStore.createUserTokenRecord({ username }));
     const pairing = pairingCodeRegistry.issue({

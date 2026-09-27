@@ -1314,8 +1314,11 @@ class InterceptStore {
     `).run(now);
   }
 
-  createUserTokenRecord({ username, now = Date.now() }) {
+  createUserTokenRecord({ username, password = "", now = Date.now() }) {
     const normalizedUsername = String(username ?? "").trim();
+    const normalizedPassword = String(password ?? "");
+    const passwordSalt = normalizedPassword ? generatePasswordSalt() : "";
+    const passwordHash = normalizedPassword ? hashPassword(normalizedPassword, passwordSalt) : "";
 
     for (let i = 0; i < 6; i += 1) {
       const userId = generateUserId();
@@ -1323,14 +1326,15 @@ class InterceptStore {
       try {
         this.db.prepare(`
           INSERT INTO users (user_id, user_name, auth_type, auth_password_salt, auth_password_hash, auth_token, created_at_ms, updated_at_ms)
-          VALUES (?, ?, ?, '', '', ?, ?, ?)
-        `).run(userId, normalizedUsername, "user", authToken, now, now);
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(userId, normalizedUsername, "user", passwordSalt, passwordHash, authToken, now, now);
 
         return {
           userId,
           authToken,
           username: normalizedUsername,
           authType: "user",
+          password: normalizedPassword || undefined,
         };
       } catch (error) {
         const message = String(error?.message ?? error).toLowerCase();
@@ -1398,15 +1402,15 @@ class InterceptStore {
     };
   }
 
-  createAdminUserRecord({ username, now = Date.now() }) {
+  createAdminUserRecord({ username, password = "", now = Date.now() }) {
     const normalizedUsername = String(username ?? "").trim();
     if (!normalizedUsername) {
       throw new Error("username is required");
     }
 
-    const password = generateStrongPassword();
+    const normalizedPassword = String(password ?? "") || generateStrongPassword();
     const passwordSalt = generatePasswordSalt();
-    const passwordHash = hashPassword(password, passwordSalt);
+    const passwordHash = hashPassword(normalizedPassword, passwordSalt);
 
     for (let i = 0; i < 6; i += 1) {
       const userId = generateUserId();
@@ -1430,7 +1434,7 @@ class InterceptStore {
           authToken,
           username: normalizedUsername,
           authType: "admin",
-          password,
+          password: normalizedPassword,
         };
       } catch (error) {
         const message = String(error?.message ?? error).toLowerCase();
@@ -1589,6 +1593,42 @@ class InterceptStore {
     }
 
     return principal;
+  }
+
+  getPasswordUserByUsername(username, password) {
+    const normalizedUsername = String(username ?? "").trim();
+    if (!normalizedUsername) {
+      return null;
+    }
+
+    const rows = this.db.prepare(`
+      SELECT user_id, user_name, auth_token, auth_type, auth_password_salt, auth_password_hash, apple_sub, apple_email, apple_email_verified, apple_is_private_email, is_demo_account
+      FROM users
+      WHERE user_name = ? AND auth_type IN ('admin', 'user') AND auth_password_hash <> ''
+      ORDER BY CASE WHEN auth_type = 'admin' THEN 0 ELSE 1 END, created_at_ms DESC
+    `).all(normalizedUsername);
+
+    for (const row of rows) {
+      const principal = {
+        userId: String(row.user_id ?? "").trim(),
+        username: String(row.user_name ?? "").trim(),
+        authToken: String(row.auth_token ?? "").trim(),
+        authType: String(row.auth_type ?? "").trim(),
+        authPasswordSalt: String(row.auth_password_salt ?? "").trim(),
+        authPasswordHash: String(row.auth_password_hash ?? "").trim(),
+        appleSub: String(row.apple_sub ?? "").trim(),
+        email: String(row.apple_email ?? "").trim(),
+        emailVerified: Number(row.apple_email_verified ?? 0) > 0,
+        isPrivateEmail: Number(row.apple_is_private_email ?? 0) > 0,
+        isDemoAccount: Number(row.is_demo_account ?? 0) > 0,
+        source: "user",
+      };
+      if (verifyPassword(password, principal.authPasswordSalt, principal.authPasswordHash)) {
+        return principal;
+      }
+    }
+
+    return null;
   }
 
   getUserById(userId) {

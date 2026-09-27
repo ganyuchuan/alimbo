@@ -8,9 +8,9 @@ import { interceptStore } from "./intercept-store.js";
 dotenv.config();
 
 function printHelp() {
-  console.log("Usage: node dist/cloud/create-user.js --username <name>");
-  console.log("       node dist/cloud/create-user.js -u <name>");
-  console.log("       node dist/cloud/create-user.js --admin --username <name>");
+  console.log("Usage: node dist/cloud/create-user.js --username <name> [--password <password>]");
+  console.log("       node dist/cloud/create-user.js -u <name> -p <password>");
+  console.log("       node dist/cloud/create-user.js --admin --username <name> --password <password>");
   console.log("       node dist/cloud/create-user.js --demo --username <name>");
 }
 
@@ -47,6 +47,16 @@ function main() {
     throw new Error("username is required, pass --username <name>");
   }
 
+  const password = readOption(args, ["--password", "-p"]);
+  if (args.includes("--password") || args.includes("-p") || args.some((arg) => arg.startsWith("--password="))) {
+    if (!password) {
+      throw new Error("password must not be empty");
+    }
+  }
+  if (password && password.length < 8) {
+    throw new Error("password must be at least 8 characters");
+  }
+
   const isAdmin = args.includes("--admin");
   const isDemo = args.includes("--demo");
   if (isAdmin && isDemo) {
@@ -58,8 +68,8 @@ function main() {
     ? demoAccountService.provisionAccount({ username })
     : interceptStore.withTransaction(() => {
         return isAdmin
-          ? interceptStore.createAdminUserRecord({ username })
-          : interceptStore.createUserTokenRecord({ username });
+          ? interceptStore.createAdminUserRecord({ username, password })
+          : interceptStore.createUserTokenRecord({ username, password });
       });
   if (isDemo) {
     demoAccountService.ensureData(issued);
